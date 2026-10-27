@@ -22,6 +22,8 @@ items:
         activeDeadlineSeconds: 300
         backoffLimit: 2
         template:
+          metadata:
+            labels: {app: cert-issuer}
           spec:
             restartPolicy: Never
             serviceAccountName: "{{ issuer_account }}"

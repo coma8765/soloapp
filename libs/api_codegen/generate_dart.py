@@ -22,6 +22,13 @@ def render(service):
         "",
     ]
     types = {"string": "String", "integer": "int"}
+
+    def dart_type(prop):
+        if prop.get("type") == "array" and "$ref" in prop.get("items", {}):
+            return "List<Api" + prop["items"]["$ref"].split("/")[-1] + ">"
+        require(prop.get("type") in types, "Unsupported Dart field type")
+        return types[prop["type"]]
+
     for name, schema in spec["components"]["schemas"].items():
         name = "Api" + name
         require(
@@ -34,17 +41,26 @@ def render(service):
             f"  const {name}({{{', '.join('required this.' + camel(f) for f in fields)}}});",
         ]
         for field, prop in fields.items():
-            require(prop["type"] in types, "Unsupported Dart field type")
-            lines += [f"  final {types[prop['type']]} {camel(field)};"]
+            lines += [f"  final {dart_type(prop)} {camel(field)};"]
         lines += [f"  factory {name}.fromJson(Map<String, dynamic> json) => {name}("]
         for field, prop in fields.items():
-            lines += [f"    {camel(field)}: json['{field}'] as {types[prop['type']]},"]
+            if prop.get("type") == "array":
+                item = "Api" + prop["items"]["$ref"].split("/")[-1]
+                lines += [
+                    f"    {camel(field)}: (json['{field}'] as List).map((e) => {item}.fromJson(e as Map<String, dynamic>)).toList(),"
+                ]
+            else:
+                lines += [f"    {camel(field)}: json['{field}'] as {dart_type(prop)},"]
         lines += ["  );", "  Map<String, dynamic> toJson() => {"]
-        lines += [f"    '{field}': {camel(field)}," for field in fields]
+        for field, prop in fields.items():
+            value = camel(field)
+            if prop.get("type") == "array":
+                value += ".map((e) => e.toJson()).toList()"
+            lines += [f"    '{field}': {value},"]
         lines += ["  };", "}", ""]
     lines += [
-        f"class {service.name.title()}Api {{",
-        f"  const {service.name.title()}Api(this.transport);",
+        f"class {service.name.replace('-', '_').title().replace('_', '')}Api {{",
+        f"  const {service.name.replace('-', '_').title().replace('_', '')}Api(this.transport);",
         "  final ApiTransport transport;",
     ]
     for path, method, op in operations(spec):
@@ -95,8 +111,10 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--check", action="store_true")
     args = p.parse_args()
-    for service in ("auth", "whoami"):
-        output = ROOT / f"services/web/lib/api/generated/{service}_api.dart"
+    for service in ("auth", "whoami", "app-api"):
+        output = (
+            ROOT / f"services/web/lib/api/generated/{service.replace(chr(45), chr(95))}_api.dart"
+        )
         content = render(ROOT / "services" / service)
         if args.check:
             require(

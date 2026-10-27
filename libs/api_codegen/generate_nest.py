@@ -13,11 +13,15 @@ ROOT = Path(__file__).resolve().parents[2]
 def render(root=ROOT):
     routes = {}
     limits = {}
+    methods = {}
     for service in ("whoami", "app-api"):
         for path, method, op in operations(load(root / "services" / service)):
-            require(method == "get", "Nest identity contract supports GET only")
+            require(method in ("get", "post"), "Unsupported Nest method")
             name = op["operationId"]
-            require(name in ("user_id", "healthz", "health_ready"), "Unsupported Nest operation")
+            require(
+                name in ("user_id", "healthz", "health_ready", "chat_messages", "chat_send"),
+                "Unsupported Nest operation",
+            )
             paths = [path] + op.get("x-backend-aliases", [])
             for item in paths:
                 limit = op["x-route"]["max_body_bytes"]
@@ -25,6 +29,9 @@ def render(root=ROOT):
                     item not in limits or limits[item] == limit, "Conflicting Nest route body limit"
                 )
                 limits[item] = limit
+                methods.setdefault(item, [])
+                if method.upper() not in methods[item]:
+                    methods[item].append(method.upper())
                 routes.setdefault(name, [])
                 if item.lstrip("/") not in routes[name]:
                     routes[name].append(item.lstrip("/"))
@@ -34,6 +41,8 @@ def render(root=ROOT):
         + json.dumps(routes, indent=2)
         + ";\nexport const bodyLimits: Record<string, number> = "
         + json.dumps(limits, indent=2)
+        + ";\nexport const methods: Record<string, string[]> = "
+        + json.dumps(methods, indent=2)
         + ";\n"
     )
 

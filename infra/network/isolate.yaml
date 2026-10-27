@@ -1,0 +1,36 @@
+- name: Apply opt-in pod network access one data center at a time
+  hosts: app_sites
+  serial: 1
+  any_errors_fatal: true
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Require the k3s network policy controller
+    ansible.builtin.command: iptables -S KUBE-ROUTER-FORWARD
+    changed_when: false
+    check_mode: false
+  - name: Label future certificate renewal pods before isolating the namespace
+    ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
+    vars:
+      manifest_source: '{{ project_root }}/infra/certificates/k8s/issuer.yaml.j2'
+      manifest_name: cert-issuer
+  - name: Apply network access matrix
+    ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
+    vars:
+      manifest_source: '{{ project_root }}/infra/network/k8s/isolation.yaml.j2'
+      manifest_name: pod-isolation
+  - name: Install isolated network verification tools
+    ansible.builtin.copy:
+      src: '{{ project_root }}/infra/network/tests/{{ item }}.py'
+      dest: '{{ remote_root }}/network-{{ item }}.py'
+      mode: '0700'
+    loop: [prune, probe]
+  - name: Remove revoked permissions owned by this manifest
+    ansible.builtin.command: python3 {{ remote_root }}/network-prune.py {{ remote_root }}/pod-isolation.yaml
+    register: network_prune
+    changed_when: network_prune.stdout | length > 0
+    when: not ansible_check_mode
+  - name: Verify denied and explicitly allowed pod connectivity
+    ansible.builtin.command: python3 {{ remote_root }}/network-probe.py
+    changed_when: false
+    when: not ansible_check_mode

@@ -23,6 +23,8 @@ jobs:
           make check-codegen test-codegen check-dashboards test-alerts
           python3 -m unittest discover -s infra/cd/tests -v
           python3 -m unittest discover -s infra/registry/tests -v
+          python3 -m unittest discover -s infra/redis/tests -v
+          python3 -m unittest discover -s infra/network/tests -v
           .venv-codegen/bin/python -m unittest discover -s infra/object-storage/tests -v
       - name: Verify merge gate and monitoring exporter
         run: |
