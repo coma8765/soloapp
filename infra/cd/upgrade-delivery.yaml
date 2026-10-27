@@ -1,0 +1,30 @@
+# Update the existing constrained gate; no new SSH keys, sudo rules or RBAC grants.
+- name: Add delivery service scopes to the installed production gate
+  hosts: app_sites
+  serial: 1
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Require an already provisioned deployment gate
+    ansible.builtin.stat:
+      path: /usr/local/libexec/soloapp-cd
+    register: installed_gate
+  - ansible.builtin.assert:
+      that: installed_gate.stat.exists
+  - name: Update fixed operation allowlist
+    ansible.builtin.copy:
+      src: '{{ project_root }}/infra/cd/{{ item.source }}'
+      dest: '{{ item.dest }}'
+      owner: root
+      group: root
+      mode: '0755'
+    loop:
+    - {source: entry.py, dest: /usr/local/libexec/soloapp-cd-entry}
+    - {source: deploy.py, dest: /usr/local/libexec/soloapp-cd}
+  - name: Refresh scoped workload identifiers
+    ansible.builtin.copy:
+      src: '{{ project_root }}/infra/cloud/resources.json'
+      dest: /etc/soloapp-cd/resources.json
+      owner: root
+      group: root
+      mode: '0600'

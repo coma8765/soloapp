@@ -2,7 +2,7 @@
 .DEFAULT_GOAL := build
 PROJECT_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 PYTHON ?= $(if $(wildcard $(PROJECT_ROOT)/.venv-codegen/bin/python),$(PROJECT_ROOT)/.venv-codegen/bin/python,python3)
-SERVICES := auth whoami
+SERVICES := auth whoami client-notify client-gateway
 BUILD_TARGETS := $(addprefix build-,$(SERVICES))
 TEST_TARGETS := $(addprefix test-,$(SERVICES))
 TEST_IMAGE_TARGETS := $(addprefix test-image-,$(SERVICES))

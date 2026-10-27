@@ -240,6 +240,7 @@ paths:
         Sends remain idempotent HTTP POST chat/messages.'
       security: []
       x-websocket: true
+      x-upstream: client-gateway
       x-route:
         exposure: public
         auth: none

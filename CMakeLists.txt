@@ -16,3 +16,7 @@ endif()
 if(SOLO_SERVICE STREQUAL "all" OR SOLO_SERVICE STREQUAL "whoami")
   add_subdirectory(services/whoami)
 endif()
+
+if(SOLO_SERVICE STREQUAL "all" OR SOLO_SERVICE STREQUAL "client-notify")
+  add_subdirectory(services/client-notify)
+endif()

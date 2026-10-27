@@ -1,12 +1,9 @@
-import { ChatSocket } from './views/chat.socket.js';
-import type { Server } from 'node:http';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Request, Response, NextFunction } from 'express';
 import { bodyLimits, routes, methods } from './generated/routes.js';
 import { HealthCircuit } from './logic/health.js';
 
 export function configureApp(app: NestExpressApplication): void {
-  app.get(ChatSocket).attach(app.getHttpServer() as Server);
   const health = app.get(HealthCircuit);
   const probes = new Set(
     [...routes.healthz, ...routes.health_ready].map((p) => '/' + p),

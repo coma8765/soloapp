@@ -1,4 +1,3 @@
-import { ChatSocket } from './views/chat.socket.js';
 import { ChatService } from './logic/chat.service.js';
 import { ChatController } from './views/chat.controller.js';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
@@ -18,13 +17,7 @@ import { HealthController } from './health.controller.js';
     HealthController,
     ChatController,
   ],
-  providers: [
-    AppService,
-    IdentityService,
-    HealthCircuit,
-    ChatService,
-    ChatSocket,
-  ],
+  providers: [AppService, IdentityService, HealthCircuit, ChatService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

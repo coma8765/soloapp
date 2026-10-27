@@ -8,3 +8,6 @@ whoami_config: "{{ workload_defaults | combine(lookup('template', project_root ~
 obs: "{{ lookup('file', project_root ~ '/infra/observability/defaults.yaml') | from_yaml | combine(observability_overrides | default({}), recursive=true) }}"
 
 web_config: "{{ workload_defaults | combine(lookup('template', project_root ~ '/services/web/deploy/defaults.yaml') | from_yaml, recursive=true) | combine((service_overrides | default({})).web | default({}), recursive=true) }}"
+
+client_gateway_config: "{{ workload_defaults | combine(lookup('template', project_root ~ '/services/client-gateway/deploy/defaults.yaml') | from_yaml, recursive=true) | combine((service_overrides | default({})).client_gateway | default({}), recursive=true) }}"
+notify_config: "{{ workload_defaults | combine(lookup('template', project_root ~ '/services/client-notify/deploy/defaults.yaml') | from_yaml, recursive=true) | combine((service_overrides | default({})).client_notify | default({}), recursive=true) }}"

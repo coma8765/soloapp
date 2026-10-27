@@ -1,0 +1,28 @@
+- name: Migrate durable chat storage on the current primary
+  hosts: app_sites
+  serial: 1
+  become: true
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+  - name: Detect writable primary
+    ansible.builtin.command: docker exec -u postgres solo-postgres psql -X -At -p 55432 -d postgres -c 'SELECT NOT pg_is_in_recovery()'
+    register: primary
+    changed_when: false
+  - name: Check chat database
+    ansible.builtin.command: docker exec -u postgres solo-postgres psql -X -At -p 55432 -d postgres -c "SELECT 1 FROM pg_database WHERE datname='chatdb'"
+    register: exists
+    changed_when: false
+    when: primary.stdout == 't'
+  - name: Create dedicated chat database
+    ansible.builtin.command: docker exec -u postgres solo-postgres createdb -p 55432 chatdb
+    when: primary.stdout == 't' and exists.stdout == ''
+  - name: Apply additive schema and scoped grants
+    ansible.builtin.command:
+      argv: [docker, exec, -i, -u, postgres, solo-postgres, psql, -X, -v, ON_ERROR_STOP=1, -p, '55432', -d, chatdb]
+      stdin: '{{ lookup("file", project_root ~ "/" ~ item) }}'
+    loop: [services/client-notify/deploy/schema.sql, infra/chat-storage/schema.sql, infra/chat-storage/grants.sql]
+    when: primary.stdout == 't'
+    changed_when: true
+  - name: Reload certificate-only access
+    ansible.builtin.include_tasks: '{{ project_root }}/infra/postgres/tasks/main.yaml'

@@ -29,3 +29,6 @@ __pycache__/
 *.tar.gz
 /build/
 /services/*/build/
+
+# Node services and shared runtime dependencies
+**/node_modules/

@@ -1,0 +1,5 @@
+{
+  "name":"client-gateway","version":"1.0.0","private":true,"type":"module","license":"Apache-2.0",
+  "scripts":{"test":"node --test tests/*.test.mjs","start":"node src/main.mjs"},
+  "dependencies":{"@soloapp/chat-runtime":"file:../../libs/chat_runtime","ws":"8.22.0"}
+}

@@ -48,6 +48,11 @@ def operations(spec):
                     op["x-websocket"] is True and method == "get" and "101" in op["responses"],
                     "WebSocket operations require GET and a 101 response",
                 )
+            if "x-upstream" in op:
+                require(
+                    op["x-upstream"] == "client-gateway" and op.get("x-websocket") is True,
+                    "Only WebSocket routes may use client-gateway",
+                )
             policy = op.get("x-route", {})
             require(
                 set(policy) == {"exposure", "auth", "max_body_bytes", "timeouts", "rate_limit"},

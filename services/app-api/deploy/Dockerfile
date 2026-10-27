@@ -1,6 +1,7 @@
 FROM node:24-bookworm-slim AS dependencies
 WORKDIR /app
-COPY services/app-api/package.json services/app-api/package-lock.json ./
+COPY libs/chat_runtime /libs/chat_runtime
+COPY services/app-api/package.json services/app-api/package-lock.json services/app-api/.npmrc ./
 RUN npm ci
 
 FROM dependencies AS build

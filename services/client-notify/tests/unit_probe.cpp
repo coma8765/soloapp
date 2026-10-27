@@ -1,0 +1,93 @@
+#include "generated/odb/task-odb.hxx"
+#include "logic/config.hpp"
+#include "logic/queue.hpp"
+#include "logic/repository.hpp"
+#include "runtime/deadline.hpp"
+#include <iostream>
+#include <json/json.h>
+#include <thread>
+int main(int argc, char **argv) {
+    using namespace solo::notify;
+    Json::Value out;
+    if (argc > 1 && std::string(argv[1]) == "config") {
+        try {
+            const auto config = Config::Load();
+            out["delivery_ms"] = config.delivery_ms;
+            out["ack_ms"] = config.ack_ms;
+        } catch (...) {
+            return 2;
+        }
+    } else if (argc > 1 && std::string(argv[1]) == "deadline") {
+        Config config;
+        const auto *host = std::getenv("RABBIT_HOST");
+        config.rabbit_host = host ? host : "127.0.0.1";
+        config.rabbit_port = 5672;
+        config.rabbit_tls = false;
+        config.rabbit_user = "notifytest";
+        config.rabbit_password = "synthetic-local-only";
+        config.queue = "notify-watchdog-test";
+        Queue publisher(config, false);
+        publisher.Publish("watchdog-redelivery-test");
+        Queue consumer(config, true);
+        const auto first = consumer.Next();
+        if (!first)
+            return 3;
+        auto started = std::chrono::steady_clock::now();
+        std::atomic<long long> fired{-1};
+        {
+            solo::Deadline deadline(30000, [&] {
+                consumer.Interrupt();
+                fired = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now() - started)
+                            .count();
+            });
+            std::this_thread::sleep_for(std::chrono::milliseconds(31000));
+            out["expired"] = deadline.expired.load();
+            out["elapsed_ms"] = Json::Int64(fired.load());
+        }
+        Queue replacement(config, true);
+        bool redelivered = false;
+        for (int i = 0; i < 5 && !redelivered; ++i) {
+            auto message = replacement.Next();
+            if (message && message->key == first->key) {
+                redelivered = true;
+                replacement.Ack(message->tag);
+            }
+        }
+        out["unacked_task_requeued"] = redelivered;
+        std::atomic<bool> unexpected{false};
+        {
+            solo::Deadline completed(100, [&] { unexpected = true; });
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        out["early_completion_cancelled_timer"] = !unexpected.load();
+    } else {
+        auto dsn = SecretFile("DATABASE_URL_FILE");
+        Repository repository(dsn);
+        auto task = repository.Submit("repository-fencing-unit", "test", "data");
+        auto first = repository.Claim(task.task_id, 30000);
+        auto duplicate = repository.Claim(task.task_id, 30000);
+        out["one_owner"] = first.has_value() && !duplicate.has_value();
+        odb::pgsql::database db(dsn);
+        {
+            odb::transaction tx(db.begin());
+            std::unique_ptr<Task> row(db.load<Task>(task.task_id));
+            row->lease_ms = NowMs() - 1;
+            db.update(*row);
+            tx.commit();
+        }
+        auto expired = repository.Get(task.task_id);
+        repository.Published(*expired, 30000);
+        auto next = repository.Claim(task.task_id, 30000);
+        out["republished_expired_task_claimable"] = next.has_value();
+        if (!next) {
+            std::cout << out << std::endl;
+            return 3;
+        }
+        out["stale_completion_rejected"] = !repository.Finish(*first, true, 1000);
+        out["new_attempt_completed"] = repository.Finish(*next, true, 1000);
+        out["monotonic_attempt"] = next->attempt > first->attempt;
+        out["completed_not_claimed"] = !repository.Claim(task.task_id, 30000).has_value();
+    }
+    std::cout << out << std::endl;
+}

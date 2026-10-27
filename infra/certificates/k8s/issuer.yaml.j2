@@ -7,6 +7,11 @@ items:
     name: "{{ issuer_account }}"
     namespace: soloapp
   automountServiceAccountToken: false
+- apiVersion: v1
+  kind: ConfigMap
+  metadata: {name: cert-issuer-script, namespace: soloapp}
+  data:
+    rotate.py: {{ lookup('file', project_root ~ '/infra/certificates/files/rotate-certificates.py') | to_json }}
 - apiVersion: batch/v1
   kind: CronJob
   metadata:
@@ -37,14 +42,16 @@ items:
             - name: issuer
               image: "{{ issuer_image }}"
               imagePullPolicy: Never
+              command: [python3, /opt/issuer/rotate.py]
               env:
               - name: TOKEN_FILE
                 value: /run/identity/token
               - name: SERVICE_ACCOUNT_ID
                 value: "{{ cloud.identities['cert-issuer'] }}"
               - name: ISSUER_CONFIG
-                value: {{ {'ca': cloud.secrets.ca, 'certificates': [{'cn': 'node-yc', 'secret': cloud.secrets['node-yc'], 'ip': hostvars['yc'].private_ip}, {'cn': 'node-home', 'secret': cloud.secrets['node-home'], 'ip': hostvars['home'].private_ip}, {'cn': 'node-edge', 'secret': cloud.secrets['node-edge'], 'ip': hostvars['edge'].private_ip}, {'cn': 'auth_yc', 'secret': cloud.secrets['auth-yc'], 'ip': hostvars['yc'].private_ip}, {'cn': 'auth_home', 'secret': cloud.secrets['auth-home'], 'ip': hostvars['home'].private_ip}, {'cn': 'ingress-yc', 'secret': cloud.secrets['ingress-yc'], 'ip': none}, {'cn': 'ingress-edge', 'secret': cloud.secrets['ingress-edge'], 'ip': none}, {'cn': 'nginx-yc', 'secret': cloud.secrets['nginx-yc'], 'ip': none}, {'cn': 'nginx-home', 'secret': cloud.secrets['nginx-home'], 'ip': none}, {'cn': 'observability-yc', 'secret': cloud.secrets['observability-yc'], 'ip': none}, {'cn': 'observability-home', 'secret': cloud.secrets['observability-home'], 'ip': none}, {'cn': 'observability-gateway', 'secret': cloud.secrets['observability-gateway'], 'ip': none}, {'cn': 'observability-gateway-home', 'secret': cloud.secrets['observability-gateway-home'], 'ip': none}]} | to_json | to_json }}
+                value: {{ {'ca': cloud.secrets.ca, 'certificates': [{'cn': 'node-yc', 'secret': cloud.secrets['node-yc'], 'ip': hostvars['yc'].private_ip}, {'cn': 'node-home', 'secret': cloud.secrets['node-home'], 'ip': hostvars['home'].private_ip}, {'cn': 'node-edge', 'secret': cloud.secrets['node-edge'], 'ip': hostvars['edge'].private_ip}, {'cn': 'auth_yc', 'secret': cloud.secrets['auth-yc'], 'ip': hostvars['yc'].private_ip}, {'cn': 'auth_home', 'secret': cloud.secrets['auth-home'], 'ip': hostvars['home'].private_ip}, {'cn': 'ingress-yc', 'secret': cloud.secrets['ingress-yc'], 'ip': none}, {'cn': 'ingress-edge', 'secret': cloud.secrets['ingress-edge'], 'ip': none}, {'cn': 'nginx-yc', 'secret': cloud.secrets['nginx-yc'], 'ip': none}, {'cn': 'nginx-home', 'secret': cloud.secrets['nginx-home'], 'ip': none}, {'cn': 'observability-yc', 'secret': cloud.secrets['observability-yc'], 'ip': none}, {'cn': 'observability-home', 'secret': cloud.secrets['observability-home'], 'ip': none}, {'cn': 'observability-gateway', 'secret': cloud.secrets['observability-gateway'], 'ip': none}, {'cn': 'observability-gateway-home', 'secret': cloud.secrets['observability-gateway-home'], 'ip': none}] + (cloud.extra_certificates | default([]))} | to_json | to_json }}
               volumeMounts:
+              - {name: issuer-script, mountPath: /opt/issuer, readOnly: true}
               - name: identity
                 mountPath: /run/identity
                 readOnly: true
@@ -62,6 +69,8 @@ items:
                   cpu: 500m
                   memory: 96Mi
             volumes:
+            - name: issuer-script
+              configMap: {name: cert-issuer-script}
             - name: identity
               projected:
                 sources:

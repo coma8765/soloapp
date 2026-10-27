@@ -1,0 +1,26 @@
+openapi: 3.0.3
+info:
+  title: client-gateway
+  version: 1.0.0
+paths:
+  /internal/delivery:
+    post:
+      operationId: delivery
+      description: Browser acknowledgement is required for delivery completion.
+      responses:
+        '200':
+          description: Success
+  /internal/delivery/cancel:
+    post:
+      operationId: cancel
+      description: cancel
+      responses:
+        '200':
+          description: Success
+  /api/v1/app-api/v1/chat/ws:
+    get:
+      operationId: socket
+      description: socket
+      responses:
+        '101':
+          description: Success

@@ -1,0 +1,7 @@
+replicas: 2
+port: 8080
+image: '{{ client_gateway_image | default("soloapp/client-gateway:dev") }}'
+image_pull_policy: IfNotPresent
+resources:
+  requests: {cpu: 50m, memory: 64Mi}
+  limits: {cpu: '1', memory: 192Mi}

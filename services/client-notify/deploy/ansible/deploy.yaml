@@ -1,0 +1,8 @@
+- name: Roll client-notify independently
+  hosts: app_sites
+  serial: 1
+  any_errors_fatal: true
+  become: true
+  gather_facts: false
+  tasks:
+  - ansible.builtin.import_tasks: tasks.yaml

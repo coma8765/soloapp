@@ -1,0 +1,200 @@
+openapi: 3.0.3
+info:
+  title: Client notification delivery
+  version: 1.0.0
+x-cpp-namespace: solo::notify::generated
+paths:
+  /api/v1/client-notify/v1/tasks:
+    post:
+      operationId: submit
+      security:
+      - bearerAuth: []
+      x-route:
+        exposure: internal
+        auth: bearer
+        max_body_bytes: 131072
+        timeouts: &id001
+          connect_seconds: 2
+          read_seconds: 10
+        rate_limit: null
+      responses:
+        '202':
+          description: Durably accepted; not yet delivered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskStatus'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryTask'
+  /api/v1/client-notify/v1/status:
+    post:
+      operationId: status
+      security:
+      - bearerAuth: []
+      x-route:
+        exposure: internal
+        auth: bearer
+        max_body_bytes: 131072
+        timeouts: *id001
+        rate_limit: null
+      responses:
+        '200':
+          description: TaskStatus
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskStatus'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskKey'
+  /healthz:
+    get:
+      operationId: healthz
+      security: []
+      x-route:
+        exposure: internal
+        auth: none
+        max_body_bytes: 131072
+        timeouts: *id001
+        rate_limit: null
+      responses:
+        '200':
+          description: Health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  /health/ready:
+    get:
+      operationId: ready
+      security: []
+      x-route:
+        exposure: internal
+        auth: none
+        max_body_bytes: 131072
+        timeouts: *id001
+        rate_limit: null
+      responses:
+        '200':
+          description: Health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    DeliveryTask:
+      type: object
+      required:
+      - task_id
+      - recipient
+      - payload
+      properties:
+        task_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_-]{16,128}$
+        recipient:
+          type: string
+          x-min-bytes: 1
+          x-max-bytes: 128
+          x-no-nul: true
+        payload:
+          type: string
+          x-min-bytes: 1
+          x-max-bytes: 65536
+          x-no-nul: true
+    TaskKey:
+      type: object
+      required:
+      - task_id
+      properties:
+        task_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_-]{16,128}$
+    TaskStatus:
+      type: object
+      required:
+      - task_id
+      - state
+      - attempt
+      properties:
+        task_id:
+          type: string
+        state:
+          type: string
+        attempt:
+          type: integer
+          minimum: 0
+    Error:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: string
+    Health:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          type: string

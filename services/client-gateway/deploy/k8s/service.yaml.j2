@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata: {name: client-gateway, namespace: soloapp}
+spec:
+  selector: {app: client-gateway}
+  ports: [{name: http, port: {{ client_gateway_config.port }}, targetPort: http}, {name: internal, port: 8443, targetPort: internal}]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: client-gateway, namespace: soloapp}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: {app: client-gateway}

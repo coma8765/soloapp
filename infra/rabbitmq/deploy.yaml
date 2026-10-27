@@ -1,0 +1,83 @@
+- name: Maintain independent two-node RabbitMQ clusters
+  hosts: app_sites
+  serial: 1
+  become: true
+  gather_facts: false
+  any_errors_fatal: true
+  vars:
+    rabbit: "{{ lookup('file', project_root ~ '/infra/rabbitmq/defaults.yaml') | from_yaml | combine(rabbitmq_overrides | default({}), recursive=true) }}"
+  tasks:
+  - name: Require two nodes and scoped credentials
+    ansible.builtin.assert:
+      that:
+      - rabbit.nodes | int == 2
+      - "'rabbitmq-' ~ inventory_hostname in cloud.secrets"
+  - name: Install secret delivery helper
+    ansible.builtin.copy:
+      src: '{{ project_root }}/infra/secrets/files/secret-fetch.py'
+      dest: '{{ remote_root }}/secret-fetch.py'
+      mode: '0700'
+    register: delivery_helper
+  - name: Deliver broker secrets into RAM
+    ansible.builtin.include_tasks: '{{ project_root }}/infra/secrets/tasks/delivery.yaml'
+    vars:
+      delivery_name: rabbitmq
+      delivery_uid: 999
+      delivery_secret_ids: '{{ cloud.secrets["rabbitmq-" ~ inventory_hostname] }}'
+  - name: Create persistent broker directories
+    ansible.builtin.file:
+      path: '{{ item.path }}'
+      state: directory
+      mode: '0700'
+      owner: '{{ item.owner }}'
+    loop:
+    - {path: '{{ remote_root }}/rabbitmq', owner: '0'}
+    - {path: /var/lib/soloapp-rabbitmq/1, owner: '999'}
+    - {path: /var/lib/soloapp-rabbitmq/2, owner: '999'}
+  - name: Install runtime manager
+    ansible.builtin.copy:
+      src: '{{ project_root }}/infra/rabbitmq/files/manage.py'
+      dest: '{{ remote_root }}/rabbitmq/manage.py'
+      mode: '0700'
+    register: manager
+  - name: Configure public topology settings
+    ansible.builtin.copy:
+      content: "{{ rabbit | combine({'ip': private_ip, 'site': inventory_hostname}) | to_nice_json }}"
+      dest: '{{ remote_root }}/rabbitmq/config.json'
+      mode: '0600'
+    register: settings
+  - name: Pull pinned stock RabbitMQ image
+    ansible.builtin.command: docker pull {{ rabbit.image }}
+    register: pulled
+    changed_when: "'Downloaded newer image' in pulled.stdout"
+  - name: Install local cluster units
+    ansible.builtin.template:
+      src: '{{ project_root }}/infra/rabbitmq/templates/service.j2'
+      dest: '/etc/systemd/system/solo-rabbitmq-{{ item }}.service'
+      mode: '0644'
+    loop: [1, 2]
+    register: units
+  - name: Start both local nodes
+    ansible.builtin.systemd_service:
+      name: 'solo-rabbitmq-{{ item }}'
+      enabled: true
+      daemon_reload: true
+      state: "{{ 'restarted' if manager.changed or settings.changed or units.changed else 'started' }}"
+    loop: [1, 2]
+  - name: Wait for both TLS listeners
+    ansible.builtin.wait_for:
+      host: '{{ private_ip }}'
+      port: '{{ item }}'
+      timeout: 120
+    loop: '{{ rabbit.ports }}'
+  - name: Verify both nodes joined the local cluster
+    ansible.builtin.command: docker exec --user 999:999 solo-rabbitmq-1 rabbitmqctl cluster_status --formatter json
+    register: cluster
+    changed_when: false
+    until: (cluster.stdout | from_json).running_nodes | length == 2
+    retries: 12
+    delay: 5
+  - name: Import queue only after both members are available
+    ansible.builtin.command: docker exec --user 999:999 solo-rabbitmq-1 rabbitmqctl import_definitions /runtime/definitions.json
+    changed_when: false
+    no_log: true

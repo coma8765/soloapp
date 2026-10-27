@@ -1,0 +1,26 @@
+- name: Require isolated workload credentials and an immutable runtime image
+  ansible.builtin.assert:
+    that:
+    - "'client-gateway-' ~ inventory_hostname in cloud.identities"
+    - "'client-gateway-' ~ inventory_hostname in cloud.secrets"
+    - "'@sha256:' in client_gateway_config.image"
+    quiet: true
+- name: Apply Service
+  ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
+  vars:
+    manifest_source: '{{ project_root }}/services/client-gateway/deploy/k8s/service.yaml.j2'
+    manifest_name: client-gateway-service
+- name: Apply explicit egress and ingress policy
+  ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
+  vars:
+    manifest_source: '{{ project_root }}/services/client-gateway/deploy/k8s/networkpolicy.yaml.j2'
+    manifest_name: client-gateway-network
+- name: Apply Deployment
+  ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
+  vars:
+    manifest_source: '{{ project_root }}/services/client-gateway/deploy/k8s/deployment.yaml.j2'
+    manifest_name: client-gateway-deployment
+- name: Wait for rollout
+  ansible.builtin.command: k3s kubectl -n soloapp rollout status deployment/client-gateway --timeout=300s
+  changed_when: false
+  when: not ansible_check_mode

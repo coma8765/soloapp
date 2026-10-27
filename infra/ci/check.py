@@ -41,6 +41,8 @@ def main():
                 "libs/runtime",
                 "services/auth/src",
                 "services/auth/tests",
+                "services/client-notify/src",
+                "services/client-notify/tests",
                 "services/whoami/src",
                 "services/whoami/tests",
             ],
