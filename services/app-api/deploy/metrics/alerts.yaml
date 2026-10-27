@@ -4,26 +4,29 @@ groups:
   - alert: Http5xxRateHigh
     expr: sum by(dc,route)(rate(soloapp_http_requests_total{service="whoami",status=~"5.."}[5m])) / sum by(dc,route)(rate(soloapp_http_requests_total{service="whoami",status=~"[1-5].."}[5m]))
       > 0.05
-    for: 1m
+    for: 2m
     labels:
       severity: warning
       project: soloapp
       service: app-api
     annotations:
-      summary: HTTP 5xx > 5% за 5 минут
-      description: DC={{ $labels.dc }} service={{ $labels.service }} namespace={{ $labels.namespace }} pod={{ $labels.pod
-        }} container={{ $labels.container }} route={{ $labels.route }} value={{ $value }}
+      summary: Доля HTTP 5xx выше 5%
+      description: 'Ошибки 5xx: {{ $value | humanizePercentage }} запросов за 5 минут; порог >5% сохраняется 2 минуты.'
+      action: Проверьте маршрут, логи 5xx, доступность upstream и PostgreSQL; сопоставьте начало ошибки с раскаткой.
+    keep_firing_for: 3m
   - alert: HttpRateLimited
     expr: sum by(dc,route)(increase(soloapp_http_requests_total{service="whoami",status="429"}[1m])) > 0
-    for: 0s
+    for: 2m
     labels:
       severity: warning
       project: soloapp
       service: app-api
     annotations:
-      summary: 'HTTP 429: запросы ограничены'
-      description: DC={{ $labels.dc }} service={{ $labels.service }} namespace={{ $labels.namespace }} pod={{ $labels.pod
-        }} container={{ $labels.container }} route={{ $labels.route }} value={{ $value }}
+      summary: Устойчивые ограничения HTTP 429
+      description: 'За последнюю минуту: около {{ printf "%.0f" $value }} ответов 429. Ограничения наблюдаются непрерывно
+        2 минуты; одиночный всплеск уведомление не вызывает.'
+      action: Проверьте RPS и настройки rate limit маршрута, источник повторов и retry/backoff клиентов.
+    keep_firing_for: 3m
   - alert: HttpLatencyHigh
     expr: histogram_quantile(0.95, sum by(le,dc,route)(rate(soloapp_http_request_duration_seconds_bucket{service="whoami"}[5m])))
       > 1
@@ -33,6 +36,7 @@ groups:
       project: soloapp
       service: app-api
     annotations:
-      summary: HTTP p95 > 1 секунды
-      description: DC={{ $labels.dc }} service={{ $labels.service }} namespace={{ $labels.namespace }} pod={{ $labels.pod
-        }} container={{ $labels.container }} route={{ $labels.route }} value={{ $value }}
+      summary: HTTP p95 выше 1 секунды
+      description: 'p95 за 5 минут: {{ printf "%.2f" $value }} с; порог >1 с сохраняется 5 минут.'
+      action: Сравните RPS, CPU, PostgreSQL connections и задержку между площадками; найдите медленный маршрут.
+    keep_firing_for: 3m

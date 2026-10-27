@@ -5,20 +5,18 @@ groups:
     expr: max by(dc,namespace,pod,service)(label_replace(label_replace(kube_pod_labels{namespace=~"soloapp|observability",label_app!=""},
       "service", "$1", "label_app", "(.+)"), "service", "app-api", "service", "whoami"))
   - record: soloapp:pod:not_ready
-    expr: (((max by(dc,namespace,pod)((kube_pod_status_ready{namespace=~"soloapp|observability",condition="true"} ==
-      0) and (time() - timestamp(kube_pod_status_ready{namespace=~"soloapp|observability",condition="true"}) < 30)) and
-      on(dc,namespace,pod) (kube_pod_status_phase{phase=~"Pending|Running|Unknown"} == 1)) unless on(dc,namespace,pod)
-      kube_pod_deletion_timestamp) + 1) * on(dc,namespace,pod) group_left(service) soloapp:pod:info
+    expr: (((max by(dc,namespace,pod)((kube_pod_status_ready{namespace=~"soloapp|observability",condition="true"} == 0) and
+      (time() - timestamp(kube_pod_status_ready{namespace=~"soloapp|observability",condition="true"}) < 30)) and on(dc,namespace,pod)
+      (kube_pod_status_phase{phase=~"Pending|Running|Unknown"} == 1)) unless on(dc,namespace,pod) kube_pod_deletion_timestamp)
+      + 1) * on(dc,namespace,pod) group_left(service) soloapp:pod:info
   - record: soloapp:container:cpu_request_ratio
     expr: (sum by(dc,namespace,pod,container)(rate(container_cpu_usage_seconds_total{namespace=~"soloapp|observability",container!="",container!="POD"}[2m]))
       / (max by(dc,namespace,pod,container)(kube_pod_container_resource_requests{namespace=~"soloapp|observability",resource="cpu"}
-      and (time()-timestamp(kube_pod_container_resource_requests)<30)) > 0)) * on(dc,namespace,pod) group_left(service)
-      soloapp:pod:info
+      and (time()-timestamp(kube_pod_container_resource_requests)<30)) > 0)) * on(dc,namespace,pod) group_left(service) soloapp:pod:info
   - record: soloapp:container:memory_request_ratio
     expr: (max by(dc,namespace,pod,container)(container_memory_working_set_bytes{namespace=~"soloapp|observability",container!="",container!="POD"}
       and (time()-timestamp(container_memory_working_set_bytes)<45)) / (max by(dc,namespace,pod,container)(kube_pod_container_resource_requests{namespace=~"soloapp|observability",resource="memory"}
-      and (time()-timestamp(kube_pod_container_resource_requests)<30)) > 0)) * on(dc,namespace,pod) group_left(service)
-      soloapp:pod:info
+      and (time()-timestamp(kube_pod_container_resource_requests)<30)) > 0)) * on(dc,namespace,pod) group_left(service) soloapp:pod:info
   - alert: PodUnavailable
     expr: soloapp:pod:not_ready > 0
     for: 1m
@@ -26,51 +24,62 @@ groups:
       severity: critical
       project: soloapp
     annotations:
-      summary: Pod недоступен более минуты
-      description: DC={{ $labels.dc }} service={{ $labels.service }} namespace={{ $labels.namespace }} pod={{ $labels.pod
-        }} container={{ $labels.container }} route={{ $labels.route }} value={{ $value }}
+      summary: Pod не готов принимать трафик больше минуты
+      description: Readiness непрерывно неуспешна не менее 1 минуты. Pod исключён из Service; оставшиеся реплики обслуживают
+        запросы.
+      action: Проверьте события pod, readiness и логи приложения; при недавней раскатке сравните версию с рабочей репликой.
+    keep_firing_for: 3m
   - alert: PodStartupTooLong
-    expr: (soloapp:pod:not_ready > 0) and on(dc,namespace,pod) (time()-kube_pod_created > 60) and on(dc,namespace,pod)
-      (kube_pod_status_phase{phase="Pending"} == 1)
+    expr: (soloapp:pod:not_ready > 0) and on(dc,namespace,pod) (time()-kube_pod_created > 60) and on(dc,namespace,pod) (kube_pod_status_phase{phase="Pending"}
+      == 1)
     for: 0s
     labels:
       severity: warning
       project: soloapp
     annotations:
       summary: Pod не запустился за минуту
-      description: DC={{ $labels.dc }} service={{ $labels.service }} namespace={{ $labels.namespace }} pod={{ $labels.pod
-        }} container={{ $labels.container }} route={{ $labels.route }} value={{ $value }}
+      description: Pod остаётся в Pending спустя 60 секунд после создания.
+      action: 'Проверьте Events: нехватку ресурсов, ImagePullBackOff, PVC и init-контейнеры.'
+    keep_firing_for: 3m
   - alert: DeploymentReplicasMissing
     expr: label_replace(label_replace(max by(dc,namespace,deployment)(kube_deployment_spec_replicas - kube_deployment_status_replicas_available),
       "service", "$1", "deployment", "(.+)"), "service", "app-api", "service", "whoami") > 0
-    for: 1m
+    for: 2m
     labels:
       severity: critical
       project: soloapp
     annotations:
-      summary: Не хватает одного или нескольких готовых подов
-      description: DC={{ $labels.dc }} service={{ $labels.service }} namespace={{ $labels.namespace }} pod={{ $labels.pod
-        }} container={{ $labels.container }} route={{ $labels.route }} value={{ $value }}
+      summary: Не хватает готовых реплик Deployment
+      description: 'Недостающих реплик: {{ printf "%.0f" $value }}. Дефицит сохраняется 2 минуты; запас отказоустойчивости
+        снижен.'
+      action: Проверьте список pod и события Deployment. Восстановите реплики или откатите неудачную раскатку.
+    keep_firing_for: 3m
   - alert: ContainerCpuRequestHigh
     expr: soloapp:container:cpu_request_ratio > 0.8
-    for: 1m
+    for: 5m
     labels:
       severity: warning
       project: soloapp
     annotations:
-      summary: CPU > 80% гарантированных requests
-      description: DC={{ $labels.dc }} service={{ $labels.service }} namespace={{ $labels.namespace }} pod={{ $labels.pod
-        }} container={{ $labels.container }} route={{ $labels.route }} value={{ $value }}
+      summary: CPU выше 80% гарантированного request
+      description: 'Использование CPU: {{ $value | humanizePercentage }} от request, порог >80% в течение 5 минут. Это доля
+        гарантированного ресурса, а не CPU limit.'
+      action: Сравните нагрузку, RPS и throttling с обычным уровнем. Если потребление штатное, пересмотрите request; если
+        выросло — проверьте профиль нагрузки.
+    keep_firing_for: 3m
   - alert: ContainerMemoryRequestHigh
     expr: soloapp:container:memory_request_ratio > 0.8
-    for: 1m
+    for: 5m
     labels:
       severity: warning
       project: soloapp
     annotations:
-      summary: Memory > 80% гарантированных requests
-      description: DC={{ $labels.dc }} service={{ $labels.service }} namespace={{ $labels.namespace }} pod={{ $labels.pod
-        }} container={{ $labels.container }} route={{ $labels.route }} value={{ $value }}
+      summary: Память выше 80% гарантированного request
+      description: 'Working set: {{ $value | humanizePercentage }} от memory request, порог >80% в течение 5 минут. Значение
+        может быть выше 100%; это не процент memory limit.'
+      action: Сравните working set с limit и историей, проверьте OOM/restarts. При стабильном штатном потреблении пересмотрите
+        request; при росте — ищите утечку.
+    keep_firing_for: 3m
   - alert: PodHealthProbeFailed
     expr: label_replace(max by(dc,service,pod,check)(probe_success{check=~"healthz|readiness|db-ready"} and (time()-timestamp(probe_success)<20)),
       "service", "app-api", "service", "whoami") == 0
@@ -79,6 +88,7 @@ groups:
       severity: critical
       project: soloapp
     annotations:
-      summary: HTTP probe пода неуспешен более минуты
-      description: DC={{ $labels.dc }} service={{ $labels.service }} namespace={{ $labels.namespace }} pod={{ $labels.pod
-        }} container={{ $labels.container }} route={{ $labels.route }} value={{ $value }}
+      summary: HTTP-проверка pod не проходит больше минуты
+      description: Проверка {{ $labels.check }} непрерывно неуспешна 1 минуту. Проверьте доступность процесса и его зависимостей.
+      action: Откройте график healthz/readiness и логи pod; сопоставьте с состоянием Service и базы данных.
+    keep_firing_for: 3m

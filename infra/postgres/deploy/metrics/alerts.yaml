@@ -7,12 +7,15 @@ groups:
       == 0) and on(dc,observer) (time()-max by(dc,observer)(timestamp(pg_up{job="postgres"})) < 20)))
   - alert: PostgresConnectionsHigh
     expr: soloapp:postgres:connection_ratio > 0.7
-    for: 1m
+    for: 3m
     labels:
       severity: warning
       project: soloapp
       service: postgres
     annotations:
-      summary: 'PG: занято > 70% max_connections (все базы)'
-      description: DC={{ $labels.dc }} service={{ $labels.service }} namespace={{ $labels.namespace }} pod={{ $labels.pod
-        }} container={{ $labels.container }} route={{ $labels.route }} value={{ $value }}
+      summary: 'PostgreSQL: занято больше 70% соединений'
+      description: Использовано {{ $value | humanizePercentage }} max_connections по всем базам; порог >70% сохраняется 3
+        минуты.
+      action: Проверьте число active/idle соединений, долгие транзакции и размеры пулов приложений. Не увеличивайте max_connections
+        без оценки памяти.
+    keep_firing_for: 3m

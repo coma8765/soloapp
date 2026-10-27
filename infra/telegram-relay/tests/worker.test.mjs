@@ -5,6 +5,7 @@ const env = {
   RELAY_TOKEN: 'x'.repeat(48),
   TELEGRAM_BOT_TOKEN: 'test-only',
   TELEGRAM_CHAT_ID: '-123',
+  GRAFANA_URL: 'https://soloapp.example/grafana/',
 };
 const payload = {
   status: 'firing',
@@ -110,7 +111,7 @@ test('splits large groups below Telegram limit without dropping pod identifiers'
       annotations: { description: 'x'.repeat(1500) },
     })),
   };
-  const output = messages(input);
+  const output = messages(input, env);
   assert.ok(output.length > 1);
   assert.ok(output.every((item) => item.length <= 3900));
   for (let i = 0; i < 100; i++)
@@ -123,9 +124,9 @@ test('recovery and truncation are visible', async () => {
     truncatedAlerts: 2,
     alerts: [{ ...payload.alerts[0], status: 'resolved' }],
   }).join('\n');
-  assert.match(output, /RESOLVED/);
-  assert.match(output, /\[resolved\]/);
-  assert.match(output, /truncated 2/);
+  assert.match(output, /ВОССТАНОВЛЕНО/);
+  assert.match(output, /восстановлено: 1/);
+  assert.match(output, /Ещё 2 алертов/);
 });
 test('rejects unsupported methods and paths', async () => {
   assert.equal(
@@ -147,4 +148,95 @@ test('Workers entrypoint accepts execution context without treating it as fetch'
     204,
   );
   assert.equal(mock.mock.calls.length, 1);
+});
+
+test('links point to configured Grafana and incident runbook, preserve filters and time range', () => {
+  const alert = {
+    ...payload.alerts[0],
+    startsAt: '2026-10-27T14:00:00Z',
+    labels: {
+      ...payload.alerts[0].labels,
+      severity: 'critical',
+      route: '/login?a=1&b=2',
+    },
+    annotations: {
+      summary: 'Pod недоступен',
+      description: 'Readiness > 1m',
+      action: 'Проверьте Events',
+      dashboard_url: 'https://attacker.example',
+    },
+    generatorURL: 'http://private-prometheus:9090/graph',
+  };
+  const output = messages({ ...payload, alerts: [alert] }, env).join('\n');
+  assert.match(output, /🔴 КРИТИЧНО/);
+  assert.match(output, /Действие: Проверьте Events/);
+  assert.match(output, /Начало: 2026-10-27 14:00:00 UTC/);
+  const url = new URL(output.split('Графики: ')[1].split('\n')[0]);
+  assert.equal(url.origin, 'https://soloapp.example');
+  assert.equal(url.pathname, '/grafana/d/soloapp-auth');
+  assert.equal(url.searchParams.get('var-dc'), 'yc');
+  assert.equal(url.searchParams.get('var-pod'), 'auth-123');
+  assert.equal(url.searchParams.get('var-route'), '/login?a=1&b=2');
+  assert.equal(
+    url.searchParams.get('from'),
+    String(Date.parse(alert.startsAt) - 300000),
+  );
+  assert.equal(url.searchParams.get('to'), 'now');
+  assert.match(output, /README.md#podunavailable/);
+  assert.doesNotMatch(output, /attacker|private-prometheus|namespace=\n/);
+});
+
+test('mixed groups show recovery time per alert and do not suggest incident values are current', () => {
+  const recovered = {
+    ...payload.alerts[0],
+    status: 'resolved',
+    startsAt: '2026-10-27T14:00:00Z',
+    endsAt: '2026-10-27T14:10:00Z',
+  };
+  const output = messages(
+    { ...payload, alerts: [payload.alerts[0], recovered] },
+    env,
+  ).join('\n');
+  assert.match(output, /активных: 1 · восстановлено: 1/);
+  assert.match(output, /Восстановление: 2026-10-27 14:10:00 UTC/);
+  assert.match(output, /не к текущему измерению/);
+  const urls = output
+    .split('\n')
+    .filter((line) => line.startsWith('Графики: '))
+    .map((line) => new URL(line.slice(9)));
+  assert.equal(
+    urls[1].searchParams.get('to'),
+    String(Date.parse(recovered.endsAt) + 300000),
+  );
+});
+
+test('Grafana URL must be configured, https and without credentials or query', async () => {
+  for (const url of [
+    '',
+    'http://grafana.example/grafana/',
+    'https://user:password@grafana.example/grafana/',
+    'https://grafana.example/grafana/?token=secret',
+  ]) {
+    assert.equal(
+      (
+        await handle(request(), { ...env, GRAFANA_URL: url }, () =>
+          assert.fail(),
+        )
+      ).status,
+      503,
+    );
+  }
+});
+
+test('unknown service safely uses infrastructure dashboard', () => {
+  const input = {
+    ...payload,
+    alerts: [
+      {
+        ...payload.alerts[0],
+        labels: { ...payload.alerts[0].labels, service: 'constructor' },
+      },
+    ],
+  };
+  assert.match(messages(input, env).join('\n'), /\/d\/soloapp-infrastructure/);
 });
