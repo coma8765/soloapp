@@ -1,0 +1,1014 @@
+id: null
+uid: soloapp-routing
+title: Soloapp · Routing chain
+schemaVersion: 39
+version: 3
+refresh: 5s
+timezone: browser
+time:
+  from: now-1h
+  to: now
+tags:
+- soloapp
+- lite
+description: NLB → ingress → DC → Kubernetes Service → pod. HAProxy excludes on its active health checks; slow arbitrary
+  business responses do not automatically exclude an otherwise healthy pod. Missing telemetry is not an UP state. NLB/Grafana
+  and auth health are independent. Grafana home is backup.
+links:
+- title: Overview
+  url: /grafana/d/soloapp-overview
+  type: link
+  keepTime: true
+  includeVars: false
+- title: auth
+  url: /grafana/d/soloapp-auth
+  type: link
+  keepTime: true
+  includeVars: false
+- title: app-api
+  url: /grafana/d/soloapp-whoami
+  type: link
+  keepTime: true
+  includeVars: false
+- title: nginx
+  url: /grafana/d/soloapp-nginx
+  type: link
+  keepTime: true
+  includeVars: false
+- title: Infrastructure
+  url: /grafana/d/soloapp-infrastructure
+  type: link
+  keepTime: true
+  includeVars: false
+- title: Routing chain
+  url: /grafana/d/soloapp-routing
+  type: link
+  keepTime: true
+  includeVars: false
+- title: PostgreSQL
+  url: /grafana/d/soloapp-postgres
+  type: link
+  keepTime: true
+  includeVars: false
+templating:
+  list:
+  - name: dc
+    type: custom
+    query: yc,home
+    multi: true
+    includeAll: true
+    allValue: .+
+    current:
+      text: All
+      value: $__all
+  - name: ingress
+    type: custom
+    query: yc,edge
+    multi: true
+    includeAll: true
+    allValue: .+
+    current:
+      text: All
+      value: $__all
+  - name: observer
+    type: custom
+    query: yc,home
+    multi: true
+    includeAll: true
+    allValue: .+
+    current:
+      text: All
+      value: $__all
+panels:
+- id: 17
+  title: 'О дашборде: Soloapp · Routing chain'
+  type: text
+  gridPos:
+    x: 0
+    y: 0
+    w: 24
+    h: 4
+  options:
+    mode: markdown
+    content: 'Цепочка маршрутизации: Yandex NLB → HAProxy → площадка → Kubernetes Service → pod. Видны исключение площадки
+      и причины недоступности.
+
+
+      Вверху — активные алерты и доля успешных операций. Красный алерт означает firing; пороги хранятся в соседних alerts.yaml.'
+  targets: []
+- id: 18
+  title: Активные алерты
+  description: Число firing-инстансов алертов; отдельный pod или контейнер считается отдельно.
+  type: stat
+  datasource: &id001
+    type: prometheus
+    uid: prometheus
+  gridPos:
+    x: 0
+    y: 4
+    w: 12
+    h: 4
+  targets:
+  - refId: A
+    expr: count(ALERTS{alertstate="firing",project="soloapp",service="routing"}) or vector(0)
+    instant: true
+    datasource: *id001
+  fieldConfig:
+    defaults:
+      unit: short
+      noValue: Нет данных
+      thresholds:
+        mode: absolute
+        steps:
+        - color: green
+          value: null
+        - color: red
+          value: 1
+  options:
+    reduceOptions:
+      calcs:
+      - lastNotNull
+      fields: ''
+      values: false
+    colorMode: value
+- id: 19
+  title: Success RPS / (Success RPS + Fail RPS)
+  description: 'HAProxy: 1xx–3xx / все ответы, включая other. Наблюдатели дедуплицированы.'
+  type: stat
+  datasource: *id001
+  gridPos:
+    x: 12
+    y: 4
+    w: 12
+    h: 4
+  targets:
+  - refId: A
+    expr: (sum(max by(ingress,proxy,server,code)(rate(haproxy_server_http_responses_total{ingress=~"$ingress",observer=~"$observer",server=~"$dc",proxy=~"auth_sites|grafana_sites",code=~"1xx|2xx|3xx"}[$__rate_interval])))
+      or 0 * sum(max by(ingress,proxy,server,code)(rate(haproxy_server_http_responses_total{ingress=~"$ingress",observer=~"$observer",server=~"$dc",proxy=~"auth_sites|grafana_sites"}[$__rate_interval]))))
+      / sum(max by(ingress,proxy,server,code)(rate(haproxy_server_http_responses_total{ingress=~"$ingress",observer=~"$observer",server=~"$dc",proxy=~"auth_sites|grafana_sites"}[$__rate_interval])))
+    instant: true
+    datasource: *id001
+  fieldConfig:
+    defaults:
+      unit: percentunit
+      noValue: Нет данных
+      thresholds:
+        mode: absolute
+        steps:
+        - color: red
+          value: null
+        - color: green
+          value: 0.95
+  options:
+    reduceOptions:
+      calcs:
+      - lastNotNull
+      fields: ''
+      values: false
+    colorMode: value
+- title: 1 · YC NLB → ingress — actual target state
+  type: state-timeline
+  description: YC getTargetStates decision, not an inferred HTTP probe. HEALTHY is eligible; UNHEALTHY/DRAINING/INACTIVE
+    excluded. UNKNOWN means no authoritative state. Check poll freshness below. Samples older than 20s are STALE; consult
+    collector status before interpreting routing.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: ((0 * sum without(state)(soloapp_nlb_target_state{ingress=~"$ingress",observer=~"$observer",state="UNHEALTHY"})
+      + 1 * sum without(state)(soloapp_nlb_target_state{ingress=~"$ingress",observer=~"$observer",state="HEALTHY"}) +
+      3 * sum without(state)(soloapp_nlb_target_state{ingress=~"$ingress",observer=~"$observer",state="INITIAL"}) + 4
+      * sum without(state)(soloapp_nlb_target_state{ingress=~"$ingress",observer=~"$observer",state="DRAINING"}) + 5
+      * sum without(state)(soloapp_nlb_target_state{ingress=~"$ingress",observer=~"$observer",state="INACTIVE"}) + 6
+      * sum without(state)(soloapp_nlb_target_state{ingress=~"$ingress",observer=~"$observer",state="UNKNOWN"})) * (time()
+      - max without(state)(timestamp(soloapp_nlb_target_state{ingress=~"$ingress",observer=~"$observer"})) < bool 20)
+      + 2 * (time() - max without(state)(timestamp(soloapp_nlb_target_state{ingress=~"$ingress",observer=~"$observer"}))
+      >= bool 20)) * on(observer) group_left() (time() - soloapp_nlb_last_success_timestamp_seconds{observer=~"$observer"}
+      < bool 20) + 2 * (0 * ((0 * sum without(state)(soloapp_nlb_target_state{ingress=~"$ingress",observer=~"$observer",state="UNHEALTHY"})
+      + 1 * sum without(state)(soloapp_nlb_target_state{ingress=~"$ingress",observer=~"$observer",state="HEALTHY"}) +
+      3 * sum without(state)(soloapp_nlb_target_state{ingress=~"$ingress",observer=~"$observer",state="INITIAL"}) + 4
+      * sum without(state)(soloapp_nlb_target_state{ingress=~"$ingress",observer=~"$observer",state="DRAINING"}) + 5
+      * sum without(state)(soloapp_nlb_target_state{ingress=~"$ingress",observer=~"$observer",state="INACTIVE"}) + 6
+      * sum without(state)(soloapp_nlb_target_state{ingress=~"$ingress",observer=~"$observer",state="UNKNOWN"})) * (time()
+      - max without(state)(timestamp(soloapp_nlb_target_state{ingress=~"$ingress",observer=~"$observer"})) < bool 20)
+      + 2 * (time() - max without(state)(timestamp(soloapp_nlb_target_state{ingress=~"$ingress",observer=~"$observer"}))
+      >= bool 20)) + 1) * on(observer) group_left() (time() - soloapp_nlb_last_success_timestamp_seconds{observer=~"$observer"}
+      >= bool 20)
+    legendFormat: '{{observer}} → {{ingress}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+      mappings:
+      - type: value
+        options:
+          '0':
+            text: UNHEALTHY
+            color: red
+          '1':
+            text: HEALTHY
+            color: green
+          '2':
+            text: STALE
+            color: orange
+          '3':
+            text: INITIAL
+            color: yellow
+          '4':
+            text: DRAINING
+            color: orange
+          '5':
+            text: INACTIVE
+            color: gray
+          '6':
+            text: UNKNOWN
+            color: orange
+      color:
+        mode: thresholds
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+    mergeValues: true
+  id: 1
+  gridPos:
+    x: 0
+    y: 8
+    w: 12
+    h: 8
+- title: NLB API — observer freshness
+  type: timeseries
+  description: API read every 5s. A failed API read produces UNKNOWN targets; an absent/stalled observer must not be
+    interpreted as healthy.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: time() - soloapp_nlb_last_success_timestamp_seconds{observer=~"$observer"}
+    legendFormat: '{{observer}} last successful API read'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: s
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 2
+  gridPos:
+    x: 12
+    y: 8
+    w: 12
+    h: 8
+- title: 2 · HAProxy → DC — server state
+  type: state-timeline
+  description: 'Actual HAProxy state. Grafana home is a healthy backup: UP does not mean currently selected. Auth and
+    Grafana route health are independent. Samples older than 20s are STALE; consult collector status before interpreting
+    routing.'
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: (0 * sum without(state)(haproxy_server_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="DOWN"})
+      + 1 * sum without(state)(haproxy_server_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="UP"})
+      + 3 * sum without(state)(haproxy_server_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="MAINT"})
+      + 4 * sum without(state)(haproxy_server_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="DRAIN"})
+      + 5 * sum without(state)(haproxy_server_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="NOLB"}))
+      * (time() - max without(state)(timestamp(haproxy_server_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability"}))
+      < bool 20) + 2 * (time() - max without(state)(timestamp(haproxy_server_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability"}))
+      >= bool 20)
+    legendFormat: '{{observer}} → {{ingress}} / {{proxy}} → {{server}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+      mappings:
+      - type: value
+        options:
+          '0':
+            text: DOWN
+            color: red
+          '1':
+            text: UP
+            color: green
+          '2':
+            text: STALE
+            color: orange
+          '3':
+            text: MAINT
+            color: gray
+          '4':
+            text: DRAIN
+            color: orange
+          '5':
+            text: NOLB
+            color: red
+      color:
+        mode: thresholds
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+    mergeValues: true
+  id: 3
+  gridPos:
+    x: 0
+    y: 16
+    w: 12
+    h: 8
+- title: HAProxy — last check result
+  type: state-timeline
+  description: L4TOUT/L6TOUT/L7TOUT = timeout; L4CON = connection error; L7STS = unexpected HTTP status; L7OK = successful
+    HTTP check. Samples older than 20s are STALE; consult collector status before interpreting routing.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: (0 * sum without(state)(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="HANA"})
+      + 1 * sum without(state)(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="SOCKERR"})
+      + 3 * sum without(state)(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="L4OK"})
+      + 4 * sum without(state)(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="L4TOUT"})
+      + 5 * sum without(state)(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="L4CON"})
+      + 6 * sum without(state)(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="L6OK"})
+      + 7 * sum without(state)(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="L6TOUT"})
+      + 8 * sum without(state)(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="L6RSP"})
+      + 9 * sum without(state)(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="L7TOUT"})
+      + 10 * sum without(state)(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="L7RSP"})
+      + 11 * sum without(state)(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="L7OK"})
+      + 12 * sum without(state)(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="L7OKC"})
+      + 13 * sum without(state)(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="L7STS"})
+      + 14 * sum without(state)(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="PROCERR"})
+      + 15 * sum without(state)(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="PROCTOUT"})
+      + 16 * sum without(state)(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability",state="PROCOK"}))
+      * (time() - max without(state)(timestamp(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability"}))
+      < bool 20) + 2 * (time() - max without(state)(timestamp(haproxy_server_check_status{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability"}))
+      >= bool 20)
+    legendFormat: '{{observer}} → {{ingress}} / {{proxy}} → {{server}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+      mappings:
+      - type: value
+        options:
+          '0':
+            text: HANA
+            color: red
+          '1':
+            text: SOCKERR
+            color: red
+          '2':
+            text: STALE
+            color: orange
+          '3':
+            text: L4OK
+            color: green
+          '4':
+            text: L4TOUT
+            color: red
+          '5':
+            text: L4CON
+            color: red
+          '6':
+            text: L6OK
+            color: green
+          '7':
+            text: L6TOUT
+            color: red
+          '8':
+            text: L6RSP
+            color: red
+          '9':
+            text: L7TOUT
+            color: red
+          '10':
+            text: L7RSP
+            color: red
+          '11':
+            text: L7OK
+            color: green
+          '12':
+            text: L7OKC
+            color: red
+          '13':
+            text: L7STS
+            color: red
+          '14':
+            text: PROCERR
+            color: red
+          '15':
+            text: PROCTOUT
+            color: red
+          '16':
+            text: PROCOK
+            color: green
+      color:
+        mode: thresholds
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+    mergeValues: true
+  id: 4
+  gridPos:
+    x: 12
+    y: 16
+    w: 12
+    h: 8
+- title: HAProxy — check duration
+  type: timeseries
+  description: HAProxy — check duration. Данные выбранных ДЦ; каждая линия соответствует меткам в легенде.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: haproxy_server_check_duration_seconds{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability"}
+    legendFormat: '{{observer}} / {{ingress}} → {{proxy}} / {{server}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: s
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 5
+  gridPos:
+    x: 0
+    y: 24
+    w: 12
+    h: 8
+- title: HAProxy — responses by status (selected range)
+  type: bargauge
+  description: 'Estimated backend response counts over the selected dashboard time range, grouped as 1xx–5xx/other (native
+    HAProxy counters do not expose individual codes). Counts user traffic, not active health checks or responses generated
+    by HAProxy without a backend server. Filters: ingress, DC, observer. Counter resets are handled by increase; take
+    the maximum estimate across observers for each server before summing, so dual collection does not double counts.
+    Gaps may undercount; rounded for display.'
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: sum by(code) (max by(ingress,proxy,server,code) (increase(haproxy_server_http_responses_total{ingress=~"$ingress",observer=~"$observer",server=~"$dc",proxy=~"auth_sites|grafana_sites"}[$__range])))
+    legendFormat: HTTP {{code}}
+    datasource:
+      type: prometheus
+      uid: prometheus
+    instant: true
+    range: false
+  fieldConfig:
+    defaults:
+      unit: short
+      min: 0
+      decimals: 0
+    overrides:
+    - matcher:
+        id: byName
+        options: HTTP 1xx
+      properties:
+      - id: color
+        value:
+          mode: fixed
+          fixedColor: blue
+    - matcher:
+        id: byName
+        options: HTTP 2xx
+      properties:
+      - id: color
+        value:
+          mode: fixed
+          fixedColor: green
+    - matcher:
+        id: byName
+        options: HTTP 3xx
+      properties:
+      - id: color
+        value:
+          mode: fixed
+          fixedColor: yellow
+    - matcher:
+        id: byName
+        options: HTTP 4xx
+      properties:
+      - id: color
+        value:
+          mode: fixed
+          fixedColor: orange
+    - matcher:
+        id: byName
+        options: HTTP 5xx
+      properties:
+      - id: color
+        value:
+          mode: fixed
+          fixedColor: red
+    - matcher:
+        id: byName
+        options: HTTP other
+      properties:
+      - id: color
+        value:
+          mode: fixed
+          fixedColor: gray
+  options:
+    orientation: horizontal
+    displayMode: gradient
+    showUnfilled: true
+    reduceOptions:
+      values: false
+      calcs:
+      - lastNotNull
+      fields: ''
+  id: 6
+  gridPos:
+    x: 12
+    y: 24
+    w: 12
+    h: 8
+- title: HAProxy — exclusions (UP → DOWN)
+  type: timeseries
+  description: 'Transitions counted by each HAProxy. Separate observers duplicate the same counter: do not sum them.'
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: increase(haproxy_server_check_up_down_total{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability"}[$__rate_interval])
+    legendFormat: '{{observer}} / {{ingress}} → {{proxy}} / {{server}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 7
+  gridPos:
+    x: 0
+    y: 32
+    w: 12
+    h: 8
+- title: HAProxy — routed sessions / second
+  type: timeseries
+  description: Shows actual backend selection, including activation of Grafana backup. Sessions are not necessarily HTTP
+    requests.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: rate(haproxy_server_sessions_total{ingress=~"$ingress",observer=~"$observer",proxy=~"auth_sites|grafana_sites|witness_reachability"}[$__rate_interval])
+    legendFormat: '{{observer}} / {{ingress}} → {{proxy}} / {{server}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: reqps
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 8
+  gridPos:
+    x: 12
+    y: 32
+    w: 12
+    h: 8
+- title: 3 · Service → pod — ready endpoints
+  type: state-timeline
+  description: 'Actual EndpointSlice: UP=ready and not terminating; DOWN=not eligible for normal Service traffic. STALE
+    after 20s; missing endpoint is a gap. Kube-proxy may briefly route to serving/terminating endpoints while draining
+    existing traffic.'
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: max by(dc,endpointslice,targetref_name) ((kube_endpointslice_endpoints{namespace="soloapp",dc=~"$dc",ready="true",terminating!="true"}
+      or on(dc,endpointslice,address,targetref_name) 0 * kube_endpointslice_endpoints{namespace="soloapp",dc=~"$dc"})
+      * (time() - timestamp(kube_endpointslice_endpoints{namespace="soloapp",dc=~"$dc"}) < bool 20) + 2 * (time() - timestamp(kube_endpointslice_endpoints{namespace="soloapp",dc=~"$dc"})
+      >= bool 20))
+    legendFormat: '{{dc}} {{endpointslice}} → {{targetref_name}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+      min: 0
+      max: 2
+      mappings:
+      - type: value
+        options:
+          '0':
+            text: DOWN
+            color: red
+          '1':
+            text: UP
+            color: green
+          '2':
+            text: STALE
+            color: orange
+      thresholds:
+        mode: absolute
+        steps:
+        - color: red
+          value: null
+        - color: green
+          value: 1
+        - color: orange
+          value: 2
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 9
+  gridPos:
+    x: 0
+    y: 40
+    w: 12
+    h: 8
+- title: Kubernetes — pod Ready condition
+  type: state-timeline
+  description: Kubelet readiness, not the independent Alloy probe. 0 excludes the pod from normal Service traffic. STALE
+    means sample older than 45s.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: kube_pod_status_ready{namespace="soloapp",dc=~"$dc",pod=~"(auth|nginx|whoami)-.+",condition="true"} * (time()
+      - timestamp(kube_pod_status_ready{namespace="soloapp",dc=~"$dc",pod=~"(auth|nginx|whoami)-.+",condition="true"})
+      < bool 45) + 2 * (time() - timestamp(kube_pod_status_ready{namespace="soloapp",dc=~"$dc",pod=~"(auth|nginx|whoami)-.+",condition="true"})
+      >= bool 45)
+    legendFormat: '{{dc}} {{pod}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+      min: 0
+      max: 2
+      mappings:
+      - type: value
+        options:
+          '0':
+            text: DOWN
+            color: red
+          '1':
+            text: UP
+            color: green
+          '2':
+            text: STALE
+            color: orange
+      thresholds:
+        mode: absolute
+        steps:
+        - color: red
+          value: null
+        - color: green
+          value: 1
+        - color: orange
+          value: 2
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 10
+  gridPos:
+    x: 12
+    y: 40
+    w: 12
+    h: 8
+- title: 4 · Pod /healthz — independent HTTP check
+  type: state-timeline
+  description: 4 · Pod /healthz — independent HTTP check. Данные выбранных ДЦ; каждая линия соответствует меткам в легенде.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: probe_success{dc=~"$dc",check="healthz"} * (time() - timestamp(probe_success{dc=~"$dc",check="healthz"}) <
+      bool 20) + 2 * (time() - timestamp(probe_success{dc=~"$dc",check="healthz"}) >= bool 20)
+    legendFormat: '{{dc}} {{service}} {{pod}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+      min: 0
+      max: 2
+      mappings:
+      - type: value
+        options:
+          '0':
+            text: DOWN
+            color: red
+          '1':
+            text: UP
+            color: green
+          '2':
+            text: STALE
+            color: orange
+      thresholds:
+        mode: absolute
+        steps:
+        - color: red
+          value: null
+        - color: green
+          value: 1
+        - color: orange
+          value: 2
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 11
+  gridPos:
+    x: 0
+    y: 48
+    w: 12
+    h: 8
+- title: Pod readiness — independent HTTP check
+  type: state-timeline
+  description: Pod readiness — independent HTTP check. Данные выбранных ДЦ; каждая линия соответствует меткам в легенде.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: probe_success{dc=~"$dc",check="readiness"} * (time() - timestamp(probe_success{dc=~"$dc",check="readiness"})
+      < bool 20) + 2 * (time() - timestamp(probe_success{dc=~"$dc",check="readiness"}) >= bool 20)
+    legendFormat: '{{dc}} {{service}} {{pod}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+      min: 0
+      max: 2
+      mappings:
+      - type: value
+        options:
+          '0':
+            text: DOWN
+            color: red
+          '1':
+            text: UP
+            color: green
+          '2':
+            text: STALE
+            color: orange
+      thresholds:
+        mode: absolute
+        steps:
+        - color: red
+          value: null
+        - color: green
+          value: 1
+        - color: orange
+          value: 2
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 12
+  gridPos:
+    x: 12
+    y: 48
+    w: 12
+    h: 8
+- title: Collection — HAProxy scrape status
+  type: state-timeline
+  description: A scrape failure means the observer cannot read the proxy. It does not by itself prove NLB exclusion.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: up{job="haproxy",ingress=~"$ingress",observer=~"$observer"} * (time() - timestamp(up{job="haproxy",ingress=~"$ingress",observer=~"$observer"})
+      < bool 20) + 2 * (time() - timestamp(up{job="haproxy",ingress=~"$ingress",observer=~"$observer"}) >= bool 20)
+    legendFormat: '{{observer}} → {{ingress}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+      min: 0
+      max: 2
+      mappings:
+      - type: value
+        options:
+          '0':
+            text: DOWN
+            color: red
+          '1':
+            text: UP
+            color: green
+          '2':
+            text: STALE
+            color: orange
+      thresholds:
+        mode: absolute
+        steps:
+        - color: red
+          value: null
+        - color: green
+          value: 1
+        - color: orange
+          value: 2
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 13
+  gridPos:
+    x: 0
+    y: 56
+    w: 12
+    h: 8
+- title: Collection — NLB API read status
+  type: state-timeline
+  description: Collection — NLB API read status. Данные выбранных ДЦ; каждая линия соответствует меткам в легенде.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: soloapp_nlb_poll_success{observer=~"$observer"} * (time() - timestamp(soloapp_nlb_poll_success{observer=~"$observer"})
+      < bool 20) + 2 * (time() - timestamp(soloapp_nlb_poll_success{observer=~"$observer"}) >= bool 20)
+    legendFormat: '{{observer}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+      min: 0
+      max: 2
+      mappings:
+      - type: value
+        options:
+          '0':
+            text: DOWN
+            color: red
+          '1':
+            text: UP
+            color: green
+          '2':
+            text: STALE
+            color: orange
+      thresholds:
+        mode: absolute
+        steps:
+        - color: red
+          value: null
+        - color: green
+          value: 1
+        - color: orange
+          value: 2
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 14
+  gridPos:
+    x: 12
+    y: 56
+    w: 12
+    h: 8
+- title: HAProxy — Good RPS
+  type: timeseries
+  description: 'Good responses per second: 1xx, 2xx, 3xx. Backend user-traffic responses; active health checks and locally
+    generated HAProxy errors without backend response are excluded. HTTP 4xx includes expected auth rejections, not only
+    service faults. Observer estimates are deduplicated per ingress/backend/server/code before summing. No samples remain
+    missing, never synthesized as zero.'
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: sum by(ingress,proxy,server) (max by(ingress,proxy,server,code) (rate(haproxy_server_http_responses_total{ingress=~"$ingress",observer=~"$observer",server=~"$dc",proxy=~"auth_sites|grafana_sites",code=~"1xx|2xx|3xx"}[$__rate_interval])))
+    legendFormat: '{{ingress}} → {{proxy}} / {{server}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: reqps
+      min: 0
+      color:
+        mode: fixed
+        fixedColor: green
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 15
+  gridPos:
+    x: 0
+    y: 64
+    w: 12
+    h: 8
+- title: HAProxy — Bad RPS
+  type: timeseries
+  description: 'Bad responses per second: 4xx, 5xx, other. Backend user-traffic responses; active health checks and locally
+    generated HAProxy errors without backend response are excluded. HTTP 4xx includes expected auth rejections, not only
+    service faults. Observer estimates are deduplicated per ingress/backend/server/code before summing. No samples remain
+    missing, never synthesized as zero.'
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: sum by(ingress,proxy,server) (max by(ingress,proxy,server,code) (rate(haproxy_server_http_responses_total{ingress=~"$ingress",observer=~"$observer",server=~"$dc",proxy=~"auth_sites|grafana_sites",code=~"4xx|5xx|other"}[$__rate_interval])))
+    legendFormat: '{{ingress}} → {{proxy}} / {{server}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: reqps
+      min: 0
+      color:
+        mode: fixed
+        fixedColor: red
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 16
+  gridPos:
+    x: 12
+    y: 64
+    w: 12
+    h: 8

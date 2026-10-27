@@ -4,6 +4,7 @@ images:
   loki: grafana/loki:3.7.8
   alloy: grafana/alloy:v1.21.2
   kube_state_metrics: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0
+  alertmanager: prom/alertmanager:v0.34.1
 scrape_interval: 15s
 metrics_retention: 3d
 metrics_retention_size: 1GB
@@ -19,31 +20,86 @@ gateway_names:
   home: observability-gateway-home
 resources:
   prometheus:
-    requests: {cpu: 20m, memory: 64Mi}
-    limits: {cpu: 500m, memory: 512Mi}
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
   loki:
-    requests: {cpu: 20m, memory: 64Mi}
-    limits: {cpu: 500m, memory: 512Mi}
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
   grafana:
-    requests: {cpu: 20m, memory: 256Mi}
-    limits: {cpu: 500m, memory: 1Gi}
+    requests:
+      cpu: 20m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
   gateway:
-    requests: {cpu: 20m, memory: 64Mi}
-    limits: {cpu: 500m, memory: 64Mi}
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 64Mi
   alloy:
-    requests: {cpu: 20m, memory: 64Mi}
-    limits: {cpu: 500m, memory: 256Mi}
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
   kube-state-metrics:
-    requests: {cpu: 20m, memory: 64Mi}
-    limits: {cpu: 500m, memory: 64Mi}
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 64Mi
   secrets:
-    requests: {cpu: 10m, memory: 24Mi}
-    limits: {cpu: 200m, memory: 64Mi}
-
+    requests:
+      cpu: 10m
+      memory: 24Mi
+    limits:
+      cpu: 200m
+      memory: 64Mi
+  alertmanager:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
 health_probe_interval: 5s
 health_probe_timeout: 2s
-dashboard_files: [soloapp, auth, whoami, nginx, infrastructure, routing, postgres]
-
+dashboards:
+  soloapp:
+    source: infra/observability/deploy/metrics/soloapp.yaml
+    folder: infrastructure
+  auth:
+    source: services/auth/deploy/metrics/dashboard.yaml
+    folder: services
+  app-api:
+    source: services/app-api/deploy/metrics/dashboard.yaml
+    folder: services
+    metrics_service: whoami
+  nginx:
+    source: services/nginx/deploy/metrics/dashboard.yaml
+    folder: services
+  infrastructure:
+    source: infra/kubernetes/deploy/metrics/dashboard.yaml
+    folder: infrastructure
+  routing:
+    source: infra/ingress/deploy/metrics/dashboard.yaml
+    folder: infrastructure
+  postgres:
+    source: infra/postgres/deploy/metrics/dashboard.yaml
+    folder: infrastructure
 routing_scrape_interval: 5s
 routing_scrape_timeout: 2s
 routing_metrics_port: 19091
@@ -53,6 +109,20 @@ nlb_targets:
   10.130.0.31: yc
   10.131.0.27: edge
 state_scrape_interval: 5s
-
 postgres_scrape_interval: 5s
 postgres_scrape_timeout: 4s
+alert_rule_files:
+- infra/kubernetes/deploy/metrics/alerts.yaml
+- services/auth/deploy/metrics/alerts.yaml
+- services/app-api/deploy/metrics/alerts.yaml
+- services/nginx/deploy/metrics/alerts.yaml
+- services/web/deploy/metrics/alerts.yaml
+- infra/postgres/deploy/metrics/alerts.yaml
+- infra/observability/deploy/metrics/alerts.yaml
+- infra/ingress/deploy/metrics/alerts.yaml
+alertmanager:
+  enabled: false
+  # Empty uses the operator-provisioned cloud.telegram_relay.url.
+  relay_url: ''
+  cluster_port: 19094
+  storage: 1Gi

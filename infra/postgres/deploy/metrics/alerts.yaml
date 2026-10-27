@@ -1,0 +1,18 @@
+groups:
+- name: soloapp.postgres
+  rules:
+  - record: soloapp:postgres:connection_ratio
+    expr: max by(dc)((sum by(dc,observer)(solo_pg_connections_count{job="postgres"}) / max by(dc,observer)(solo_pg_node_max_connections{job="postgres"}))
+      and on(dc,observer) ((max by(dc,observer)(pg_up{job="postgres"}) == 1) and on(dc,observer) (max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres"})
+      == 0) and on(dc,observer) (time()-max by(dc,observer)(timestamp(pg_up{job="postgres"})) < 20)))
+  - alert: PostgresConnectionsHigh
+    expr: soloapp:postgres:connection_ratio > 0.7
+    for: 1m
+    labels:
+      severity: warning
+      project: soloapp
+      service: postgres
+    annotations:
+      summary: 'PG: занято > 70% max_connections (все базы)'
+      description: DC={{ $labels.dc }} service={{ $labels.service }} namespace={{ $labels.namespace }} pod={{ $labels.pod
+        }} container={{ $labels.container }} route={{ $labels.route }} value={{ $value }}

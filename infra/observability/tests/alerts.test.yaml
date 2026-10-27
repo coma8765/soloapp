@@ -1,0 +1,250 @@
+rule_files:
+- rules.yaml
+evaluation_interval: 15s
+tests:
+- name: HTTP 5 percent is below strict threshold
+  interval: 15s
+  input_series:
+  - series: soloapp_http_requests_total{dc="yc",service="auth",route="/login",status="200"}
+    values: 0+95x40
+  - series: soloapp_http_requests_total{dc="yc",service="auth",route="/login",status="500"}
+    values: 0+5x40
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Http5xxRateHigh",service="auth",alertstate="firing"})
+      or vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: HTTP 6 percent is firing
+  interval: 15s
+  input_series:
+  - series: soloapp_http_requests_total{dc="yc",service="auth",route="/login",status="200"}
+    values: 0+94x40
+  - series: soloapp_http_requests_total{dc="yc",service="auth",route="/login",status="500"}
+    values: 0+6x40
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Http5xxRateHigh",service="auth",alertstate="firing"})
+      or vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: 429 triggers on observed increment
+  interval: 15s
+  input_series:
+  - series: soloapp_http_requests_total{dc="home",service="whoami",route="/user-id",status="429"}
+    values: 0 0 1 1 1 1
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="HttpRateLimited",service="app-api",alertstate="firing"})
+      or vector(0)
+    eval_time: 30s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: Pod alerts preserve exact identity and wait a minute
+  interval: 15s
+  input_series:
+  - &id001
+    series: kube_pod_labels{dc="home",namespace="soloapp",pod="whoami-broken",label_app="whoami"}
+    values: 1+0x20
+  - &id002
+    series: kube_pod_status_ready{dc="home",namespace="soloapp",pod="whoami-broken",condition="true"}
+    values: 0+0x20
+  - &id003
+    series: kube_pod_status_phase{dc="home",namespace="soloapp",pod="whoami-broken",phase="Pending"}
+    values: 1+0x20
+  - &id004
+    series: kube_pod_created{dc="home",namespace="soloapp",pod="whoami-broken"}
+    values: 0+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="PodUnavailable",alertstate="firing"}) or vector(0)
+    eval_time: 45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: ALERTS{alertname="PodUnavailable",alertstate="firing"}
+    eval_time: 75s
+    exp_samples:
+    - labels: ALERTS{alertname="PodUnavailable",alertstate="firing",dc="home",namespace="soloapp",pod="whoami-broken",service="app-api",severity="critical",project="soloapp"}
+      value: 1
+  - expr: count(ALERTS{alertname="PodStartupTooLong",alertstate="firing"}) or vector(0)
+    eval_time: 75s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: Terminating rolling-update pod does not page
+  interval: 15s
+  input_series:
+  - *id001
+  - *id002
+  - *id003
+  - *id004
+  - series: kube_pod_deletion_timestamp{dc="home",namespace="soloapp",pod="whoami-broken"}
+    values: 1+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname=~"PodUnavailable|PodStartupTooLong",alertstate="firing"})
+      or vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: Memory request threshold 80%
+  interval: 15s
+  input_series:
+  - *id001
+  - series: container_memory_working_set_bytes{dc="home",namespace="soloapp",pod="whoami-broken",container="whoami"}
+    values: 80+0x20
+  - series: kube_pod_container_resource_requests{dc="home",namespace="soloapp",pod="whoami-broken",container="whoami",resource="memory"}
+    values: 100+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ContainerMemoryRequestHigh",alertstate="firing"})
+      or vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: Memory request threshold 81%
+  interval: 15s
+  input_series:
+  - *id001
+  - series: container_memory_working_set_bytes{dc="home",namespace="soloapp",pod="whoami-broken",container="whoami"}
+    values: 81+0x20
+  - series: kube_pod_container_resource_requests{dc="home",namespace="soloapp",pod="whoami-broken",container="whoami",resource="memory"}
+    values: 100+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ContainerMemoryRequestHigh",alertstate="firing"})
+      or vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: Postgres all sessions count once despite two observers
+  interval: 15s
+  input_series:
+  - series: pg_up{job="postgres",dc="yc",observer="yc"}
+    values: 1+0x40
+  - series: pg_exporter_last_scrape_error{job="postgres",dc="yc",observer="yc"}
+    values: 0+0x40
+  - series: solo_pg_node_max_connections{job="postgres",dc="yc",observer="yc"}
+    values: 100+0x40
+  - series: solo_pg_connections_count{job="postgres",dc="yc",observer="yc",state="active",application="other",wait_type="none"}
+    values: 40+0x40
+  - series: solo_pg_connections_count{job="postgres",dc="yc",observer="yc",state="idle",application="other",wait_type="none"}
+    values: 31+0x40
+  - series: pg_up{job="postgres",dc="yc",observer="home"}
+    values: 1+0x40
+  - series: pg_exporter_last_scrape_error{job="postgres",dc="yc",observer="home"}
+    values: 0+0x40
+  - series: solo_pg_node_max_connections{job="postgres",dc="yc",observer="home"}
+    values: 100+0x40
+  - series: solo_pg_connections_count{job="postgres",dc="yc",observer="home",state="active",application="other",wait_type="none"}
+    values: 40+0x40
+  - series: solo_pg_connections_count{job="postgres",dc="yc",observer="home",state="idle",application="other",wait_type="none"}
+    values: 31+0x40
+  promql_expr_test:
+  - expr: soloapp:postgres:connection_ratio
+    eval_time: 2m
+    exp_samples:
+    - labels: soloapp:postgres:connection_ratio{dc="yc"}
+      value: 0.71
+  - expr: count(ALERTS{alertname="PostgresConnectionsHigh",alertstate="firing"}) or
+      vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: Postgres exactly 70 percent does not fire
+  interval: 15s
+  input_series:
+  - series: pg_up{job="postgres",dc="yc",observer="yc"}
+    values: 1+0x40
+  - series: pg_exporter_last_scrape_error{job="postgres",dc="yc",observer="yc"}
+    values: 0+0x40
+  - series: solo_pg_node_max_connections{job="postgres",dc="yc",observer="yc"}
+    values: 100+0x40
+  - series: solo_pg_connections_count{job="postgres",dc="yc",observer="yc",state="active",application="other",wait_type="none"}
+    values: 40+0x40
+  - series: solo_pg_connections_count{job="postgres",dc="yc",observer="yc",state="idle",application="other",wait_type="none"}
+    values: 30+0x40
+  - series: pg_up{job="postgres",dc="yc",observer="home"}
+    values: 1+0x40
+  - series: pg_exporter_last_scrape_error{job="postgres",dc="yc",observer="home"}
+    values: 0+0x40
+  - series: solo_pg_node_max_connections{job="postgres",dc="yc",observer="home"}
+    values: 100+0x40
+  - series: solo_pg_connections_count{job="postgres",dc="yc",observer="home",state="active",application="other",wait_type="none"}
+    values: 40+0x40
+  - series: solo_pg_connections_count{job="postgres",dc="yc",observer="home",state="idle",application="other",wait_type="none"}
+    values: 30+0x40
+  promql_expr_test:
+  - expr: soloapp:postgres:connection_ratio
+    eval_time: 2m
+    exp_samples:
+    - labels: soloapp:postgres:connection_ratio{dc="yc"}
+      value: 0.7
+  - expr: count(ALERTS{alertname="PostgresConnectionsHigh",alertstate="firing"}) or
+      vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: Stale PostgreSQL observations do not retain a healthy quota
+  interval: 15s
+  input_series:
+  - series: pg_up{job="postgres",dc="yc",observer="yc"}
+    values: 1+0x1
+  - series: pg_exporter_last_scrape_error{job="postgres",dc="yc",observer="yc"}
+    values: 0+0x1
+  - series: solo_pg_node_max_connections{job="postgres",dc="yc",observer="yc"}
+    values: 100+0x1
+  - series: solo_pg_connections_count{job="postgres",dc="yc",observer="yc",state="active",application="other",wait_type="none"}
+    values: 40+0x1
+  - series: solo_pg_connections_count{job="postgres",dc="yc",observer="yc",state="idle",application="other",wait_type="none"}
+    values: 31+0x1
+  - series: pg_up{job="postgres",dc="yc",observer="home"}
+    values: 1+0x1
+  - series: pg_exporter_last_scrape_error{job="postgres",dc="yc",observer="home"}
+    values: 0+0x1
+  - series: solo_pg_node_max_connections{job="postgres",dc="yc",observer="home"}
+    values: 100+0x1
+  - series: solo_pg_connections_count{job="postgres",dc="yc",observer="home",state="active",application="other",wait_type="none"}
+    values: 40+0x1
+  - series: solo_pg_connections_count{job="postgres",dc="yc",observer="home",state="idle",application="other",wait_type="none"}
+    values: 31+0x1
+  promql_expr_test:
+  - expr: soloapp:postgres:connection_ratio
+    eval_time: 2m
+    exp_samples: []
+- name: CPU 80 percent of requests
+  interval: 15s
+  input_series:
+  - series: kube_pod_labels{dc="yc",namespace="soloapp",pod="auth-cpu",label_app="auth"}
+    values: 1+0x40
+  - series: container_cpu_usage_seconds_total{dc="yc",namespace="soloapp",pod="auth-cpu",container="auth"}
+    values: 0+12.0x40
+  - series: kube_pod_container_resource_requests{dc="yc",namespace="soloapp",pod="auth-cpu",container="auth",resource="cpu"}
+    values: 1+0x40
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ContainerCpuRequestHigh",alertstate="firing"}) or
+      vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: CPU 81 percent of requests
+  interval: 15s
+  input_series:
+  - series: kube_pod_labels{dc="yc",namespace="soloapp",pod="auth-cpu",label_app="auth"}
+    values: 1+0x40
+  - series: container_cpu_usage_seconds_total{dc="yc",namespace="soloapp",pod="auth-cpu",container="auth"}
+    values: 0+12.15x40
+  - series: kube_pod_container_resource_requests{dc="yc",namespace="soloapp",pod="auth-cpu",container="auth",resource="cpu"}
+    values: 1+0x40
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ContainerCpuRequestHigh",alertstate="firing"}) or
+      vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 1

@@ -6,7 +6,7 @@ Each independent k3s cluster runs Grafana, Prometheus, Loki, an mTLS gateway, Al
 
 Losing either site leaves a complete monitoring stack and previously delivered data on the other site. New samples from the failed site stop; samples from the surviving site continue. Each store has independent local-path PVCs. This is dual delivery, not a replicated storage cluster: delivery gaps and different histories are possible. Prometheus remote-write uses a local WAL with bounded retention; Loki delivery is best-effort and may lose logs during a prolonged outage. Losing both disks loses history.
 
-Grafana instances have independent SQLite user/session databases. The initial admin password is shared through Lockbox; dashboards and datasources are provisioned from this directory. Failover may require signing in again. UI changes to users/passwords are local to one instance; do not rely on them for replicated configuration. Save shared dashboards and configuration here and redeploy. A shared Grafana database is deliberately not required for monitoring availability.
+Grafana instances have independent SQLite user/session databases. The initial admin password is shared through Lockbox; datasources are provisioned from this directory and dashboards from the YAML catalog in `defaults.yaml`. Failover may require signing in again. UI changes to users/passwords are local to one instance; do not rely on them for replicated configuration. Save service dashboards in their `deploy/metrics/` directories and redeploy. A shared Grafana database is deliberately not required for monitoring availability.
 
 ## Metrics and logs
 
@@ -26,7 +26,7 @@ ansible-playbook infra/observability/deploy.yaml
 ansible-playbook infra/ansible/apps.yaml --tags nginx
 ansible-playbook infra/ingress/cutover.yaml
 ansible-playbook infra/ansible/site.yaml --tags certificates --limit app_sites
-python3 infra/observability/tests/verify.py
+.venv-codegen/bin/python infra/observability/tests/verify.py
 ```
 
 The observability playbook installs the private NodePort guard before exposing gateway Service 31981. It deploys stores one DC at a time. Monitoring components have one replica per site and Recreate updates; the second site remains available during an individual stack update. Application Deployments retain their two-replica RollingUpdate configuration.
@@ -41,19 +41,19 @@ Each agent/gateway has its own scoped workload identity and TLS secret. Projecte
 
 Prometheus and Loki are not publicly exposed. NetworkPolicy limits their access to the monitoring gateway and Grafana. The gateway accepts writes only from agent certificate identities and Grafana requests only from nginx certificate identities. Public access to Grafana requires its own authentication; anonymous access and signup are disabled.
 
-Prometheus evaluates replica availability, missing DC agent samples, HTTP error-rate and latency rules. Notifications are not configured; rules are visible in Prometheus/Grafana queries. This deployment does not include Alertmanager, distributed tracing or SQL-text/query-level profiling.
+Prometheus evaluates service-owned alert rules and sends notifications to its local Alertmanager when enabled. Two Alertmanagers exchange notification state over WireGuard and send Telegram alerts. Distributed tracing and SQL-text/query-level profiling are not included.
 
 References: [Alloy remote-write fan-out](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.remote_write/), [Grafana home dashboard provisioning](https://grafana.com/docs/grafana/latest/administration/organization-preferences/).
 
-Alloy reads `nodes/metrics` only for its local node over verified kubelet TLS; it has no `nodes/proxy`, exec, secret-read or workload-write permission. Application pod discovery/log access and kube-state-metrics workload reads are enforced by Roles in `soloapp`; only node state is cluster-scoped. See [Kubelet authorization](https://kubernetes.io/docs/reference/access-authn-authz/kubelet-authn-authz/).
+Alloy reads `nodes/metrics` only for its local node over verified kubelet TLS; it has no `nodes/proxy`, exec, secret-read or workload-write permission. Application pod discovery/log access and kube-state-metrics workload reads are enforced by Roles in `soloapp` and `observability`; only node state is cluster-scoped. See [Kubelet authorization](https://kubernetes.io/docs/reference/access-authn-authz/kubelet-authn-authz/).
 
 ## Separate dashboards and HTTP health probes
 
-Navigation: `soloapp-overview`, `soloapp-auth`, `soloapp-whoami`, `soloapp-nginx`, `soloapp-infrastructure` (under `/grafana/d/<uid>`). Source JSON files are generated reproducibly by `python3 infra/observability/dashboards/generate.py`; `dashboard_files` provisions the explicit list to both sites. Application dashboards fix the service label and filter CPU/memory/restarts by application container. The application pod selector applies to health/resource/application-log panels; business HTTP metrics and gateway logs are measured at nginx and are service/DC aggregates.
+Navigation: `soloapp-overview`, `soloapp-auth`, `soloapp-whoami`, `soloapp-nginx`, `soloapp-infrastructure` (under `/grafana/d/<uid>`). Service dashboard sources live in `services/<service>/deploy/metrics/dashboard.yaml`; their Grafana titles exactly match the directory name. `auth`, `app-api` and `nginx` appear in the **Services** folder (UID `soloapp-services`). app-api keeps UID `soloapp-whoami` and metric labels for the existing whoami workload. Shared YAML lives with its owner: overview in `infra/observability/deploy/metrics/`, routing in `infra/ingress/deploy/metrics/`, PostgreSQL in `infra/postgres/deploy/metrics/`, and Kubernetes in `infra/kubernetes/deploy/metrics/`. These dashboards remain in **Soloapp**. The `dashboards` catalog in `defaults.yaml` maps sources to provisioning folders. Ansible loads YAML and renders Grafana JSON directly into the ConfigMap; no checked-in generated JSON or Python panel definitions remain. Application dashboards fix the service label and filter CPU/memory/restarts by application container. The application pod selector applies to health/resource/application-log panels; business HTTP metrics and gateway logs are measured at nginx and are service/DC aggregates.
 
 Each local Alloy probes every running app pod, including unready pods, every `health_probe_interval` (default 5s), with `health_probe_timeout` 2s. Auth: `/healthz`, `/health/ready`, `/ready`; whoami: `/healthz`, `/health/ready`; nginx: `/healthz` on its internal health port (also its readiness check). That is 14 targets per site / 28 total for two replicas per service. These independent observational probes do not control pod scheduling and do not add business RPS. Kubelet readiness/liveness probes remain responsible for traffic exclusion/restarts.
 
-Panels show per-pod availability, real HTTP status (0 means no HTTP response), end-to-end probe duration and sample age. UP requires a sample younger than 20s; older samples are shown as STALE (orange), and absent data remains a gap. Missing data is never synthesized as success. If the interval is raised above 5s, adjust the 20s freshness horizon in the generator to cover at least several intervals. Data starts when the new probes are deployed, not retroactively. Auth DB readiness is separate from process liveness. `/user-id` client-visible errors/latency include nginx's auth verification and are not pure whoami handler timings.
+Panels show per-pod availability, real HTTP status (0 means no HTTP response), end-to-end probe duration and sample age. UP requires a sample younger than 20s; older samples are shown as STALE (orange), and absent data remains a gap. Missing data is never synthesized as success. If the interval is raised above 5s, adjust the 20s freshness horizon in the affected dashboard YAML to cover at least several intervals. Data starts when the new probes are deployed, not retroactively. Auth DB readiness is separate from process liveness. `/user-id` client-visible errors/latency include nginx's auth verification and are not pure whoami handler timings.
 
 The probe component is built into Alloy; no new privileged pod or secret is needed. Additive NetworkPolicies allow only pods labeled `app=alloy` in namespace `observability` to the C++ HTTP ports (their health endpoints share the application listener). Existing application authentication still applies. No new kubelet/exec RBAC is granted. Metrics use the existing mTLS dual delivery to both Prometheus stores.
 
@@ -74,7 +74,7 @@ The exporter endpoint is published only on each ingress WireGuard address, port 
 
 NLB access uses existing projected 600s Kubernetes identity tokens, exchanged for IAM tokens kept only in RAM. No new permanent key is created. Both monitoring service accounts have the explicitly approved `load-balancer.viewer` role at folder scope (the narrowest supported scope); this reads all NLB/target-group metadata in that folder and does not grant changes. Reproduce the grants with `ansible-playbook infra/observability/nlb-access.yaml` only with operator authorization. The sidecar uses the existing secrets helper image but does not mount TLS/Lockbox secret volumes; its endpoint binds localhost only.
 
-Deploy ingress first (`infra/ingress/cutover.yaml`), then observability (`infra/observability/deploy.yaml`). Generate JSON with `python3 infra/observability/dashboards/generate.py`. Validate with `python3 infra/observability/tests/test_nlb_exporter.py` and `python3 infra/observability/tests/verify.py`.
+Deploy ingress first (`infra/ingress/cutover.yaml`), then observability (`infra/observability/deploy.yaml`). Validate YAML with `make check-dashboards`; optionally export JSON with `.venv-codegen/bin/python infra/observability/dashboards/generate.py --output-dir work/dashboards`. Validate with `python3 infra/observability/tests/test_nlb_exporter.py` and `.venv-codegen/bin/python infra/observability/tests/verify.py`.
 
 The controlled test `python3 infra/observability/tests/routing_fault.py` temporarily drains only the YC ingress from NLB, then changes only one health-check destination to a local deliberately stalled HTTP listener. It verifies NLB UNHEALTHY, HAProxy DOWN and L7TOUT in both stores, then recovery to HEALTHY/UP/L7OK. The edge ingress must remain healthy. A 120s systemd watchdog and `finally` restore the original configuration. Run only during an authorized validation window; this test changes live routing eligibility temporarily.
 
@@ -108,9 +108,9 @@ passwords or application rows. No new permanent key or public endpoint is added.
 
 ```sh
 ansible-playbook infra/observability/postgres-access.yaml
-python3 infra/observability/dashboards/generate.py
+make check-dashboards
 ansible-playbook infra/observability/deploy.yaml
-python3 infra/observability/tests/verify.py
+.venv-codegen/bin/python infra/observability/tests/verify.py
 # Selective updates:
 ansible-playbook infra/observability/deploy.yaml --tags stores
 ansible-playbook infra/observability/deploy.yaml --tags agents
@@ -142,7 +142,7 @@ are recorded in `infra/cloud/resources.json`; token values are not.
 `libs/monitoring/grafana.py` fetches the site's token inside the Grafana pod
 using its short-lived workload identity and runs API checks there. The token
 is never exported to the caller or written to the repository.
-`python3 infra/observability/tests/verify.py` uses this Viewer access for all
+`.venv-codegen/bin/python infra/observability/tests/verify.py` uses this Viewer access for all
 seven provisioned dashboards and their data sources. Personal home-dashboard
 preferences are outside this service-account check.
 
@@ -154,3 +154,106 @@ the corresponding Grafana workload identity. No automatic API-token rotation
 is configured: renew the tokens and update each Lockbox payload before the
 recorded expiry, then revoke the old Grafana tokens. Internal TLS certificate
 rotation is separate and continues automatically.
+
+## Editing service dashboards
+
+Edit `services/auth/deploy/metrics/dashboard.yaml`,
+`services/app-api/deploy/metrics/dashboard.yaml` or
+`services/nginx/deploy/metrics/dashboard.yaml`. Run `make check-dashboards`,
+then `make deploy-dashboards` to provision both sites serially. Dashboard content
+is polled every 15 seconds after Kubernetes projects the ConfigMap. Provider
+configuration changes restart Grafana one site at a time; the other site serves
+the existing public URL. UIDs are retained so bookmarks keep working.
+
+Add a service by adding its YAML source and a `dashboards` catalog entry with
+`folder: services`. The validator requires its title and owning directory to
+match the service name, and rejects duplicate UIDs, panel IDs and YAML keys.
+
+
+## Alert rules and Telegram
+
+All alert sources are plain YAML, listed by `alert_rule_files` in `defaults.yaml`:
+
+* `services/{auth,app-api,nginx,web}/deploy/metrics/alerts.yaml`: HTTP errors, rate limiting, latency.
+* `infra/kubernetes/deploy/metrics/alerts.yaml`: pod readiness/startup, replica count, CPU/memory requests and HTTP probes.
+* `infra/postgres/deploy/metrics/alerts.yaml`: all-database connection quota.
+* `infra/ingress/deploy/metrics/alerts.yaml`: excluded HAProxy backends.
+* `infra/observability/deploy/metrics/alerts.yaml`: collection and notification failures.
+* `infra/observability/deploy/metrics/alertmanager.yaml`: grouping, repeat interval and Telegram receiver.
+
+Thresholds are edited directly in the owning YAML. `make check-alerts` assembles the rules;
+`make test-alerts` runs promtool syntax checks and synthetic tests locally or in CI.
+No service images need rebuilding to update dashboards/rules.
+
+| Alert | Condition | Persistence |
+| --- | --- | --- |
+| Http5xxRateHigh | 5xx / all HTTP > 5%, rolling 5m window, per DC and route | 1m |
+| HttpRateLimited | Any observed 429 increment in rolling 1m window | Next evaluation |
+| ContainerCpuRequestHigh | CPU usage / CPU request > 80%, rolling 2m rate | 1m |
+| ContainerMemoryRequestHigh | Working set / memory request > 80% | 1m |
+| PodUnavailable | Active pod not Ready; deleting pods excluded | 1m |
+| PodStartupTooLong | Pending pod age > 1m; deleting pods excluded | Next evaluation |
+| DeploymentReplicasMissing | Available replicas below desired, including absence of a pod object | 1m |
+| PodHealthProbeFailed | Per-pod health/readiness/DB probe fails | 1m |
+| PostgresConnectionsHigh | All client connections / max_connections > 70% | 1m |
+
+CPU/memory checks include helper containers, not only the main process. A request is a
+scheduler reservation, not a hard limit: legitimate steady usage may exceed 80%.
+Zero/missing resource requests are excluded from division. PG connections are summed
+per observer before choosing a maximum across observers, so duplicate observation does
+not double the quota. The denominator is configured max_connections, including reserved
+slots; it does not represent the smaller quota available to an unprivileged role.
+Kubernetes metrics must be fresh for per-pod checks; loss of collection raises
+MonitoringAgentMissing. A missing deployment replica has no pod name until Kubernetes
+creates one; its alert identifies the deployment, while PodUnavailable identifies exact
+namespace/pod/container. Alert annotations include DC, service, pod and route as applicable.
+
+Every dashboard starts with its purpose, firing-alert count and success ratio.
+HTTP success is 1xx–3xx, failure is 4xx–5xx (HAProxy also counts `other` as failure).
+Expected authorization denials are still 4xx. Zero traffic is unknown/NaN, never fabricated
+100% success. PostgreSQL uses commit/(commit+rollback), explicitly labelled transactions;
+infrastructure shows the application's global HTTP ratio. The active count is the number
+of firing instances, not distinct rule names, and includes alerts inhibited for Telegram.
+
+Operator bootstrap (token files outside the repository):
+
+```sh
+.venv-codegen/bin/python infra/observability/bootstrap-alerting.py \
+  --token-file /path/to/bot-token --chat-id-file /path/to/chat-id
+# CF_ACCOUNT_ID / CF_API_TOKEN supplied by the operator environment:
+.venv-codegen/bin/python infra/telegram-relay/deploy.py --subdomain <workers-subdomain>
+# In private inventory: observability_overrides.alertmanager.enabled: true
+ansible-playbook infra/observability/deploy.yaml
+```
+
+The Telegram token/chat are held in an operator-only Lockbox secret and Cloudflare
+Workers Secrets. Alertmanager receives only a separate relay credential from
+`soloapp-alertmanager-relay`. Each site's service account is federated exclusively to
+`system:serviceaccount:observability:alertmanager` and has payloadViewer on this one
+secret, with no folder role or permanent IAM key. Projected identity tokens last 600s;
+the relay credential lives in a mode-0600 RAM volume and is refreshed every five minutes.
+Neither bot nor relay keys appear in Kubernetes Secrets, ConfigMaps, source or logs.
+The webhook URL is public configuration, stored in private cloud resources; optionally
+override `alertmanager.relay_url`. Cloudflare accepts only authenticated project alerts
+and sends to the fixed chat. See `infra/telegram-relay/README.md` for deployment, rotation
+and migration from the original direct Telegram configuration.
+
+The Alertmanager HTTP API is cluster-internal and restricted to Prometheus/Alloy pods.
+Only gossip TCP/UDP 19094 is mapped to each private WireGuard host IP, protected by the
+private-port guard and NetworkPolicy. Each Prometheus sends to its local Alertmanager;
+each Prometheus already receives both DCs' telemetry. The two Alertmanagers share the
+notification log and silences, while each retains a local PVC. Losing either whole DC
+leaves an independent evaluator and notification sender. Both send through an independent
+Cloudflare Worker: YC does not need direct Telegram egress, and losing home does not remove its notification path. Cloudflare/Telegram
+outages can still delay delivery; failed webhooks are retried by Alertmanager.
+A network partition can produce duplicate alerts;
+Alertmanager deliberately prefers duplicate delivery over losing a notification.
+
+Messages are grouped by alert/DC/service, initially delayed 15s, regrouped after 1m,
+and repeated every 4h while firing; recovery messages are enabled. Evaluation adds up to
+15s plus scrape and delivery time to the stated persistence. Up to 100 alert instances
+per group are forwarded, with exact pod names and messages split to fit Telegram limits. Larger groups include an explicit truncation warning;
+Grafana retains the full alert list. The private chat ID is not committed.
+
+References: [Alertmanager notification configuration](https://prometheus.io/docs/alerting/latest/configuration/),
+[HA notification deduplication](https://prometheus.io/docs/alerting/latest/high_availability/).

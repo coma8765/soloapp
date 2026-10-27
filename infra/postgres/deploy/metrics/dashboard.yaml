@@ -1,0 +1,996 @@
+id: null
+uid: soloapp-postgres
+title: Soloapp · PostgreSQL
+schemaVersion: 39
+version: 3
+refresh: 5s
+timezone: browser
+time:
+  from: now-1h
+  to: now
+tags:
+- soloapp
+- lite
+description: Physical PostgreSQL nodes, observed independently from YC and home every 5s over mTLS. Missing or stale
+  data never proves a healthy primary. Statistics exclude SQL text and application records.
+links:
+- title: Overview
+  url: /grafana/d/soloapp-overview
+  type: link
+  keepTime: true
+  includeVars: false
+- title: auth
+  url: /grafana/d/soloapp-auth
+  type: link
+  keepTime: true
+  includeVars: false
+- title: app-api
+  url: /grafana/d/soloapp-whoami
+  type: link
+  keepTime: true
+  includeVars: false
+- title: nginx
+  url: /grafana/d/soloapp-nginx
+  type: link
+  keepTime: true
+  includeVars: false
+- title: Infrastructure
+  url: /grafana/d/soloapp-infrastructure
+  type: link
+  keepTime: true
+  includeVars: false
+- title: Routing chain
+  url: /grafana/d/soloapp-routing
+  type: link
+  keepTime: true
+  includeVars: false
+- title: PostgreSQL
+  url: /grafana/d/soloapp-postgres
+  type: link
+  keepTime: true
+  includeVars: false
+templating:
+  list:
+  - name: dc
+    type: custom
+    query: yc,home
+    multi: true
+    includeAll: true
+    allValue: .+
+    current:
+      text: All
+      value: $__all
+  - name: observer
+    type: custom
+    query: yc,home
+    multi: true
+    includeAll: true
+    allValue: .+
+    current:
+      text: All
+      value: $__all
+panels:
+- id: 23
+  title: 'О дашборде: Soloapp · PostgreSQL'
+  type: text
+  gridPos:
+    x: 0
+    y: 0
+    w: 24
+    h: 4
+  options:
+    mode: markdown
+    content: 'PostgreSQL: расположение primary, репликация, соединения всех баз, транзакции и блокировки. Success ratio
+      здесь означает commit/(commit+rollback), а не HTTP RPS.
+
+
+      Вверху — активные алерты и доля успешных операций. Красный алерт означает firing; пороги хранятся в соседних alerts.yaml.'
+  targets: []
+- id: 24
+  title: Активные алерты
+  description: Число firing-инстансов алертов; отдельный pod или контейнер считается отдельно.
+  type: stat
+  datasource: &id001
+    type: prometheus
+    uid: prometheus
+  gridPos:
+    x: 0
+    y: 4
+    w: 12
+    h: 4
+  targets:
+  - refId: A
+    expr: count(ALERTS{alertstate="firing",project="soloapp",service="postgres",dc=~"$dc"}) or vector(0)
+    instant: true
+    datasource: *id001
+  fieldConfig:
+    defaults:
+      unit: short
+      noValue: Нет данных
+      thresholds:
+        mode: absolute
+        steps:
+        - color: green
+          value: null
+        - color: red
+          value: 1
+  options:
+    reduceOptions:
+      calcs:
+      - lastNotNull
+      fields: ''
+      values: false
+    colorMode: value
+- id: 25
+  title: Успешные транзакции / все транзакции
+  description: commit TPS / (commit TPS + rollback TPS); при отсутствии транзакций — нет данных.
+  type: stat
+  datasource: *id001
+  gridPos:
+    x: 12
+    y: 4
+    w: 12
+    h: 4
+  targets:
+  - refId: A
+    expr: sum(max by(dc)(rate(solo_pg_database_xact_commit{dc=~"$dc",observer=~"$observer"}[$__rate_interval]))) / (sum(max
+      by(dc)(rate(solo_pg_database_xact_commit{dc=~"$dc",observer=~"$observer"}[$__rate_interval]))) + sum(max by(dc)(rate(solo_pg_database_xact_rollback{dc=~"$dc",observer=~"$observer"}[$__rate_interval]))))
+    instant: true
+    datasource: *id001
+  fieldConfig:
+    defaults:
+      unit: percentunit
+      noValue: Нет данных
+      thresholds:
+        mode: absolute
+        steps:
+        - color: red
+          value: null
+        - color: green
+          value: 0.95
+  options:
+    reduceOptions:
+      calcs:
+      - lastNotNull
+      fields: ''
+      values: false
+    colorMode: value
+- title: Current master — physical DC
+  type: stat
+  description: Fresh observations of pg_is_in_recovery()=false. Empty means no confirmed current primary. It does not
+    prove fencing or successful writes; compare auth /ready and the primary-count panel.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: max by(dc)(((max by(dc,observer)(solo_pg_node_primary{job="postgres",dc=~"$dc",observer=~"$observer"}) and
+      (time() - max by(dc,observer)(timestamp(solo_pg_node_primary{job="postgres",dc=~"$dc",observer=~"$observer"}))
+      < 20)) == 1) and on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})
+      * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"}))) ==
+      1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+    instant: true
+    range: false
+  fieldConfig:
+    defaults:
+      unit: short
+      mappings:
+      - type: value
+        options:
+          '1':
+            text: MASTER
+            color: green
+      noValue: UNKNOWN
+    overrides: []
+  options:
+    textMode: value_and_name
+    colorMode: background
+    reduceOptions:
+      calcs:
+      - last
+      fields: ''
+      values: false
+  id: 1
+  gridPos:
+    x: 0
+    y: 8
+    w: 12
+    h: 8
+- title: Primary / standby — history by observer
+  type: state-timeline
+  description: 1 PRIMARY, 0 STANDBY, 2 UNAVAILABLE (connection or collection failure), 3 STALE (20s). Two independent
+    observers can disagree during a partition; gaps are unknown, not healthy.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: (((max by(dc,observer)(solo_pg_node_primary{job="postgres",dc=~"$dc",observer=~"$observer"}) and on(dc,observer)
+      ((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1)) or on(dc,observer) ((2 + 0 * (max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})
+      * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))) and
+      on(dc,observer) ((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 0))) * ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}))) < bool
+      20) + 3 * (1 - ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < bool 20)))
+    legendFormat: '{{observer}} → {{dc}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+      mappings:
+      - type: value
+        options:
+          '0':
+            text: STANDBY
+            color: blue
+          '1':
+            text: PRIMARY
+            color: green
+          '2':
+            text: UNAVAILABLE
+            color: red
+          '3':
+            text: STALE
+            color: orange
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+    mergeValues: true
+  id: 2
+  gridPos:
+    x: 12
+    y: 8
+    w: 12
+    h: 8
+- title: Number of observed primaries
+  type: stat
+  description: Expected 1 when both sites are observed. 0 = no primary observed; >1 requires investigation. Missing data
+    is not synthesized as zero.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: sum(max by(dc)(((max by(dc,observer)(solo_pg_node_primary{job="postgres",dc=~"$dc",observer=~"$observer"})
+      and (time() - max by(dc,observer)(timestamp(solo_pg_node_primary{job="postgres",dc=~"$dc",observer=~"$observer"}))
+      < 20)) and on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 -
+      max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"}))) == 1) and
+      on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))))
+    legendFormat: observed primary count
+    datasource:
+      type: prometheus
+      uid: prometheus
+    instant: true
+    range: false
+  fieldConfig:
+    defaults:
+      unit: short
+      thresholds:
+        mode: absolute
+        steps:
+        - color: red
+          value: null
+        - color: green
+          value: 1
+        - color: red
+          value: 2
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 3
+  gridPos:
+    x: 0
+    y: 16
+    w: 12
+    h: 8
+- title: Database reachability
+  type: state-timeline
+  description: Database reachability. Данные выбранных ДЦ; каждая линия соответствует меткам в легенде.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: pg_up{job="postgres",dc=~"$dc",observer=~"$observer"} * (time() - timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})
+      < bool 20) + 2 * (time() - timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) >= bool 20)
+    legendFormat: '{{observer}} → {{dc}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+      min: 0
+      max: 2
+      mappings:
+      - type: value
+        options:
+          '0':
+            text: DOWN
+            color: red
+          '1':
+            text: UP
+            color: green
+          '2':
+            text: STALE
+            color: orange
+      thresholds:
+        mode: absolute
+        steps:
+        - color: red
+          value: null
+        - color: green
+          value: 1
+        - color: orange
+          value: 2
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 4
+  gridPos:
+    x: 12
+    y: 16
+    w: 12
+    h: 8
+- title: Database metrics — sample age
+  type: timeseries
+  description: Database metrics — sample age. Данные выбранных ДЦ; каждая линия соответствует меткам в легенде.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: (time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+    legendFormat: '{{observer}} → {{dc}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: s
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 5
+  gridPos:
+    x: 0
+    y: 24
+    w: 12
+    h: 8
+- title: Database collection errors
+  type: timeseries
+  description: 0 healthy; 1 one or more metric queries failed. Database connectivity alone does not guarantee complete
+    statistics.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"}
+    legendFormat: '{{observer}} → {{dc}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 6
+  gridPos:
+    x: 12
+    y: 24
+    w: 12
+    h: 8
+- title: Synchronous replication
+  type: timeseries
+  description: Interpret on the primary. A standalone writable primary can have sync disabled by pg_auto_failover; 0
+    replicas is then expected but data has only one copy.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: max by(dc)(solo_pg_node_sync_required{job="postgres",dc=~"$dc",observer=~"$observer"} and on(dc,observer) (((max
+      by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}} sync configured'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  - refId: B
+    expr: max by(dc)(solo_pg_node_synchronous_standbys{job="postgres",dc=~"$dc",observer=~"$observer"} and on(dc,observer)
+      (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}} synchronous replicas'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  - refId: C
+    expr: max by(dc)(solo_pg_node_streaming_standbys{job="postgres",dc=~"$dc",observer=~"$observer"} and on(dc,observer)
+      (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}} streaming replicas'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 7
+  gridPos:
+    x: 0
+    y: 32
+    w: 12
+    h: 8
+- title: Replication — primary to replica WAL gap
+  type: timeseries
+  description: Primary WAL position minus last reported replay LSN. Only rows with a reported replay LSN are emitted;
+    missing replica is missing, never zero lag.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: max by(dc,application_name,state,sync_state)(solo_pg_replication_replay_gap_bytes{job="postgres",dc=~"$dc",observer=~"$observer"}
+      and on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}} → {{application_name}} {{state}} {{sync_state}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: bytes
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 8
+  gridPos:
+    x: 12
+    y: 32
+    w: 12
+    h: 8
+- title: Standby — received WAL not yet replayed
+  type: timeseries
+  description: Receive minus replay on standby; primary emits 0. Does not include WAL not yet received over the network.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: max by(dc)(solo_pg_node_receive_replay_gap_bytes{job="postgres",dc=~"$dc",observer=~"$observer"} and on(dc,observer)
+      (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: bytes
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 9
+  gridPos:
+    x: 0
+    y: 40
+    w: 12
+    h: 8
+- title: Client connections by state
+  type: timeseries
+  description: Client connections by state. Данные выбранных ДЦ; каждая линия соответствует меткам в легенде.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: sum by(dc,state)(max by(dc,state,application,wait_type)(solo_pg_connections_count{job="postgres",dc=~"$dc",observer=~"$observer"}
+      and on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20))))
+    legendFormat: '{{dc}} {{state}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 10
+  gridPos:
+    x: 12
+    y: 40
+    w: 12
+    h: 8
+- title: Auth pool — database connections
+  type: timeseries
+  description: Physical PostgreSQL sessions with application_name=soloapp-auth. Pools connect to the current primary;
+    this is not a count grouped by the application pod location.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: sum by(dc)(max by(dc,state,application,wait_type)(solo_pg_connections_count{job="postgres",dc=~"$dc",observer=~"$observer",application="auth"}
+      and on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20))))
+    legendFormat: '{{dc}} auth'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 11
+  gridPos:
+    x: 0
+    y: 48
+    w: 12
+    h: 8
+- title: Client connections / max_connections — all databases
+  type: timeseries
+  description: Все клиентские соединения PostgreSQL / max_connections. Наблюдатели дедуплицированы после суммирования.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: soloapp:postgres:connection_ratio{dc=~"$dc"}
+    legendFormat: '{{dc}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: percentunit
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 12
+  gridPos:
+    x: 12
+    y: 48
+    w: 12
+    h: 8
+- title: Transactions / second
+  type: timeseries
+  description: Database transactions including monitoring and readiness, not business request RPS. Read-only queries
+    on standby also commit transactions.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: max by(dc)(rate(solo_pg_database_xact_commit{job="postgres",dc=~"$dc",observer=~"$observer"}[$__rate_interval])
+      and on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}} commits'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  - refId: B
+    expr: max by(dc)(rate(solo_pg_database_xact_rollback{job="postgres",dc=~"$dc",observer=~"$observer"}[$__rate_interval])
+      and on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}} rollbacks'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: ops
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 13
+  gridPos:
+    x: 0
+    y: 56
+    w: 12
+    h: 8
+- title: Cache hit ratio
+  type: timeseries
+  description: PostgreSQL shared-buffer hits. OS cache is not included; idle periods can display zero.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: 100 * max by(dc)(rate(solo_pg_database_blks_hit{job="postgres",dc=~"$dc",observer=~"$observer"}[$__rate_interval])
+      and on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20))) / clamp_min((max by(dc)(rate(solo_pg_database_blks_hit{job="postgres",dc=~"$dc",observer=~"$observer"}[$__rate_interval])
+      and on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20))) + max by(dc)(rate(solo_pg_database_blks_read{job="postgres",dc=~"$dc",observer=~"$observer"}[$__rate_interval])
+      and on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))), 0.000001)
+    legendFormat: '{{dc}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: percent
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 14
+  gridPos:
+    x: 12
+    y: 56
+    w: 12
+    h: 8
+- title: Rows / second
+  type: timeseries
+  description: Rows / second. Данные выбранных ДЦ; каждая линия соответствует меткам в легенде.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: max by(dc)(rate(solo_pg_database_tup_fetched{job="postgres",dc=~"$dc",observer=~"$observer"}[$__rate_interval])
+      and on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}} fetched'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  - refId: B
+    expr: max by(dc)(rate(solo_pg_database_tup_inserted{job="postgres",dc=~"$dc",observer=~"$observer"}[$__rate_interval])
+      and on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}} inserted'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  - refId: C
+    expr: max by(dc)(rate(solo_pg_database_tup_updated{job="postgres",dc=~"$dc",observer=~"$observer"}[$__rate_interval])
+      and on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}} updated'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  - refId: D
+    expr: max by(dc)(rate(solo_pg_database_tup_deleted{job="postgres",dc=~"$dc",observer=~"$observer"}[$__rate_interval])
+      and on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}} deleted'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: ops
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 15
+  gridPos:
+    x: 0
+    y: 64
+    w: 12
+    h: 8
+- title: Temporary writes / second
+  type: timeseries
+  description: Temporary writes / second. Данные выбранных ДЦ; каждая линия соответствует меткам в легенде.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: max by(dc)(rate(solo_pg_database_temp_bytes{job="postgres",dc=~"$dc",observer=~"$observer"}[$__rate_interval])
+      and on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: Bps
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 16
+  gridPos:
+    x: 12
+    y: 64
+    w: 12
+    h: 8
+- title: Waiting locks / blocked sessions
+  type: timeseries
+  description: Waiting locks / blocked sessions. Данные выбранных ДЦ; каждая линия соответствует меткам в легенде.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: max by(dc)(solo_pg_contention_waiting_locks{job="postgres",dc=~"$dc",observer=~"$observer"} and on(dc,observer)
+      (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}} waiting locks'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  - refId: B
+    expr: max by(dc)(solo_pg_contention_blocked_sessions{job="postgres",dc=~"$dc",observer=~"$observer"} and on(dc,observer)
+      (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}} blocked sessions'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 17
+  gridPos:
+    x: 0
+    y: 72
+    w: 12
+    h: 8
+- title: Oldest open client transaction
+  type: timeseries
+  description: Oldest open client transaction. Данные выбранных ДЦ; каждая линия соответствует меткам в легенде.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: max by(dc)(solo_pg_contention_oldest_transaction_seconds{job="postgres",dc=~"$dc",observer=~"$observer"} and
+      on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: s
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 18
+  gridPos:
+    x: 12
+    y: 72
+    w: 12
+    h: 8
+- title: Deadlocks / second
+  type: timeseries
+  description: Deadlocks / second. Данные выбранных ДЦ; каждая линия соответствует меткам в легенде.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: max by(dc)(rate(solo_pg_database_deadlocks{job="postgres",dc=~"$dc",observer=~"$observer"}[$__rate_interval])
+      and on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: ops
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 19
+  gridPos:
+    x: 0
+    y: 80
+    w: 12
+    h: 8
+- title: Database size
+  type: timeseries
+  description: Database size. Данные выбранных ДЦ; каждая линия соответствует меткам в легенде.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: max by(dc)(solo_pg_database_size_bytes{job="postgres",dc=~"$dc",observer=~"$observer"} and on(dc,observer)
+      (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}} authdb'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: bytes
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 20
+  gridPos:
+    x: 12
+    y: 80
+    w: 12
+    h: 8
+- title: PostgreSQL uptime
+  type: timeseries
+  description: PostgreSQL uptime. Данные выбранных ДЦ; каждая линия соответствует меткам в легенде.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: max by(dc)(solo_pg_node_uptime_seconds{job="postgres",dc=~"$dc",observer=~"$observer"} and on(dc,observer)
+      (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20)))
+    legendFormat: '{{dc}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: s
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 21
+  gridPos:
+    x: 0
+    y: 88
+    w: 12
+    h: 8
+- title: Connections by wait category
+  type: timeseries
+  description: Connections by wait category. Данные выбранных ДЦ; каждая линия соответствует меткам в легенде.
+  datasource:
+    type: prometheus
+    uid: prometheus
+  targets:
+  - refId: A
+    expr: sum by(dc,wait_type)(max by(dc,state,application,wait_type)(solo_pg_connections_count{job="postgres",dc=~"$dc",observer=~"$observer"}
+      and on(dc,observer) (((max by(dc,observer)(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"}) * (1 - max by(dc,observer)(pg_exporter_last_scrape_error{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      == 1) and on(dc,observer) ((time() - max by(dc,observer)(timestamp(pg_up{job="postgres",dc=~"$dc",observer=~"$observer"})))
+      < 20))))
+    legendFormat: '{{dc}} {{wait_type}}'
+    datasource:
+      type: prometheus
+      uid: prometheus
+  fieldConfig:
+    defaults:
+      unit: short
+    overrides: []
+  options:
+    legend:
+      displayMode: table
+      placement: bottom
+    tooltip:
+      mode: multi
+  id: 22
+  gridPos:
+    x: 12
+    y: 88
+    w: 12
+    h: 8

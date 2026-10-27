@@ -5,4 +5,13 @@ providers:
   type: file
   disableDeletion: true
   editable: false
-  options: {path: /var/lib/grafana/dashboards}
+  updateIntervalSeconds: 15
+  options: {path: /var/lib/grafana/dashboards/infrastructure}
+- name: soloapp-services
+  folder: Services
+  folderUid: soloapp-services
+  type: file
+  disableDeletion: true
+  editable: false
+  updateIntervalSeconds: 15
+  options: {path: /var/lib/grafana/dashboards/services}

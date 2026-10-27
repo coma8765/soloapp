@@ -223,3 +223,11 @@ prometheus.scrape "postgres_{{ site }}" {
   forward_to = [prometheus.remote_write.central.receiver]
 }
 {% endfor %}
+
+{% if obs.alertmanager.enabled %}
+prometheus.scrape "alertmanager" {
+  targets = [{__address__ = "alertmanager:9093", job = "alertmanager", dc = "{{ inventory_hostname }}"}]
+  scrape_interval = "{{ obs.scrape_interval }}"
+  forward_to = [prometheus.remote_write.central.receiver]
+}
+{% endif %}

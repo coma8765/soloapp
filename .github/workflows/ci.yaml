@@ -20,10 +20,12 @@ jobs:
           .venv-codegen/bin/pip install -r libs/api_codegen/requirements.txt -r libs/storage/requirements.txt
       - name: Validate codegen and policy
         run: |
-          make check-codegen test-codegen
+          make check-codegen test-codegen check-dashboards test-alerts
           python3 -m unittest discover -s infra/cd/tests -v
           python3 -m unittest discover -s infra/registry/tests -v
           .venv-codegen/bin/python -m unittest discover -s infra/object-storage/tests -v
+      - name: Test Telegram relay authorization and delivery
+        run: node --test infra/telegram-relay/tests/worker.test.mjs
       - name: Install verified secret scanner
         run: |
           curl --fail --location --retry 3 -o "$RUNNER_TEMP/gitleaks.tar.gz" https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
