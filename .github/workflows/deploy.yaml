@@ -5,6 +5,11 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      rollback_revision:
+        description: Previously deployed v0.1.P or full commit SHA; empty for a new release
+        required: false
+        type: string
 permissions:
   contents: read
   actions: read
@@ -12,7 +17,15 @@ concurrency:
   group: production
   cancel-in-progress: false
 jobs:
-  deploy:
+  prepare:
+    permissions:
+      contents: write
+      actions: read
+    outputs:
+      sha: ${{ steps.revision.outputs.sha }}
+      target: ${{ steps.version.outputs.target }}
+      version: ${{ steps.version.outputs.version }}
+      operation: ${{ steps.version.outputs.operation }}
     if: >-
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'workflow_dispatch' ||
@@ -20,7 +33,7 @@ jobs:
         github.event.workflow_run.event == 'push' &&
         github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 10
     environment: production
     steps:
       - name: Select current green main revision
@@ -41,6 +54,28 @@ jobs:
         with:
           ref: ${{ steps.revision.outputs.sha }}
           persist-credentials: false
+      - name: Reserve version or resolve rollback
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.revision.outputs.sha }}
+          ROLLBACK: ${{ inputs.rollback_revision }}
+        run: |
+          if [ -n "$ROLLBACK" ]; then
+            python3 infra/cd/version.py resolve "$ROLLBACK"
+          else
+            python3 infra/cd/version.py reserve "$SHA"
+          fi
+  deploy:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment: production
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
       - name: Prepare restricted deployment identities
         env:
           YC_KEY: ${{ secrets.CD_YC_KEY }}
@@ -52,50 +87,83 @@ jobs:
           printf '%s\n' "$YC_KEY" > "$RUNNER_TEMP/cd/yc"
           printf '%s\n' "$HOME_KEY" > "$RUNNER_TEMP/cd/home"
           printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/cd/known_hosts"
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+      - if: inputs.rollback_revision == ''
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           flutter-version: '3.44.8'
           channel: stable
       - name: Build exact web revision
+        if: inputs.rollback_revision == ''
         working-directory: services/web
         env:
-          SHA: ${{ steps.revision.outputs.sha }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           flutter pub get --enforce-lockfile
-          flutter build web --release --no-web-resources-cdn --base-href "/web/releases/$SHA/" --dart-define="APP_VERSION=$SHA"
+          flutter build web --release --no-web-resources-cdn --base-href "/web/releases/$SHA/" --dart-define="APP_VERSION=$VERSION" --build-name="${VERSION#v}" --build-number="${VERSION##*.}"
           python3 deploy/package.py "$SHA" "$RUNNER_TEMP/web.tar.gz"
       - name: Publish and verify both S3 replicas before activation
+        if: inputs.rollback_revision == ''
         env:
           HOST: ${{ secrets.CD_YC_HOST }}
           PORT: ${{ secrets.CD_YC_PORT }}
-          SHA: ${{ steps.revision.outputs.sha }}
+          SHA: ${{ needs.prepare.outputs.sha }}
         run: |
           ssh -i "$RUNNER_TEMP/cd/yc" -p "$PORT" -o IdentitiesOnly=yes -o BatchMode=yes \
             -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/cd/known_hosts" \
             -o ForwardAgent=no -o ConnectTimeout=20 -o ServerAliveInterval=30 \
             "soloapp-cd@$HOST" "publish $SHA" < "$RUNNER_TEMP/web.tar.gz"
+      - name: Build runtime images on GitHub runner
+        if: inputs.rollback_revision == ''
+        env:
+          SHA: ${{ needs.prepare.outputs.sha }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          docker buildx create --use
+          bash infra/registry/build.sh "$SHA" "$RUNNER_TEMP/images"
+      - name: Publish identical runtime images to both private registries
+        if: inputs.rollback_revision == ''
+        env:
+          SHA: ${{ needs.prepare.outputs.sha }}
+          YC_HOST: ${{ secrets.CD_YC_HOST }}
+          HOME_HOST: ${{ secrets.CD_HOME_HOST }}
+          YC_PORT: ${{ secrets.CD_YC_PORT }}
+          HOME_PORT: ${{ secrets.CD_HOME_PORT }}
+        run: |
+          set -euo pipefail
+          for service in auth whoami web; do
+            for site in yc home; do
+              if [ "$site" = yc ]; then host=$YC_HOST; port=$YC_PORT; else host=$HOME_HOST; port=$HOME_PORT; fi
+              ssh -i "$RUNNER_TEMP/cd/$site" -p "$port" -o IdentitiesOnly=yes -o BatchMode=yes \
+                -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/cd/known_hosts" \
+                -o ForwardAgent=no -o ConnectTimeout=20 -o ServerAliveInterval=30 \
+                "soloapp-cd@$host" "push-$service $SHA" < "$RUNNER_TEMP/images/$service.oci.tar"
+            done
+          done
       - name: Roll YC
         env:
           HOST: ${{ secrets.CD_YC_HOST }}
           PORT: ${{ secrets.CD_YC_PORT }}
-          SHA: ${{ steps.revision.outputs.sha }}
+          SHA: ${{ needs.prepare.outputs.target }}
+          OPERATION: ${{ needs.prepare.outputs.operation }}
           SOLOAPP_BASE_URL: ${{ secrets.SOLOAPP_BASE_URL }}
         run: |
           ssh -i "$RUNNER_TEMP/cd/yc" -p "$PORT" -o IdentitiesOnly=yes -o BatchMode=yes \
             -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/cd/known_hosts" \
             -o ForwardAgent=no -o ConnectTimeout=20 -o ServerAliveInterval=30 \
-            "soloapp-cd@$HOST" "deploy $SHA"
+            "soloapp-cd@$HOST" "$OPERATION $SHA"
       - name: Roll home and verify public API
         env:
           HOST: ${{ secrets.CD_HOME_HOST }}
           PORT: ${{ secrets.CD_HOME_PORT }}
-          SHA: ${{ steps.revision.outputs.sha }}
+          SHA: ${{ needs.prepare.outputs.target }}
+          OPERATION: ${{ needs.prepare.outputs.operation }}
           SOLOAPP_BASE_URL: ${{ secrets.SOLOAPP_BASE_URL }}
         run: |
           ssh -i "$RUNNER_TEMP/cd/home" -p "$PORT" -o IdentitiesOnly=yes -o BatchMode=yes \
             -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/cd/known_hosts" \
             -o ForwardAgent=no -o ConnectTimeout=20 -o ServerAliveInterval=30 \
-            "soloapp-cd@$HOST" "deploy $SHA"
+            "soloapp-cd@$HOST" "$OPERATION $SHA"
           python3 services/nginx/tests/smoke.py
           python3 services/web/tests/smoke.py "$SHA"
       - name: Remove deployment keys

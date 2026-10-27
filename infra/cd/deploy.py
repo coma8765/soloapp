@@ -4,6 +4,8 @@
 This program is installed by an operator, not self-updated by a release.
 No arbitrary command, repository URL, inventory or manifest comes over SSH.
 """
+import hashlib
+import ssl
 import fcntl
 import json
 import os
@@ -43,6 +45,29 @@ def run(argv, *, cwd=None, capture=False, env=None):
                           stdout=subprocess.PIPE if capture else None, env=env).stdout
 
 
+def registry_images(sha, require_both=True):
+    directory = Path('/run/soloapp-registry')
+    ctx = ssl.create_default_context(cafile=str(directory / 'ca.crt'))
+    ctx.load_cert_chain(str(directory / 'pull.crt'), str(directory / 'pull.key'))
+    copies = []
+    for host in ('10.77.26.11', '10.77.26.12'):
+        images = []
+        try:
+            for service in ('auth', 'whoami', 'web'):
+                url = 'https://' + host + ':5043/v2/soloapp/' + service + '/manifests/git-' + sha
+                req = urllib.request.Request(url, headers={'Accept': 'application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'})
+                with urllib.request.urlopen(req, context=ctx, timeout=15) as response:
+                    content = response.read(4 * 1024 * 1024)
+                digest = 'sha256:' + hashlib.sha256(content).hexdigest()
+                images.append('registry.soloapp.internal:5043/soloapp/' + service + '@' + digest)
+            copies.append(images)
+        except Exception:
+            if require_both: raise RuntimeError('Both registry copies must be reachable before a new release') from None
+    if not copies: raise RuntimeError('No registry copy is reachable')
+    if any(copy != copies[0] for copy in copies): raise RuntimeError('Registry replicas disagree')
+    return copies[0]
+
+
 def main():
     os.umask(0o077)
     if len(sys.argv) not in (2, 3):
@@ -53,21 +78,25 @@ def main():
         return
     sha = validate_revision(sys.argv[1])
     mode = sys.argv[2] if len(sys.argv) == 3 else 'deploy'
-    if mode not in ('deploy', 'publish'): raise SystemExit('Invalid CD operation')
+    if mode not in ('deploy', 'publish', 'push-auth', 'push-whoami', 'push-web', 'rollback'): raise SystemExit('Invalid CD operation')
     STATE.mkdir(mode=0o700, exist_ok=True)
     with (STATE / 'deploy.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        history = STATE / 'history' / (sha + '.json')
+        if mode == 'rollback' and not history.is_file():
+            raise SystemExit('Rollback requires a previously deployed release on this site')
         api = ('https://api.github.com/repos/' + cfg['repository'] +
                '/actions/workflows/ci.yaml/runs?event=push&branch=main&head_sha=' + sha)
         req = urllib.request.Request(api, headers={'User-Agent': 'soloapp-cd', 'Accept': 'application/vnd.github+json'})
-        with urllib.request.urlopen(req, timeout=30) as response:
-            if not ci_passed(json.load(response), sha, cfg['repository']):
-                raise SystemExit('Deployment denied: successful push CI on main is required')
+        if mode != 'rollback':
+            with urllib.request.urlopen(req, timeout=30) as response:
+                if not ci_passed(json.load(response), sha, cfg['repository']):
+                    raise SystemExit('Deployment denied: successful push CI on main is required')
         repo = STATE / 'repository'
         if not repo.exists():
             run(['git', 'clone', '--no-checkout', 'https://github.com/' + cfg['repository'] + '.git', str(repo)])
         run(['git', 'fetch', '--prune', 'origin', '+refs/heads/main:refs/remotes/origin/main'], cwd=repo)
-        if run(['git', 'rev-parse', 'origin/main'], cwd=repo, capture=True).strip() != sha:
+        if mode != 'rollback' and run(['git', 'rev-parse', 'origin/main'], cwd=repo, capture=True).strip() != sha:
             raise SystemExit('Deployment denied: this is not the current main commit')
         source = STATE / ('release-' + sha)
         if not source.exists():
@@ -84,20 +113,24 @@ def main():
         if mode == 'publish':
             run(storage)
             return
-        # A new release cannot activate when either copy is missing/unreachable.
-        run(storage + ['--check'])
-        tag = 'git-' + sha
-        images = ['soloapp/' + service + ':' + tag for service in ('auth', 'whoami', 'web')]
-        for service, image in zip(('auth', 'whoami', 'web'), images):
-            print('Building ' + service + ' at ' + sha, flush=True)
-            run(['docker', 'build', '--target', 'runtime', '--label', 'org.opencontainers.image.revision=' + sha,
-                 '-f', 'services/' + service + '/deploy/Dockerfile', '-t', image, '.'], cwd=source)
-        archive = STATE / ('images-' + sha + '.tar')
-        try:
-            run(['docker', 'save', '-o', str(archive)] + images)
-            run(['k3s', 'ctr', 'images', 'import', str(archive)])
-        finally:
-            archive.unlink(missing_ok=True)
+        if mode.startswith('push-'):
+            service = mode.removeprefix('push-')
+            run(['docker', 'run', '--rm', '-i', '--network', 'host', '--read-only',
+                 '--cap-drop=ALL', '--security-opt', 'no-new-privileges', '--user', '10006:10006',
+                 '--tmpfs', '/tmp:rw,nosuid,nodev,size=2200m,mode=1777',
+                 '-v', str(source) + ':/src:ro', '-v', '/run/soloapp-registry-publisher:/run/soloapp-registry:ro',
+                 '--entrypoint', 'python3', 'soloapp/deploy-controller:1',
+                 '/src/infra/registry/push.py', sha, service])
+            return
+        if mode != 'rollback':
+            # Publication and activation wait for both verified copies.
+            run(storage + ['--check'])
+        images = registry_images(sha, require_both=mode != 'rollback')
+        if mode == 'rollback' and images != json.loads(history.read_text())['images']:
+            raise SystemExit('Rollback image digests differ from the recorded successful deployment')
+        # Pull exact digests before mutating pods, including old manifests with Never policy.
+        for image in images:
+            run(['k3s', 'crictl', 'pull', image])
         # A short-lived, namespace-scoped token, held only in /run (tmpfs).
         with tempfile.TemporaryDirectory(prefix='soloapp-cd-', dir='/run') as temp:
             runtime = Path(temp)
@@ -131,6 +164,8 @@ def main():
             run(cmd + ['--check'])
             run(cmd)
         result = {'site': cfg['site'], 'revision': sha, 'images': images, 'status': 'deployed'}
+        history.parent.mkdir(mode=0o700, exist_ok=True)
+        history.write_text(json.dumps(result) + '\n')
         (STATE / 'deployed.json').write_text(json.dumps(result) + '\n')
         print(json.dumps(result), flush=True)
 

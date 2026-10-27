@@ -3,6 +3,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 cfg=json.load(open('/secrets/admin.json'))
+if len(sys.argv)>2: cfg['bucket']=sys.argv[2]
 s3=boto3.client('s3',endpoint_url=sys.argv[1],aws_access_key_id=cfg['access_key'],aws_secret_access_key=cfg['secret_key'],region_name='us-east-1',config=Config(signature_version='s3v4',s3={'addressing_style':'path'}))
 for attempt in range(20):
  try:

@@ -21,3 +21,19 @@ class GateTests(unittest.TestCase):
                        {'head_sha': 'b' * 40}, {'head_repository': {'full_name': 'fork/repo'}}):
             self.assertFalse(gate.ci_passed({'workflow_runs': [dict(good, **change)]}, 'a' * 40, 'owner/repo'))
         self.assertFalse(gate.ci_passed({}, 'a' * 40, 'owner/repo'))
+
+class RegistryTests(unittest.TestCase):
+    def test_new_release_requires_two_matching_copies(self):
+        from unittest.mock import patch, MagicMock
+        ctx=MagicMock()
+        def response(payload):
+            value=MagicMock();value.__enter__.return_value.read.return_value=payload;return value
+        with patch.object(gate.ssl,'create_default_context',return_value=ctx):
+            with patch.object(gate.urllib.request,'urlopen',side_effect=[response(b'a')]*3+[OSError('offline')]):
+                with self.assertRaises(RuntimeError):gate.registry_images('a'*40)
+            with patch.object(gate.urllib.request,'urlopen',side_effect=[response(b'a')]*3+[response(b'b')]*3):
+                with self.assertRaises(RuntimeError):gate.registry_images('a'*40)
+            with patch.object(gate.urllib.request,'urlopen',side_effect=[response(b'a')]*3+[OSError('offline')]):
+                self.assertEqual(len(gate.registry_images('a'*40,require_both=False)),3)
+            with patch.object(gate.urllib.request,'urlopen',side_effect=OSError('offline')):
+                with self.assertRaises(RuntimeError):gate.registry_images('a'*40,require_both=False)

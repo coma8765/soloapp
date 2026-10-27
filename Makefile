@@ -57,3 +57,10 @@ check-codegen-web:
 	$(PYTHON) libs/api_codegen/generate_dart.py --check
 build-web test-web:
 	$(MAKE) -C services/web $(subst -web,,$@)
+
+.PHONY: release-images build-controller
+release-images:
+	bash infra/registry/build.sh "$(shell git rev-parse HEAD)" "$(PROJECT_ROOT)/work/release-images"
+build-controller:
+	docker buildx build --platform linux/amd64 --load -t soloapp/deploy-controller:1 infra/cd
+	docker save -o work/deploy-controller.tar soloapp/deploy-controller:1

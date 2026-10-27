@@ -3,6 +3,8 @@
   serial: 1
   gather_facts: false
   become: true
+  vars:
+    s3_volume_max: 32
   tasks:
   - name: Update Lockbox helper with S3 reload support
     ansible.builtin.copy:
@@ -54,7 +56,7 @@
       - -s3.ip.bind=0.0.0.0
       - -master.telemetry=false
       - -master.volumeSizeLimitMB=1024
-      - -volume.max=8
+      - '-volume.max={{ s3_volume_max }}'
       - -volume.port=18080
       - -volume.fileSizeLimitMB=64
       - -filer
