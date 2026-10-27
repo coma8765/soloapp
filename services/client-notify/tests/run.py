@@ -39,7 +39,16 @@ def main():
         )
         for _ in range(60):
             result = subprocess.run(
-                [args.engine, "exec", name, "rabbitmq-diagnostics", "-q", "check_running"],
+                [
+                    args.engine,
+                    "exec",
+                    "--user",
+                    "rabbitmq",
+                    name,
+                    "rabbitmq-diagnostics",
+                    "-q",
+                    "check_running",
+                ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
