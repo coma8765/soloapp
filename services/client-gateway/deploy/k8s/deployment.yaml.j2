@@ -66,7 +66,7 @@ items:
           env:
           - {name: TOKEN_FILE, value: /run/identity/token}
           - {name: SERVICE_ACCOUNT_ID, value: '{{ cloud.identities["client-gateway-" ~ inventory_hostname] }}'}
-          - {name: SECRET_IDS, value: '{{ cloud.secrets["client-gateway-" ~ inventory_hostname] }},{{ cloud.secrets["client-gateway-tls-" ~ inventory_hostname] }},{{ cloud.secrets["client-gateway-tls-" ~ inventory_hostname] }}'}
+          - {name: SECRET_IDS, value: '{{ cloud.secrets["client-gateway-" ~ inventory_hostname] }},{{ cloud.secrets["client-gateway-tls-" ~ inventory_hostname] }}'}
           - {name: SECRET_DIR, value: /run/soloapp-secrets/data}
           - {name: LOOP, value: '1'}
           resources:
@@ -84,7 +84,7 @@ items:
           env:
           - {name: TOKEN_FILE, value: /run/identity/token}
           - {name: SERVICE_ACCOUNT_ID, value: '{{ cloud.identities["client-gateway-" ~ inventory_hostname] }}'}
-          - {name: SECRET_IDS, value: '{{ cloud.secrets["client-gateway-" ~ inventory_hostname] }},{{ cloud.secrets["client-gateway-tls-" ~ inventory_hostname] }},{{ cloud.secrets["client-gateway-tls-" ~ inventory_hostname] }}'}
+          - {name: SECRET_IDS, value: '{{ cloud.secrets["client-gateway-" ~ inventory_hostname] }},{{ cloud.secrets["client-gateway-tls-" ~ inventory_hostname] }}'}
           - {name: SECRET_DIR, value: /run/soloapp-secrets/data}
           resources:
             requests: {cpu: 10m, memory: 24Mi}

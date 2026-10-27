@@ -56,3 +56,15 @@ class MergeGateTests(unittest.TestCase):
         self.assertIn("required_pull_request_reviews", protection)
         self.assertFalse(protection["allow_force_pushes"])
         self.assertFalse(protection["allow_deletions"])
+
+
+class SiteConfigurationTests(unittest.TestCase):
+    def test_all_delivery_workloads_have_independent_site_replica_settings(self):
+        for site in ("yc", "home"):
+            config = yaml.safe_load(
+                (ROOT / "infra/ansible/host_vars" / (site + ".yaml")).read_text()
+            )
+            for service in ("client_gateway", "client_notify"):
+                self.assertEqual(config["service_overrides"][service]["replicas"], 2)
+            if site == "home":
+                self.assertEqual(config["network_direct_https_mark"], "0x2024")
