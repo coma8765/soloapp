@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:web/main.dart';
-import 'package:web/api/transport.dart';
+import 'package:soloapp_web/main.dart';
+import 'package:soloapp_web/api/transport.dart';
 
 void main() {
   testWidgets('login, protected whoami, logout use generated API paths', (tester) async {

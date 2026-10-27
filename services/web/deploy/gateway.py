@@ -17,15 +17,21 @@ CACHE = Path('/cache')
 CONFIG = '/run/soloapp-secrets/data/reader.json'
 LOCK = threading.RLock()
 MAX_CACHE = 192 * 1024 * 1024
+LAST_GOOD = 0
 
 
 def object_bytes(key):
+    global LAST_GOOD
     bucket, stores = clients(CONFIG)
-    for store in stores:
+    order = [LAST_GOOD] + [i for i in range(len(stores)) if i != LAST_GOOD]
+    for index in order:
+        store = stores[index]
         try:
             response = store.get_object(Bucket=bucket, Key=key)
             if response['ContentLength'] > 64 * 1024 * 1024: raise ValueError('Oversized object')
-            with response['Body'] as body: return body.read()
+            with response['Body'] as body: data = body.read()
+            LAST_GOOD = index
+            return data
         except Exception:
             continue
     raise OSError('S3 replicas unavailable')

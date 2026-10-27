@@ -36,6 +36,15 @@ class ReleaseTests(unittest.TestCase):
   self.assertEqual(verify_copies('web',stores,SHA),manifest)
   stores[1].data[f'releases/{SHA}/committed.json']=b'{}'
   with self.assertRaises(ValueError):verify_copies('web',stores,SHA)
+ def test_readback_corruption_prevents_commit(self):
+  class Corrupt(Store):
+   def get_object(self,Key,**kw):
+    result=super().get_object(Key=Key,**kw)
+    if Key.endswith('/index.html'):result['Body']=io.BytesIO(b'corrupt')
+    return result
+  stores=[Store(),Corrupt()]
+  with self.assertRaises(ValueError):publish('web',stores,SHA,{'index.html':b'html'},b'{}')
+  for store in stores:self.assertNotIn(f'releases/{SHA}/committed.json',store.data)
  def test_existing_revision_cannot_change(self):
   stores=[Store(),Store()];stores[1].data[f'releases/{SHA}/manifest.json']=b'previous'
   with self.assertRaises(ValueError):publish('web',stores,SHA,{},b'other')
