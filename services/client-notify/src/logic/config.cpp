@@ -51,6 +51,7 @@ Config Config::Load() {
     c.retry_ms = solo::db::PoolSetting("NOTIFY_RETRY_DELAY_MS", c.retry_ms, 10000);
     if (c.rabbit_host.empty() || c.rabbit_user.empty() || c.rabbit_password.empty() ||
         c.gateway_url.empty() || c.gateway_token.empty() || c.queue.empty() || c.delivery_ms < 1 ||
+        c.delivery_ms > 290000 || c.rabbit_port < 1 || c.rabbit_port > 65535 ||
         c.ack_ms <= c.delivery_ms + 1000 || c.ack_ms > 300000 || c.retry_ms < 100 ||
         c.retry_ms > 10000)
         throw std::runtime_error("Invalid config bounds");

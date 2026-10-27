@@ -9,7 +9,15 @@
 int main(int argc, char **argv) {
     using namespace solo::notify;
     Json::Value out;
-    if (argc > 1 && std::string(argv[1]) == "deadline") {
+    if (argc > 1 && std::string(argv[1]) == "config") {
+        try {
+            const auto config = Config::Load();
+            out["delivery_ms"] = config.delivery_ms;
+            out["ack_ms"] = config.ack_ms;
+        } catch (...) {
+            return 2;
+        }
+    } else if (argc > 1 && std::string(argv[1]) == "deadline") {
         Config config;
         const auto *host = std::getenv("RABBIT_HOST");
         config.rabbit_host = host ? host : "127.0.0.1";
