@@ -1,0 +1,136 @@
+apiVersion: v1
+kind: List
+items:
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata: {name: alertmanager, namespace: observability}
+  automountServiceAccountToken: false
+- apiVersion: v1
+  kind: ConfigMap
+  metadata: {name: alertmanager, namespace: observability}
+  data:
+    alertmanager.yaml: {{ lookup('file', project_root ~ '/infra/observability/deploy/metrics/alertmanager.yaml') | to_json }}
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata: {name: alertmanager, namespace: observability}
+  spec:
+    accessModes: [ReadWriteOnce]
+    storageClassName: local-path
+    resources:
+      requests: {storage: '{{ obs.alertmanager.storage }}'}
+- apiVersion: v1
+  kind: Service
+  metadata: {name: alertmanager, namespace: observability}
+  spec:
+    selector: {app: alertmanager}
+    ports: [{name: http, port: 9093, targetPort: 9093}]
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata: {name: alertmanager, namespace: observability}
+  spec:
+    podSelector: {matchLabels: {app: alertmanager}}
+    policyTypes: [Ingress]
+    ingress:
+    - from:
+      - podSelector: {matchLabels: {app: prometheus}}
+      - podSelector: {matchLabels: {app: alloy}}
+      ports: [{port: 9093, protocol: TCP}]
+    - from:
+{% for site in groups['app_sites'] %}
+      - ipBlock: {cidr: '{{ hostvars[site].private_ip }}/32'}
+{% endfor %}
+      ports:
+      - {port: {{ obs.alertmanager.cluster_port }}, protocol: TCP}
+      - {port: {{ obs.alertmanager.cluster_port }}, protocol: UDP}
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata: {name: alertmanager, namespace: observability}
+  spec:
+    replicas: 1
+    strategy: {type: Recreate}
+    selector: {matchLabels: {app: alertmanager}}
+    template:
+      metadata:
+        labels: {app: alertmanager}
+        annotations:
+          checksum/config: '{{ lookup("file", project_root ~ "/infra/observability/deploy/metrics/alertmanager.yaml") | hash("sha256") }}'
+      spec:
+        serviceAccountName: alertmanager
+        automountServiceAccountToken: false
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10001
+          runAsGroup: 10001
+          fsGroup: 10001
+          seccompProfile: {type: RuntimeDefault}
+        initContainers:
+        - name: fetch-secrets
+          image: '{{ secrets_image }}'
+          imagePullPolicy: Never
+          command: [python3, /usr/local/bin/secret-fetch.py]
+          env: &identity_env
+          - {name: TOKEN_FILE, value: /run/identity/token}
+          - {name: SERVICE_ACCOUNT_ID, value: '{{ cloud.identities["alertmanager-" ~ inventory_hostname] }}'}
+          - {name: SECRET_IDS, value: '{{ cloud.secrets["alertmanager-telegram"] }}'}
+          - {name: SECRET_DIR, value: /run/soloapp-secrets/data}
+          securityContext: &security
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          resources: {{ obs.resources.secrets | to_json }}
+          volumeMounts: &secret_mounts
+          - {name: identity, mountPath: /run/identity, readOnly: true}
+          - {name: secrets, mountPath: /run/soloapp-secrets}
+        containers:
+        - name: alertmanager
+          image: '{{ obs.images.alertmanager }}'
+          args:
+          - --config.file=/etc/alertmanager/alertmanager.yaml
+          - --storage.path=/alertmanager
+          - --web.listen-address=:9093
+          - --cluster.listen-address=0.0.0.0:{{ obs.alertmanager.cluster_port }}
+          - --cluster.advertise-address={{ private_ip }}:{{ obs.alertmanager.cluster_port }}
+{% for site in groups['app_sites'] if site != inventory_hostname %}
+          - --cluster.peer={{ hostvars[site].private_ip }}:{{ obs.alertmanager.cluster_port }}
+{% endfor %}
+          ports:
+          - {name: http, containerPort: 9093}
+          - {name: gossip-tcp, containerPort: {{ obs.alertmanager.cluster_port }}, hostPort: {{ obs.alertmanager.cluster_port }}, hostIP: '{{ private_ip }}', protocol: TCP}
+          - {name: gossip-udp, containerPort: {{ obs.alertmanager.cluster_port }}, hostPort: {{ obs.alertmanager.cluster_port }}, hostIP: '{{ private_ip }}', protocol: UDP}
+          securityContext: *security
+          resources: {{ obs.resources.alertmanager | to_json }}
+          volumeMounts:
+          - {name: config, mountPath: /etc/alertmanager, readOnly: true}
+          - {name: data, mountPath: /alertmanager}
+          - {name: secrets, mountPath: /run/soloapp-secrets, readOnly: true}
+          readinessProbe:
+            httpGet: {path: /-/ready, port: 9093}
+            periodSeconds: 5
+          startupProbe:
+            httpGet: {path: /-/ready, port: 9093}
+            periodSeconds: 3
+            failureThreshold: 60
+        - name: refresh-secrets
+          image: '{{ secrets_image }}'
+          imagePullPolicy: Never
+          command: [python3, /usr/local/bin/secret-fetch.py]
+          env:
+          - {name: LOOP, value: '1'}
+          - {name: TOKEN_FILE, value: /run/identity/token}
+          - {name: SERVICE_ACCOUNT_ID, value: '{{ cloud.identities["alertmanager-" ~ inventory_hostname] }}'}
+          - {name: SECRET_IDS, value: '{{ cloud.secrets["alertmanager-telegram"] }}'}
+          - {name: SECRET_DIR, value: /run/soloapp-secrets/data}
+          securityContext: *security
+          resources: {{ obs.resources.secrets | to_json }}
+          volumeMounts: *secret_mounts
+        volumes:
+        - name: config
+          configMap: {name: alertmanager}
+        - name: data
+          persistentVolumeClaim: {claimName: alertmanager}
+        - name: secrets
+          emptyDir: {medium: Memory, sizeLimit: 1Mi}
+        - name: identity
+          projected:
+            sources:
+            - serviceAccountToken: {path: token, expirationSeconds: 600, audience: soloapp-lockbox}

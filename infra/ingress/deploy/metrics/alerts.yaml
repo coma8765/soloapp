@@ -1,0 +1,15 @@
+groups:
+- name: soloapp.routing
+  rules:
+  - alert: IngressBackendUnavailable
+    expr: max by(ingress,proxy,server)(haproxy_server_status{state="UP",proxy=~"auth_sites|grafana_sites"} and (time()-timestamp(haproxy_server_status)<20))
+      == 0
+    for: 1m
+    labels:
+      severity: warning
+      project: soloapp
+      service: routing
+    annotations:
+      summary: HAProxy исключил площадку
+      description: DC={{ $labels.dc }} service={{ $labels.service }} namespace={{ $labels.namespace }} pod={{ $labels.pod
+        }} container={{ $labels.container }} route={{ $labels.route }} value={{ $value }}

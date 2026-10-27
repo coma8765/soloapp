@@ -69,3 +69,17 @@ build-controller:
 app-api: build-app-api
 build-app-api test-app-api test-image-app-api:
 	$(MAKE) -C "$(PROJECT_ROOT)/services/app-api" $(patsubst %-app-api,%,$@)
+
+.PHONY: check-dashboards deploy-dashboards
+check-dashboards:
+	$(PYTHON) infra/observability/dashboards/generate.py --check
+deploy-dashboards: check-dashboards check-alerts
+	ansible-playbook infra/observability/deploy.yaml --tags stores
+
+.PHONY: check-alerts test-alerts
+check-alerts:
+	$(PYTHON) -m libs.monitoring.alerts --output work/alert-tests/rules.yaml
+test-alerts: check-alerts
+	cp infra/observability/tests/alerts.test.yaml work/alert-tests/tests.yaml
+	docker run --rm --entrypoint /bin/promtool -v "$(PROJECT_ROOT)/work/alert-tests:/tests:ro" prom/prometheus:v3.15.1 check rules /tests/rules.yaml
+	docker run --rm --entrypoint /bin/promtool -v "$(PROJECT_ROOT)/work/alert-tests:/tests:ro" prom/prometheus:v3.15.1 test rules /tests/tests.yaml

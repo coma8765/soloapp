@@ -1,0 +1,38 @@
+global:
+  resolve_timeout: 5m
+route:
+  receiver: telegram
+  group_by:
+  - alertname
+  - dc
+  - service
+  group_wait: 15s
+  group_interval: 1m
+  repeat_interval: 4h
+receivers:
+- name: telegram
+  telegram_configs:
+  - bot_token_file: /run/soloapp-secrets/data/telegram-token
+    chat_id_file: /run/soloapp-secrets/data/telegram-chat-id
+    send_resolved: true
+    parse_mode: HTML
+    message: '<b>Soloapp {{ .Status | toUpper }} — {{ .CommonLabels.alertname }}</b>
+
+      {{ range .Alerts }}
+
+      <b>{{ .Labels.dc }} / {{ .Labels.service }}</b> {{ .Labels.pod }} {{ .Labels.container }}
+
+      {{ .Annotations.summary }}
+
+      {{ .Annotations.description }}
+
+      {{ end }}'
+inhibit_rules:
+- source_matchers:
+  - alertname="PodStartupTooLong"
+  target_matchers:
+  - alertname="PodUnavailable"
+  equal:
+  - dc
+  - namespace
+  - pod

@@ -21,7 +21,33 @@
   gather_facts: false
   vars:
     obs: "{{ lookup('file', project_root ~ '/infra/observability/defaults.yaml') | from_yaml | combine(observability_overrides | default({}), recursive=true) }}"
+  pre_tasks:
+  - name: Validate service-owned dashboard YAML before deployment
+    ansible.builtin.command:
+      argv: ['{{ ansible_playbook_python }}', '{{ project_root }}/infra/observability/dashboards/generate.py', --check]
+    delegate_to: localhost
+    become: false
+    changed_when: false
+    check_mode: false
+  - name: Validate service-owned alert YAML before deployment
+    ansible.builtin.command:
+      argv: ['{{ ansible_playbook_python }}', -m, libs.monitoring.alerts]
+      chdir: '{{ project_root }}'
+    delegate_to: localhost
+    become: false
+    changed_when: false
+    check_mode: false
   tasks:
+  - name: Apply Alertmanager with dedicated workload identity
+    ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
+    vars:
+      manifest_source: '{{ project_root }}/infra/observability/k8s/alertmanager.yaml.j2'
+      manifest_name: observability-alertmanager
+    when: obs.alertmanager.enabled | bool
+  - name: Wait for Alertmanager
+    ansible.builtin.command: k3s kubectl -n observability rollout status deployment/alertmanager --timeout=300s
+    changed_when: false
+    when: obs.alertmanager.enabled | bool and not ansible_check_mode
   - ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
     vars:
       manifest_source: '{{ project_root }}/infra/observability/k8s/central.yaml.j2'

@@ -7,14 +7,16 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'operations'))
 from remote import ROOT
 sys.path.insert(0,str(ROOT))
 from libs.monitoring.grafana import run_grafana
+from libs.monitoring.dashboards import load_dashboards
 dashboards=[]
 queries=[]
-for name in ('soloapp','auth','whoami','nginx','infrastructure','routing','postgres'):
- dashboard=json.loads((ROOT/('infra/observability/dashboards/'+name+'.json')).read_text())
- dashboards.append({'uid':dashboard['uid'],'panels':len(dashboard['panels'])})
+for name, entry in load_dashboards().items():
+ dashboard=entry['dashboard']
+ metric_service=entry.get('metrics_service',name)
+ dashboards.append({'uid':dashboard['uid'],'panels':len(dashboard['panels']),'title':dashboard['title'],'folder':'Services' if entry['folder']=='services' else 'Soloapp'})
  for panel in dashboard['panels']:
-  for t in panel['targets']:
-   expr=t['expr'].replace('$__rate_interval','2m').replace('$__range','1h').replace('$dc','.+').replace('$pod',(name+'-.+') if name in ('auth','whoami','nginx') else '.+').replace('$route','.*').replace('$search','.*').replace('$ingress','.+').replace('$observer','.+')
+  for t in panel.get('targets',[]):
+   expr=t['expr'].replace('$__rate_interval','2m').replace('$__range','1h').replace('$dc','.+').replace('$pod',(metric_service+'-.+') if entry['folder']=='services' else '.+').replace('$route','.*').replace('$search','.*').replace('$ingress','.+').replace('$observer','.+')
    queries.append({'dashboard':name,'title':panel['title'],'datasource':t['datasource']['uid'],'expr':expr})
 remote='''import json,urllib.request,urllib.parse,base64
 from pathlib import Path
@@ -25,6 +27,8 @@ def get(path):
 for expected in DASHBOARDS:
  dashboard=get('dashboards/uid/'+expected['uid'])
  assert len(dashboard['dashboard']['panels'])==expected['panels'], expected
+ assert dashboard['dashboard']['title']==expected['title'], expected
+ assert dashboard['meta']['folderTitle']==expected['folder'], expected
 # Verify provisioned dashboards above; Grafana personal home is user-specific
 # and its built-in default dashboard is not accessible to service accounts.
 results=[]
@@ -60,7 +64,7 @@ routing_checks={
  'nlb_targets': ('soloapp_nlb_target_state{state="HEALTHY"} == 1',4),
  'nlb_pollers': ('soloapp_nlb_poll_success == 1',2),
  'ingress_scrapes': ('up{job="haproxy"} == 1',4),
- 'service_endpoints': ('kube_endpointslice_endpoints{namespace="soloapp",ready="true",terminating!="true"}',12),
+ 'service_endpoints': ('kube_endpointslice_endpoints{namespace="soloapp",ready="true",terminating!="true",targetref_name=~"(auth|whoami|nginx)-.+"}',12),
 }
 for name,(expr,count) in routing_checks.items():
  rows=get('datasources/proxy/uid/prometheus/api/v1/query?'+urllib.parse.urlencode({'query':expr}))['data']['result']
@@ -72,4 +76,4 @@ for host in ('yc','home'):
  result=run_grafana(host,remote,check=False)
  if result.returncode:raise RuntimeError(result.stderr)
  report[host]=json.loads(result.stdout);print(host,'verified',len(report[host]['panels']),'queries')
-(ROOT/'outputs/observability-verification.json').write_text(json.dumps(report,indent=2)+'\n')
+(ROOT/'work/observability-verification.json').write_text(json.dumps(report,indent=2)+'\n')

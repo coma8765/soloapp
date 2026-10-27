@@ -1,0 +1,38 @@
+groups:
+- name: soloapp.http.web
+  rules:
+  - alert: Http5xxRateHigh
+    expr: sum by(dc,route)(rate(soloapp_http_requests_total{service="web",status=~"5.."}[5m])) / sum by(dc,route)(rate(soloapp_http_requests_total{service="web",status=~"[1-5].."}[5m]))
+      > 0.05
+    for: 1m
+    labels:
+      severity: warning
+      project: soloapp
+      service: web
+    annotations:
+      summary: HTTP 5xx > 5% за 5 минут
+      description: DC={{ $labels.dc }} service={{ $labels.service }} namespace={{ $labels.namespace }} pod={{ $labels.pod
+        }} container={{ $labels.container }} route={{ $labels.route }} value={{ $value }}
+  - alert: HttpRateLimited
+    expr: sum by(dc,route)(increase(soloapp_http_requests_total{service="web",status="429"}[1m])) > 0
+    for: 0s
+    labels:
+      severity: warning
+      project: soloapp
+      service: web
+    annotations:
+      summary: 'HTTP 429: запросы ограничены'
+      description: DC={{ $labels.dc }} service={{ $labels.service }} namespace={{ $labels.namespace }} pod={{ $labels.pod
+        }} container={{ $labels.container }} route={{ $labels.route }} value={{ $value }}
+  - alert: HttpLatencyHigh
+    expr: histogram_quantile(0.95, sum by(le,dc,route)(rate(soloapp_http_request_duration_seconds_bucket{service="web"}[5m])))
+      > 1
+    for: 5m
+    labels:
+      severity: warning
+      project: soloapp
+      service: web
+    annotations:
+      summary: HTTP p95 > 1 секунды
+      description: DC={{ $labels.dc }} service={{ $labels.service }} namespace={{ $labels.namespace }} pod={{ $labels.pod
+        }} container={{ $labels.container }} route={{ $labels.route }} value={{ $value }}

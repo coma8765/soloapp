@@ -57,8 +57,8 @@
         "namespace": "observability"
       },
       "data": {
-{% for dashboard in obs.dashboard_files %}
-        "{{ dashboard }}.json": {{ lookup('file', project_root ~ '/infra/observability/dashboards/' ~ dashboard ~ '.json') | to_json }}{% if not loop.last %},{% endif %}
+{% for name, dashboard in obs.dashboards.items() %}
+        "{{ name }}.json": {{ lookup('file', project_root ~ '/' ~ dashboard.source) | from_yaml | to_json | to_json }}{% if not loop.last %},{% endif %}
 {% endfor %}
       }
     },
@@ -623,7 +623,12 @@
               {
                 "name": "dashboard",
                 "configMap": {
-                  "name": "grafana-dashboards"
+                  "name": "grafana-dashboards",
+                  "items": [
+{% for name, dashboard in obs.dashboards.items() %}
+                    {"key": "{{ name }}.json", "path": "{{ dashboard.folder }}/{{ name }}.json"}{% if not loop.last %},{% endif %}
+{% endfor %}
+                  ]
                 }
               },
               {

@@ -6,3 +6,9 @@ scrape_configs:
   static_configs:
   - targets: ['127.0.0.1:9090']
 rule_files: [/etc/prometheus/rules.yaml]
+{% if obs.alertmanager.enabled %}
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets: ['alertmanager:9093']
+{% endif %}

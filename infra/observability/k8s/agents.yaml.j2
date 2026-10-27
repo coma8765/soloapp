@@ -129,7 +129,7 @@
                 "resources": {{ obs.resources['kube-state-metrics'] | to_json }},
                 "args": [
                   "--resources=pods,nodes,deployments,replicasets,endpointslices",
-                  "--namespaces=soloapp",
+                  "--namespaces=soloapp,observability",
                   "--metric-labels-allowlist=pods=[app],endpointslices=[kubernetes.io/service-name]"
                 ],
                 "readinessProbe": {

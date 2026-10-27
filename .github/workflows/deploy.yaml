@@ -1,11 +1,13 @@
 name: Deploy production
 on:
-  workflow_run:
-    workflows: [Validate source]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
+      service:
+        description: 'Recommended: deploy one service. all = explicit coordinated release'
+        required: true
+        type: choice
+        default: app-api
+        options: [app-api, auth, web, nginx, all]
       rollback_revision:
         description: Previously deployed v0.1.P or full commit SHA; empty for a new release
         required: false
@@ -26,22 +28,34 @@ jobs:
       target: ${{ steps.version.outputs.target }}
       version: ${{ steps.version.outputs.version }}
       operation: ${{ steps.version.outputs.operation }}
-    if: >-
-      github.ref == 'refs/heads/main' &&
-      (github.event_name == 'workflow_dispatch' ||
-       (github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.event == 'push' &&
-        github.event.workflow_run.head_repository.full_name == github.repository))
+      service: ${{ steps.scope.outputs.service }}
+      images: ${{ steps.scope.outputs.images }}
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: production
     steps:
+      - name: Validate isolated deployment scope
+        id: scope
+        env:
+          SERVICE: ${{ inputs.service }}
+        run: |
+          case "$SERVICE" in
+            auth) images=auth ;;
+            app-api) images=whoami ;;
+            web) images=web ;;
+            nginx) images='' ;;
+            all) images='auth whoami web' ;;
+            *) exit 2 ;;
+          esac
+          echo "service=$SERVICE" >> "$GITHUB_OUTPUT"
+          echo "images=$images" >> "$GITHUB_OUTPUT"
       - name: Select current green main revision
         id: revision
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          REQUESTED: ${{ github.event.workflow_run.head_sha || github.sha }}
+          REQUESTED: ${{ github.sha }}
         run: |
           set -euo pipefail
           [[ "$REQUESTED" =~ ^[0-9a-f]{40}$ ]]
@@ -87,13 +101,13 @@ jobs:
           printf '%s\n' "$YC_KEY" > "$RUNNER_TEMP/cd/yc"
           printf '%s\n' "$HOME_KEY" > "$RUNNER_TEMP/cd/home"
           printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/cd/known_hosts"
-      - if: inputs.rollback_revision == ''
+      - if: inputs.rollback_revision == '' && (needs.prepare.outputs.service == 'web' || needs.prepare.outputs.service == 'all')
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           flutter-version: '3.44.8'
           channel: stable
       - name: Build exact web revision
-        if: inputs.rollback_revision == ''
+        if: inputs.rollback_revision == '' && (needs.prepare.outputs.service == 'web' || needs.prepare.outputs.service == 'all')
         working-directory: services/web
         env:
           SHA: ${{ needs.prepare.outputs.sha }}
@@ -103,7 +117,7 @@ jobs:
           flutter build web --release --no-web-resources-cdn --base-href "/web/releases/$SHA/" --dart-define="APP_VERSION=$VERSION" --build-name="${VERSION#v}" --build-number="${VERSION##*.}"
           python3 deploy/package.py "$SHA" "$RUNNER_TEMP/web.tar.gz"
       - name: Publish and verify both S3 replicas before activation
-        if: inputs.rollback_revision == ''
+        if: inputs.rollback_revision == '' && (needs.prepare.outputs.service == 'web' || needs.prepare.outputs.service == 'all')
         env:
           HOST: ${{ secrets.CD_YC_HOST }}
           PORT: ${{ secrets.CD_YC_PORT }}
@@ -114,24 +128,26 @@ jobs:
             -o ForwardAgent=no -o ConnectTimeout=20 -o ServerAliveInterval=30 \
             "soloapp-cd@$HOST" "publish $SHA" < "$RUNNER_TEMP/web.tar.gz"
       - name: Build runtime images on GitHub runner
-        if: inputs.rollback_revision == ''
+        if: inputs.rollback_revision == '' && needs.prepare.outputs.service != 'nginx'
         env:
           SHA: ${{ needs.prepare.outputs.sha }}
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          SERVICE: ${{ needs.prepare.outputs.service }}
         run: |
           docker buildx create --use
-          bash infra/registry/build.sh "$SHA" "$RUNNER_TEMP/images"
+          bash infra/registry/build.sh "$SHA" "$RUNNER_TEMP/images" "$SERVICE"
       - name: Publish identical runtime images to both private registries
-        if: inputs.rollback_revision == ''
+        if: inputs.rollback_revision == '' && needs.prepare.outputs.service != 'nginx'
         env:
           SHA: ${{ needs.prepare.outputs.sha }}
           YC_HOST: ${{ secrets.CD_YC_HOST }}
           HOME_HOST: ${{ secrets.CD_HOME_HOST }}
           YC_PORT: ${{ secrets.CD_YC_PORT }}
           HOME_PORT: ${{ secrets.CD_HOME_PORT }}
+          IMAGES: ${{ needs.prepare.outputs.images }}
         run: |
           set -euo pipefail
-          for service in auth whoami web; do
+          for service in $IMAGES; do
             for site in yc home; do
               if [ "$site" = yc ]; then host=$YC_HOST; port=$YC_PORT; else host=$HOME_HOST; port=$HOME_PORT; fi
               ssh -i "$RUNNER_TEMP/cd/$site" -p "$port" -o IdentitiesOnly=yes -o BatchMode=yes \
@@ -146,26 +162,31 @@ jobs:
           PORT: ${{ secrets.CD_YC_PORT }}
           SHA: ${{ needs.prepare.outputs.target }}
           OPERATION: ${{ needs.prepare.outputs.operation }}
+          SERVICE: ${{ needs.prepare.outputs.service }}
           SOLOAPP_BASE_URL: ${{ secrets.SOLOAPP_BASE_URL }}
         run: |
           ssh -i "$RUNNER_TEMP/cd/yc" -p "$PORT" -o IdentitiesOnly=yes -o BatchMode=yes \
             -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/cd/known_hosts" \
             -o ForwardAgent=no -o ConnectTimeout=20 -o ServerAliveInterval=30 \
-            "soloapp-cd@$HOST" "$OPERATION $SHA"
+            "soloapp-cd@$HOST" "$OPERATION-$SERVICE $SHA"
       - name: Roll home and verify public API
         env:
           HOST: ${{ secrets.CD_HOME_HOST }}
           PORT: ${{ secrets.CD_HOME_PORT }}
           SHA: ${{ needs.prepare.outputs.target }}
           OPERATION: ${{ needs.prepare.outputs.operation }}
+          SERVICE: ${{ needs.prepare.outputs.service }}
           SOLOAPP_BASE_URL: ${{ secrets.SOLOAPP_BASE_URL }}
         run: |
           ssh -i "$RUNNER_TEMP/cd/home" -p "$PORT" -o IdentitiesOnly=yes -o BatchMode=yes \
             -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/cd/known_hosts" \
             -o ForwardAgent=no -o ConnectTimeout=20 -o ServerAliveInterval=30 \
-            "soloapp-cd@$HOST" "$OPERATION $SHA"
+            "soloapp-cd@$HOST" "$OPERATION-$SERVICE $SHA"
           python3 services/nginx/tests/smoke.py
-          python3 services/web/tests/smoke.py "$SHA"
+          if [ "$SERVICE" = web ] || [ "$SERVICE" = all ]; then
+            python3 services/web/tests/smoke.py "$SHA"
+          fi
+          printf 'Deployed %s at %s to YC and home.\n' "$SERVICE" "$SHA" >> "$GITHUB_STEP_SUMMARY"
       - name: Remove deployment keys
         if: always()
         run: rm -rf "$RUNNER_TEMP/cd"
