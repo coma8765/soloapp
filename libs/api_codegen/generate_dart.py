@@ -66,6 +66,9 @@ def render(service):
     for path, method, op in operations(spec):
         if op["x-route"]["exposure"] != "public":
             continue
+        if op.get("x-websocket"):
+            lines += [f"  static const {camel(op['operationId'])}Path = '{path}';"]
+            continue
         args = []
         body = (
             op.get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema")

@@ -17,3 +17,14 @@ ansible-playbook infra/network/isolate.yaml
 Сначала Redis, затем app-api, nginx и web через обычный CI/CD. Все сборки выполняются локально или в GitHub Actions. Redis/Sentinel работают как systemd-supervised контейнеры с host networking, независимо от управления двумя k3s; прикладные контейнеры остаются в pod network.
 
 Ротация ACL: создать новые согласованные версии Lockbox, дождаться refresh, затем последовательно выполнить deploy с restart по одной площадке. Сначала добавить второй пароль/переходные credentials для безостановочной ротации; одномоментная смена единственного пароля потребует переподключения. Сертификаты node обновляет общий issuer; после смены TLS файлов Redis/Sentinel необходимо перезапустить последовательно по площадкам. Не перезаписывать живую топологию bootstrap-конфигом.
+
+## WebSocket delivery
+
+App-api uses one dedicated blocking `XREAD` connection per active pod to broadcast
+stream events to local WebSocket clients. `BLOCK 1000` is an idle timeout, not polling
+latency: Redis wakes the reader immediately on XADD. History remains capped at 500
+messages with 100 returned to clients. Redis ACL adds only `XREAD` and `GETDEL`, within
+the existing `soloapp:chat:*` key prefix. Single-use 30-second tickets are consumed
+atomically on the active primary; the same asynchronous-replication limitations apply
+to tickets during partitions/failover. Refresh ACL without restarting Redis using
+`ansible-playbook infra/redis/reload-acl.yaml`.

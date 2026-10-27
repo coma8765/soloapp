@@ -43,6 +43,11 @@ def operations(spec):
                     "Invalid or conflicting backend alias",
                 )
                 routes.add((alias, method))
+            if "x-websocket" in op:
+                require(
+                    op["x-websocket"] is True and method == "get" and "101" in op["responses"],
+                    "WebSocket operations require GET and a 101 response",
+                )
             policy = op.get("x-route", {})
             require(
                 set(policy) == {"exposure", "auth", "max_body_bytes", "timeouts", "rate_limit"},

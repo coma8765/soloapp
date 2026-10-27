@@ -188,6 +188,87 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/app-api/v1/chat/socket-ticket:
+    post:
+      operationId: chat_socket_ticket
+      description: Single-use WebSocket ticket, valid for 30 seconds. Issued only
+        after session verification.
+      security:
+      - bearerAuth: []
+      x-route:
+        exposure: public
+        auth: signed-user
+        max_body_bytes: 8192
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 10
+        rate_limit: &id003
+          group: chat
+          requests_per_second: 10
+          burst: 20
+      responses:
+        '201':
+          description: ChatSocketTicket
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSocketTicket'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/app-api/v1/chat/ws:
+    get:
+      operationId: chat_socket
+      description: 'WebSocket delivery: soloapp.chat.v1 and ticket.<ticket> subprotocols.
+        Ticket consumed atomically before upgrade. Server sends history, message and
+        ping JSON frames; closes after 60 seconds to revalidate the session on reconnect.
+        Sends remain idempotent HTTP POST chat/messages.'
+      security: []
+      x-websocket: true
+      x-route:
+        exposure: public
+        auth: none
+        max_body_bytes: 8192
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 45
+        rate_limit: *id003
+      responses:
+        '101':
+          description: Authenticated WebSocket stream
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   securitySchemes:
     bearerAuth:
@@ -255,3 +336,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ChatMessage'
+    ChatSocketTicket:
+      type: object
+      required:
+      - ticket
+      - expires_in
+      properties:
+        ticket:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        expires_in:
+          type: integer

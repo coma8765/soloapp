@@ -5,6 +5,8 @@ import hashlib
 import json
 import os
 import signal
+import socket
+import ssl
 import subprocess
 import sys
 import time
@@ -76,7 +78,7 @@ loglevel notice
         acl += user(
             "chat",
             credentials["chat"],
-            "~soloapp:chat:* +ping +info +client|setinfo +client|setname +get +set +incr +expire +eval +xadd +xrevrange",
+            "~soloapp:chat:* +ping +info +client|setinfo +client|setname +get +set +incr +expire +eval +xadd +xrevrange +xread +getdel",
         )
         # An empty saved file is meaningful: this node was promoted to master.
         role = (
@@ -212,8 +214,42 @@ def run(mode):
         time.sleep(1)
 
 
+def reload_acl():
+    """Refresh only ACLs, retaining the running primary and replica connections."""
+    config = json.loads(Path("/opt/hack-vk-26/redis/config.json").read_text())
+    credentials = json.loads(Path("/run/soloapp-redis/credentials.json").read_text())
+    _, acl = render(config, credentials, "redis", "")
+    path = RUNTIME / "redis.acl"
+    previous = path.read_text()
+    context = ssl.create_default_context(cafile="/run/soloapp-node/ca.crt")
+    try:
+        with socket.create_connection((config["ip"], config["port"]), timeout=5) as tcp:
+            with context.wrap_socket(tcp, server_hostname=config["ip"]) as connection:
+                stream = connection.makefile("rb")
+
+                def command(*args):
+                    encoded = [arg.encode() for arg in args]
+                    payload = b"*%d\r\n" % len(encoded)
+                    for arg in encoded:
+                        payload += b"$%d\r\n" % len(arg) + arg + b"\r\n"
+                    connection.sendall(payload)
+                    if stream.readline() != b"+OK\r\n":
+                        raise RuntimeError("Redis ACL command failed")
+
+                command("AUTH", "operator", credentials["operator"])
+                atomic(path, acl, True)
+                command("ACL", "LOAD")
+        print("Redis ACL reloaded without restart")
+    except Exception:
+        atomic(path, previous, True)
+        raise RuntimeError("Redis ACL reload failed; previous file restored") from None
+
+
 if __name__ == "__main__":
     mode = sys.argv[1]
+    if mode == "reload-acl":
+        reload_acl()
+        raise SystemExit(0)
     if mode not in ("redis", "sentinel"):
         raise SystemExit("Expected redis or sentinel")
     raise SystemExit(run(mode))

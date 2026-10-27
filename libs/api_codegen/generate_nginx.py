@@ -17,7 +17,8 @@ def render(root=ROOT):
     for service in SERVICES:
         backend = "whoami" if service == "app-api" else service
         for path, method, op in operations(load(root / "services" / service)):
-            policy = op["x-route"]
+            policy = dict(op["x-route"])
+            policy["websocket"] = op.get("x-websocket", False)
             if service == "auth" and op["operationId"] == "internal_verify":
                 require(
                     method == "get"
@@ -106,6 +107,13 @@ def render(root=ROOT):
             + ")$) { return 405; }",
             f"  client_max_body_size {policy['max_body_bytes']};",
         ]
+        if policy.get("websocket"):
+            lines += [
+                "  proxy_http_version 1.1;",
+                "  proxy_set_header Upgrade $http_upgrade;",
+                "  proxy_set_header Connection $connection_upgrade;",
+                "  proxy_buffering off;",
+            ]
         if path == "/ready":
             lines += ["  access_log off;"]
         if rate:

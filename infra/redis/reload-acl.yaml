@@ -1,0 +1,16 @@
+- name: Refresh chat ACL without restarting Redis
+  hosts: app_sites
+  serial: 1
+  any_errors_fatal: true
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Install runtime manager with current scoped ACL
+    ansible.builtin.copy:
+      src: '{{ project_root }}/infra/redis/files/manage.py'
+      dest: '{{ remote_root }}/redis/manage.py'
+      mode: '0700'
+  - name: Reload ACL on the running TLS listener
+    ansible.builtin.command: python3 {{ remote_root }}/redis/manage.py reload-acl
+    changed_when: true
+    when: not ansible_check_mode

@@ -16,6 +16,12 @@ export const routes = {
   ],
   "chat_send": [
     "api/v1/app-api/v1/chat/messages"
+  ],
+  "chat_socket_ticket": [
+    "api/v1/app-api/v1/chat/socket-ticket"
+  ],
+  "chat_socket": [
+    "api/v1/app-api/v1/chat/ws"
   ]
 };
 export const bodyLimits: Record<string, number> = {
@@ -24,7 +30,9 @@ export const bodyLimits: Record<string, number> = {
   "/health/ready": 8192,
   "/healthz": 8192,
   "/api/v1/app-api/v1/user-id": 8192,
-  "/api/v1/app-api/v1/chat/messages": 8192
+  "/api/v1/app-api/v1/chat/messages": 8192,
+  "/api/v1/app-api/v1/chat/socket-ticket": 8192,
+  "/api/v1/app-api/v1/chat/ws": 8192
 };
 export const methods: Record<string, string[]> = {
   "/api/v1/whoami/v1/user-id": [
@@ -45,5 +53,11 @@ export const methods: Record<string, string[]> = {
   "/api/v1/app-api/v1/chat/messages": [
     "GET",
     "POST"
+  ],
+  "/api/v1/app-api/v1/chat/socket-ticket": [
+    "POST"
+  ],
+  "/api/v1/app-api/v1/chat/ws": [
+    "GET"
   ]
 };

@@ -37,6 +37,7 @@ items:
           - name: HEALTH_COOLDOWN_SECONDS
             value: '{{ whoami_config.health.cooldown_seconds }}'
           - {name: HMAC_KEY_FILE, value: /run/soloapp-secrets/data/userid-hmac}
+          - {name: CHAT_ALLOWED_ORIGIN, value: 'https://{{ public_domain }}'}
           - {name: PORT, value: '{{ whoami_config.port }}'}
           - {name: LISTEN_ADDRESS, value: '0.0.0.0'}
           ports: [{name: http, containerPort: {{ whoami_config.port }}}]

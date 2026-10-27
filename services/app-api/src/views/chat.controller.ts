@@ -10,6 +10,10 @@ export class ChatController {
   history() {
     return this.chat.history();
   }
+  @Post(routes.chat_socket_ticket)
+  ticket(@Req() request: AuthenticatedRequest) {
+    return this.chat.ticket(request.auth.userId);
+  }
   @Post(routes.chat_send)
   send(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
     return this.chat.send(request.auth.userId, body);
