@@ -11,22 +11,16 @@ route:
   repeat_interval: 4h
 receivers:
 - name: telegram
-  telegram_configs:
-  - bot_token_file: /run/soloapp-secrets/data/telegram-token
-    chat_id_file: /run/soloapp-secrets/data/telegram-chat-id
+  webhook_configs:
+  - url: '{{ obs.alertmanager.relay_url | default(cloud.telegram_relay.url, true) }}'
     send_resolved: true
-    parse_mode: HTML
-    message: '<b>Soloapp {{ .Status | toUpper }} — {{ .CommonLabels.alertname }}</b>
-
-      {{ range .Alerts }}
-
-      <b>{{ .Labels.dc }} / {{ .Labels.service }}</b> {{ .Labels.pod }} {{ .Labels.container }}
-
-      {{ .Annotations.summary }}
-
-      {{ .Annotations.description }}
-
-      {{ end }}'
+    max_alerts: 100
+    timeout: 2m
+    http_config:
+      follow_redirects: false
+      authorization:
+        type: Bearer
+        credentials_file: /run/soloapp-secrets/data/relay-token
 inhibit_rules:
 - source_matchers:
   - alertname="PodStartupTooLong"

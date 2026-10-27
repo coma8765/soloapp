@@ -220,33 +220,40 @@ Operator bootstrap (token files outside the repository):
 ```sh
 .venv-codegen/bin/python infra/observability/bootstrap-alerting.py \
   --token-file /path/to/bot-token --chat-id-file /path/to/chat-id
+# CF_ACCOUNT_ID / CF_API_TOKEN supplied by the operator environment:
+.venv-codegen/bin/python infra/telegram-relay/deploy.py --subdomain <workers-subdomain>
 # In private inventory: observability_overrides.alertmanager.enabled: true
 ansible-playbook infra/observability/deploy.yaml
 ```
 
-Bootstrap creates a dedicated `soloapp-alertmanager-telegram` Lockbox secret. Each site has
-its own Alertmanager service account, federated only to
-`system:serviceaccount:observability:alertmanager`, with payloadViewer only on that secret.
-No folder role or permanent IAM key is needed. Projected identity tokens last 600 seconds;
-Telegram credentials exist in Lockbox and a mode-0600 RAM volume, never Kubernetes Secrets,
-ConfigMaps, source or logs. The refresh helper reloads payload files every five minutes.
-To rotate, add a Lockbox version; the bot token file is read for sends. Changing chat ID
-requires restarting both Alertmanagers serially so the configuration is reloaded.
+The Telegram token/chat are held in an operator-only Lockbox secret and Cloudflare
+Workers Secrets. Alertmanager receives only a separate relay credential from
+`soloapp-alertmanager-relay`. Each site's service account is federated exclusively to
+`system:serviceaccount:observability:alertmanager` and has payloadViewer on this one
+secret, with no folder role or permanent IAM key. Projected identity tokens last 600s;
+the relay credential lives in a mode-0600 RAM volume and is refreshed every five minutes.
+Neither bot nor relay keys appear in Kubernetes Secrets, ConfigMaps, source or logs.
+The webhook URL is public configuration, stored in private cloud resources; optionally
+override `alertmanager.relay_url`. Cloudflare accepts only authenticated project alerts
+and sends to the fixed chat. See `infra/telegram-relay/README.md` for deployment, rotation
+and migration from the original direct Telegram configuration.
 
 The Alertmanager HTTP API is cluster-internal and restricted to Prometheus/Alloy pods.
 Only gossip TCP/UDP 19094 is mapped to each private WireGuard host IP, protected by the
 private-port guard and NetworkPolicy. Each Prometheus sends to its local Alertmanager;
 each Prometheus already receives both DCs' telemetry. The two Alertmanagers share the
 notification log and silences, while each retains a local PVC. Losing either whole DC
-leaves an independent evaluator and notification sender. This does not promise delivery
-if both Telegram/internet routes fail. A network partition can produce duplicate alerts;
+leaves an independent evaluator and notification sender. Both send through an independent
+Cloudflare Worker: YC does not need direct Telegram egress, and losing home does not remove its notification path. Cloudflare/Telegram
+outages can still delay delivery; failed webhooks are retried by Alertmanager.
+A network partition can produce duplicate alerts;
 Alertmanager deliberately prefers duplicate delivery over losing a notification.
 
 Messages are grouped by alert/DC/service, initially delayed 15s, regrouped after 1m,
 and repeated every 4h while firing; recovery messages are enabled. Evaluation adds up to
-15s plus scrape and delivery time to the stated persistence. All exact pod names are
-included within a group message. The private chat ID is held alongside the bot token in
-Lockbox; it is not committed.
+15s plus scrape and delivery time to the stated persistence. Up to 100 alert instances
+per group are forwarded, with exact pod names and messages split to fit Telegram limits. Larger groups include an explicit truncation warning;
+Grafana retains the full alert list. The private chat ID is not committed.
 
-References: [Alertmanager Telegram configuration](https://prometheus.io/docs/alerting/latest/configuration/),
+References: [Alertmanager notification configuration](https://prometheus.io/docs/alerting/latest/configuration/),
 [HA notification deduplication](https://prometheus.io/docs/alerting/latest/high_availability/).

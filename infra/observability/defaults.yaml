@@ -122,5 +122,7 @@ alert_rule_files:
 - infra/ingress/deploy/metrics/alerts.yaml
 alertmanager:
   enabled: false
+  # Empty uses the operator-provisioned cloud.telegram_relay.url.
+  relay_url: ''
   cluster_port: 19094
   storage: 1Gi

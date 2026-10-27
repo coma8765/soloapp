@@ -9,7 +9,7 @@ items:
   kind: ConfigMap
   metadata: {name: alertmanager, namespace: observability}
   data:
-    alertmanager.yaml: {{ lookup('file', project_root ~ '/infra/observability/deploy/metrics/alertmanager.yaml') | to_json }}
+    alertmanager.yaml: {{ lookup('template', project_root ~ '/infra/observability/deploy/metrics/alertmanager.yaml') | to_json }}
 - apiVersion: v1
   kind: PersistentVolumeClaim
   metadata: {name: alertmanager, namespace: observability}
@@ -53,7 +53,7 @@ items:
       metadata:
         labels: {app: alertmanager}
         annotations:
-          checksum/config: '{{ lookup("file", project_root ~ "/infra/observability/deploy/metrics/alertmanager.yaml") | hash("sha256") }}'
+          checksum/config: '{{ lookup("template", project_root ~ "/infra/observability/deploy/metrics/alertmanager.yaml") | hash("sha256") }}'
       spec:
         serviceAccountName: alertmanager
         automountServiceAccountToken: false
@@ -71,7 +71,7 @@ items:
           env: &identity_env
           - {name: TOKEN_FILE, value: /run/identity/token}
           - {name: SERVICE_ACCOUNT_ID, value: '{{ cloud.identities["alertmanager-" ~ inventory_hostname] }}'}
-          - {name: SECRET_IDS, value: '{{ cloud.secrets["alertmanager-telegram"] }}'}
+          - {name: SECRET_IDS, value: '{{ cloud.secrets["alertmanager-relay"] }}'}
           - {name: SECRET_DIR, value: /run/soloapp-secrets/data}
           securityContext: &security
             allowPrivilegeEscalation: false
@@ -118,7 +118,7 @@ items:
           - {name: LOOP, value: '1'}
           - {name: TOKEN_FILE, value: /run/identity/token}
           - {name: SERVICE_ACCOUNT_ID, value: '{{ cloud.identities["alertmanager-" ~ inventory_hostname] }}'}
-          - {name: SECRET_IDS, value: '{{ cloud.secrets["alertmanager-telegram"] }}'}
+          - {name: SECRET_IDS, value: '{{ cloud.secrets["alertmanager-relay"] }}'}
           - {name: SECRET_DIR, value: /run/soloapp-secrets/data}
           securityContext: *security
           resources: {{ obs.resources.secrets | to_json }}

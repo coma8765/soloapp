@@ -26,7 +26,7 @@ groups:
       description: DC={{ $labels.dc }} service={{ $labels.service }} namespace={{ $labels.namespace }} pod={{ $labels.pod
         }} container={{ $labels.container }} route={{ $labels.route }} value={{ $value }}
   - alert: TelegramDeliveryFailed
-    expr: sum by(dc)(increase(alertmanager_notifications_failed_total{integration="telegram"}[5m])) > 0
+    expr: sum by(dc)(increase(alertmanager_notifications_failed_total{integration="webhook"}[5m])) > 0
     for: 0s
     labels:
       severity: warning

@@ -29,6 +29,5 @@ def main():
         existing=yc('iam','workload-identity','federated-credential','list','--service-account-id',account)
         if not any(c.get('federation_id')==cloud['federations'][site] and c.get('external_subject_id')=='system:serviceaccount:observability:alertmanager' for c in existing):
             yc('iam','workload-identity','federated-credential','create','--service-account-id',account,'--federation-id',cloud['federations'][site],'--external-subject-id','system:serviceaccount:observability:alertmanager')
-        yc('lockbox','secret','add-access-binding',cloud['secrets']['alertmanager-telegram'],'--role','lockbox.payloadViewer','--service-account-id',account)
-    print('Alertmanager identities provisioned; Telegram key stored only in Lockbox')
+    print('Identities provisioned; bot secret is operator-only. Deploy infra/telegram-relay next.')
 if __name__=='__main__':main()
