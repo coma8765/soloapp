@@ -1,0 +1,30 @@
+- name: Retire legacy chat Redis and Sentinel after verified migration
+  hosts: all
+  serial: 1
+  any_errors_fatal: true
+  become: true
+  gather_facts: false
+  vars:
+    legacy_units: "{{ ['redis', 'sentinel'] if inventory_hostname in groups.app_sites else ['sentinel'] }}"
+  tasks:
+  - name: Stop and disable only legacy project services
+    ansible.builtin.systemd_service:
+      name: 'solo-{{ item }}.service'
+      enabled: false
+      state: stopped
+    loop: '{{ legacy_units }}'
+  - name: Stop legacy containers if they survived their supervisor
+    ansible.builtin.command: 'docker stop -t 10 solo-{{ item }}'
+    loop: '{{ legacy_units }}'
+    register: legacy_stop
+    changed_when: legacy_stop.rc == 0
+    failed_when: legacy_stop.rc != 0 and 'No such container' not in legacy_stop.stderr
+  - name: Stop legacy credential refresh timer
+    ansible.builtin.systemd_service:
+      name: solo-redis-secrets.timer
+      enabled: false
+      state: stopped
+  - name: Stop any active legacy credential refresh
+    ansible.builtin.systemd_service:
+      name: solo-redis-secrets.service
+      state: stopped
