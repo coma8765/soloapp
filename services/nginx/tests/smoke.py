@@ -33,6 +33,7 @@ def main():
         checks.append({"method": method, "path": path, "status": status, "site": site})
         return json.loads(data) if data and data.startswith(b"{") else None
 
+    check("GET", "/", 200)
     for path in (
         "/auth/login",
         "/auth/register",

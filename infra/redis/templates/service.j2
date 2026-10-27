@@ -1,0 +1,13 @@
+[Unit]
+Description=Soloapp {{ item }} with TLS and Lockbox ACLs
+Requires=docker.service solo-node-secrets.service solo-redis-secrets.service
+After=docker.service network-online.target wg-quick@wg-solo.service solo-node-secrets.service solo-redis-secrets.service
+[Service]
+Type=simple
+UMask=0077
+ExecStart=/usr/bin/python3 {{ remote_root }}/redis/manage.py {{ item }}
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=40
+[Install]
+WantedBy=multi-user.target

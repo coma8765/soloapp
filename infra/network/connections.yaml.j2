@@ -1,0 +1,86 @@
+# Every connection is opt-in; adding a pod alone grants no network access.
+namespaces: [default, soloapp, observability]
+dns:
+  soloapp: [auth, whoami, nginx, web, cert-issuer]
+  observability: [alloy, kube-state-metrics, prometheus, loki, grafana, gateway, alertmanager]
+# Standard Kubernetes NetworkPolicy has no FQDN matching. These named workloads
+# explicitly get public IPv4 TCP/443 for Lockbox/IAM, OAuth, YC API and the relay.
+# Private ranges, pod/service networks and metadata are excluded.
+public_https:
+  soloapp: [auth, whoami, nginx, web, cert-issuer]
+  observability: [alloy, grafana, gateway, alertmanager]
+pod_links:
+- {source: soloapp/nginx, target: soloapp/auth, port: {{ auth_config.port }}}
+- {source: soloapp/nginx, target: soloapp/whoami, port: {{ whoami_config.port }}}
+- {source: soloapp/nginx, target: soloapp/web, port: {{ web_config.port }}}
+- {source: soloapp/nginx, target: observability/gateway, port: 19091}
+- {source: observability/alloy, target: soloapp/auth, port: {{ auth_config.port }}}
+- {source: observability/alloy, target: soloapp/whoami, port: {{ whoami_config.port }}}
+- {source: observability/alloy, target: soloapp/nginx, port: {{ nginx_config.health_port }}}
+- {source: observability/alloy, target: observability/kube-state-metrics, port: 8080}
+- {source: observability/alloy, target: observability/alertmanager, port: 9093}
+- {source: observability/alloy, target: observability/gateway, port: 19091}
+- {source: observability/prometheus, target: observability/alertmanager, port: 9093}
+- {source: observability/grafana, target: observability/prometheus, port: 9090}
+- {source: observability/grafana, target: observability/loki, port: 3100}
+- {source: observability/gateway, target: observability/prometheus, port: 9090}
+- {source: observability/gateway, target: observability/loki, port: 3100}
+- {source: observability/gateway, target: observability/grafana, port: 3000}
+host_egress:
+- namespace: soloapp
+  apps: [auth]
+  hosts: [{{ hostvars.yc.private_ip }}, {{ hostvars.home.private_ip }}]
+  ports: [55432]
+- namespace: soloapp
+  apps: [whoami]
+  hosts: [{{ hostvars.yc.private_ip }}, {{ hostvars.home.private_ip }}]
+  ports: [16379]
+- namespace: soloapp
+  apps: [whoami]
+  hosts: [{{ hostvars.yc.private_ip }}, {{ hostvars.home.private_ip }}, {{ hostvars.edge.private_ip }}]
+  ports: [26379]
+- namespace: soloapp
+  apps: [web]
+  hosts: [{{ hostvars.yc.private_ip }}, {{ hostvars.home.private_ip }}]
+  ports: [18333]
+- namespace: soloapp
+  apps: [nginx]
+  hosts: [{{ private_ip }}]
+  ports: [{{ obs.gateway_node_port }}]
+- namespace: observability
+  apps: [alloy]
+  hosts: [{{ hostvars.yc.private_ip }}, {{ hostvars.home.private_ip }}]
+  ports: [55432, {{ obs.gateway_node_port }}]
+- namespace: observability
+  apps: [alloy]
+  hosts: [{{ hostvars.yc.private_ip }}, {{ hostvars.edge.private_ip }}]
+  ports: [{{ obs.routing_metrics_port }}]
+- namespace: observability
+  apps: [alloy]
+  hosts: [{{ private_ip }}]
+  ports: [10250]
+- namespace: observability
+  apps: [alloy, kube-state-metrics]
+  hosts: [{{ private_ip }}, 10.{{ cluster_octet | int + 1 }}.0.1]
+  ports: [6443, 443]
+- namespace: observability
+  apps: [grafana]
+  hosts: [{{ hostvars.yc.private_ip }}, {{ hostvars.home.private_ip }}]
+  ports: [55432]
+- namespace: observability
+  apps: [alertmanager]
+  hosts: [{{ hostvars.yc.private_ip }}, {{ hostvars.home.private_ip }}]
+  ports: [{{ obs.alertmanager.cluster_port }}]
+  protocols: [TCP, UDP]
+# Docker DNAT is applied before the pod egress policy on these nodes.
+# This permission is restricted to the web workload and S3 container port.
+docker_s3_cidr: 172.17.0.0/16
+host_ingress:
+- namespace: soloapp
+  app: nginx
+  cidrs: [{{ hostvars.yc.private_ip }}/32, {{ hostvars.edge.private_ip }}/32, 172.17.0.0/16]
+  port: {{ nginx_config.port }}
+- namespace: observability
+  app: gateway
+  cidrs: [{{ hostvars.yc.private_ip }}/32, {{ hostvars.home.private_ip }}/32]
+  port: 19091

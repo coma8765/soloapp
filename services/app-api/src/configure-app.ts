@@ -1,6 +1,6 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Request, Response, NextFunction } from 'express';
-import { bodyLimits, routes } from './generated/routes.js';
+import { bodyLimits, routes, methods } from './generated/routes.js';
 import { HealthCircuit } from './logic/health.js';
 
 export function configureApp(app: NestExpressApplication): void {
@@ -13,7 +13,7 @@ export function configureApp(app: NestExpressApplication): void {
     res.on('finish', () => {
       if (!probes.has(path)) health.record(res.statusCode);
     });
-    if (req.method !== 'GET' && bodyLimits[path] !== undefined) {
+    if (methods[path] !== undefined && !methods[path].includes(req.method)) {
       res.status(405).end();
       return;
     }

@@ -18,3 +18,11 @@ class DartTests(unittest.TestCase):
         text = render(ROOT / "services/whoami")
         self.assertIn("accessToken: accessToken", text)
         self.assertNotIn("X-User-Signature", text)
+
+    def test_chat_array_and_post_are_generated_from_contract(self):
+        text = render(ROOT / "services/app-api")
+        self.assertIn("List<ApiChatMessage>", text)
+        self.assertIn("Future<ApiChatMessage> chatSend", text)
+        self.assertIn("transport.request('POST', '/api/v1/app-api/v1/chat/messages'", text)
+        self.assertIn("clientId", text)
+        self.assertNotIn("X-Verified-User-Id", text)

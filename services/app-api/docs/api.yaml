@@ -6,9 +6,10 @@ paths:
   /api/v1/app-api/v1/user-id:
     get:
       operationId: user_id
-      x-backend-aliases: [/user-id]
-      description: 'Internal endpoint: nginx supplies HMAC-signed identity. Public clients use Bearer
-        at the gateway.'
+      x-backend-aliases:
+      - /user-id
+      description: 'Internal endpoint: nginx supplies HMAC-signed identity. Public
+        clients use Bearer at the gateway.'
       parameters:
       - name: X-Verified-User-Id
         in: header
@@ -105,6 +106,88 @@ paths:
           connect_seconds: 2
           read_seconds: 15
         rate_limit: null
+  /api/v1/app-api/v1/chat/messages:
+    get:
+      operationId: chat_messages
+      security:
+      - bearerAuth: []
+      x-route:
+        exposure: public
+        auth: signed-user
+        max_body_bytes: 8192
+        timeouts: &id001
+          connect_seconds: 2
+          read_seconds: 10
+        rate_limit: &id002
+          group: chat
+          requests_per_second: 10
+          burst: 20
+      responses:
+        '200':
+          description: ChatHistory
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatHistory'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: chat_send
+      security:
+      - bearerAuth: []
+      x-route:
+        exposure: public
+        auth: signed-user
+        max_body_bytes: 8192
+        timeouts: *id001
+        rate_limit: *id002
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatSend'
+      responses:
+        '201':
+          description: ChatMessage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessage'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   securitySchemes:
     bearerAuth:
@@ -133,3 +216,42 @@ components:
       properties:
         status:
           type: string
+    ChatSend:
+      type: object
+      additionalProperties: false
+      required:
+      - text
+      - client_id
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        client_id:
+          type: string
+          pattern: ^[0-9a-f]{32}$
+    ChatMessage:
+      type: object
+      required:
+      - id
+      - user_id
+      - text
+      - sent_at
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        text:
+          type: string
+        sent_at:
+          type: integer
+    ChatHistory:
+      type: object
+      required:
+      - messages
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'

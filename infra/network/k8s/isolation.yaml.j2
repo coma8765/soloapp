@@ -1,0 +1,125 @@
+{% set policy = lookup('template', project_root ~ '/infra/network/connections.yaml.j2') | from_yaml %}
+apiVersion: v1
+kind: List
+items:
+{% for namespace in policy.namespaces %}
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: default-deny
+    namespace: {{ namespace }}
+    labels: {soloapp.io/network-policy: isolation}
+  spec:
+    podSelector: {}
+    policyTypes: [Ingress, Egress]
+    ingress: []
+    egress: []
+{% endfor %}
+{% for namespace, apps in policy.dns.items() %}
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: allow-dns
+    namespace: {{ namespace }}
+    labels: {soloapp.io/network-policy: isolation}
+  spec:
+    podSelector:
+      matchExpressions: [{key: app, operator: In, values: {{ apps | to_json }} }]
+    policyTypes: [Egress]
+    egress:
+    - to:
+      - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+        podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+{% endfor %}
+{% for namespace, apps in policy.public_https.items() %}
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: allow-public-https
+    namespace: {{ namespace }}
+    labels: {soloapp.io/network-policy: isolation}
+  spec:
+    podSelector:
+      matchExpressions: [{key: app, operator: In, values: {{ apps | to_json }} }]
+    policyTypes: [Egress]
+    egress:
+    - to:
+      - ipBlock:
+          cidr: 0.0.0.0/0
+          except: [0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4]
+      ports: [{port: 443, protocol: TCP}]
+{% endfor %}
+{% for link in policy.pod_links %}
+{% for direction in ['Ingress', 'Egress'] %}
+{% set owner = link.target if direction == 'Ingress' else link.source %}
+{% set peer = link.source if direction == 'Ingress' else link.target %}
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: allow-{{ link.source | replace('/', '-') }}-to-{{ link.target | replace('/', '-') }}-{{ direction | lower }}
+    namespace: {{ owner.split('/')[0] }}
+    labels: {soloapp.io/network-policy: isolation}
+  spec:
+    podSelector: {matchLabels: {app: {{ owner.split('/')[1] }}}}
+    policyTypes: [{{ direction }}]
+    {{ direction | lower }}:
+    - {{ 'from' if direction == 'Ingress' else 'to' }}:
+      - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ peer.split('/')[0] }}}}
+        podSelector: {matchLabels: {app: {{ peer.split('/')[1] }}}}
+      ports: [{port: {{ link.port }}, protocol: TCP}]
+{% endfor %}
+{% endfor %}
+{% for link in policy.host_egress %}
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: allow-host-egress-{{ loop.index }}
+    namespace: {{ link.namespace }}
+    labels: {soloapp.io/network-policy: isolation}
+  spec:
+    podSelector:
+      matchExpressions: [{key: app, operator: In, values: {{ link.apps | to_json }} }]
+    policyTypes: [Egress]
+    egress:
+    - to:
+{% for host in link.hosts %}
+      - ipBlock: {cidr: {{ host }}/32}
+{% endfor %}
+      ports:
+{% for port in link.ports %}
+{% for protocol in link.protocols | default(['TCP']) %}
+      - {port: {{ port }}, protocol: {{ protocol }}}
+{% endfor %}
+{% endfor %}
+{% endfor %}
+{% for link in policy.host_ingress %}
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: allow-host-ingress-{{ link.app }}
+    namespace: {{ link.namespace }}
+    labels: {soloapp.io/network-policy: isolation}
+  spec:
+    podSelector: {matchLabels: {app: {{ link.app }}}}
+    policyTypes: [Ingress]
+    ingress:
+    - from:
+{% for cidr in link.cidrs %}
+      - ipBlock: {cidr: {{ cidr }}}
+{% endfor %}
+      ports: [{port: {{ link.port }}, protocol: TCP}]
+{% endfor %}
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: allow-web-s3-dnat
+    namespace: soloapp
+    labels: {soloapp.io/network-policy: isolation}
+  spec:
+    podSelector: {matchLabels: {app: web}}
+    policyTypes: [Egress]
+    egress:
+    - to:
+      - ipBlock: {cidr: {{ policy.docker_s3_cidr }}}
+      ports: [{port: 8333, protocol: TCP}]

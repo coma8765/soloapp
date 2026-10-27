@@ -1,0 +1,74 @@
+- name: Redis primary replica and three independent Sentinels
+  hosts: all
+  serial: 1
+  any_errors_fatal: true
+  become: true
+  gather_facts: false
+  vars:
+    redis: "{{ lookup('file', project_root ~ '/infra/redis/defaults.yaml') | from_yaml | combine(redis_overrides | default({}), recursive=true) }}"
+    redis_units: "{{ ['redis', 'sentinel'] if inventory_hostname in groups.app_sites else ['sentinel'] }}"
+  tasks:
+  - name: Require provisioned Redis credentials
+    ansible.builtin.assert:
+      that: "'redis-server' in cloud.secrets"
+      quiet: true
+  - name: Install current secret delivery helper
+    ansible.builtin.copy:
+      src: '{{ project_root }}/infra/secrets/files/secret-fetch.py'
+      dest: '{{ remote_root }}/secret-fetch.py'
+      mode: '0700'
+    register: delivery_helper
+  - name: Deliver Redis credentials to tmpfs
+    ansible.builtin.include_tasks: '{{ project_root }}/infra/secrets/tasks/delivery.yaml'
+    vars:
+      delivery_name: redis
+      delivery_uid: 999
+      delivery_secret_ids: '{{ cloud.secrets["redis-server"] }}'
+  - name: Create Redis directories
+    ansible.builtin.file:
+      path: '{{ item.path }}'
+      state: directory
+      mode: '0700'
+      owner: '{{ item.owner }}'
+    loop:
+    - {path: '{{ remote_root }}/redis', owner: '0'}
+    - {path: /var/lib/soloapp-redis, owner: '0'}
+    - {path: /var/lib/soloapp-redis/data, owner: '999'}
+  - name: Install Redis runtime manager
+    ansible.builtin.copy:
+      src: '{{ project_root }}/infra/redis/files/manage.py'
+      dest: '{{ remote_root }}/redis/manage.py'
+      mode: '0700'
+    register: redis_manager
+  - name: Configure nonsecret Redis settings
+    ansible.builtin.copy:
+      content: "{{ redis | combine({'ip': private_ip, 'initial_master': hostvars.yc.private_ip}) | to_nice_json }}"
+      dest: '{{ remote_root }}/redis/config.json'
+      mode: '0600'
+    register: redis_settings
+  - name: Pull pinned stock image
+    ansible.builtin.command: docker pull {{ redis.image }}
+    register: redis_pull
+    changed_when: "'Downloaded newer image' in redis_pull.stdout"
+    when: not ansible_check_mode
+  - name: Install Redis and Sentinel units
+    ansible.builtin.template:
+      src: '{{ project_root }}/infra/redis/templates/service.j2'
+      dest: '/etc/systemd/system/solo-{{ item }}.service'
+      mode: '0644'
+    loop: '{{ redis_units }}'
+    register: redis_services
+  - name: Start Redis and Sentinel
+    ansible.builtin.systemd_service:
+      name: 'solo-{{ item }}'
+      enabled: true
+      daemon_reload: true
+      state: "{{ 'restarted' if redis_manager.changed or redis_settings.changed or redis_services.changed else 'started' }}"
+    loop: '{{ redis_units }}'
+  - name: Wait for TLS listener
+    ansible.builtin.wait_for:
+      host: '{{ private_ip }}'
+      port: '{{ redis.sentinel_port if item == "sentinel" else redis.port }}'
+      timeout: 45
+    loop: '{{ redis_units }}'
+    when: not ansible_check_mode

@@ -31,6 +31,9 @@ void main() {
           expect(request.headers['Authorization'], 'Bearer test-token');
           expect(request.headers.containsKey('X-Verified-User-Id'), false);
           return http.Response('{"user_id":"user-123"}', 200);
+        case '/api/v1/app-api/v1/chat/messages':
+          expect(request.headers['Authorization'], 'Bearer test-token');
+          return http.Response('{"messages":[]}', 200);
         case '/api/v1/auth/v1/logout':
           expect(request.headers['Authorization'], 'Bearer test-token');
           return http.Response('', 204);
@@ -54,13 +57,15 @@ void main() {
     await tester.tap(find.text('Войти'));
     await tester.pumpAndSettle();
     expect(find.text('user-123'), findsOneWidget);
+    await tester.ensureVisible(find.text('Проверить через Whoami'));
     await tester.tap(find.text('Проверить через Whoami'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Whoami подтвердил'), findsOneWidget);
+    await tester.ensureVisible(find.text('Выйти'));
     await tester.tap(find.text('Выйти'));
     await tester.pumpAndSettle();
     expect(find.text('Вход в аккаунт'), findsOneWidget);
-    expect(calls.length, 3);
+    expect(calls.where((p) => !p.endsWith('/chat/messages')).length, 3);
   });
 
   testWidgets('401 keeps login form and presents an error', (tester) async {

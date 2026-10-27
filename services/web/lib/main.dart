@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'api/generated/auth_api.dart' as auth;
 import 'api/generated/whoami_api.dart';
 import 'api/transport.dart';
+import 'views/chat.dart';
 
 void main() => runApp(const SoloApp());
 
@@ -176,6 +177,17 @@ class _AuthPageState extends State<AuthPage> {
                       style: TextStyle(fontSize: 12),
                     ),
                   ] else ...[
+                    ChatPanel(
+                      key: ValueKey(_session!.accessToken),
+                      transport: _transport,
+                      token: _session!.accessToken,
+                      userId: _session!.userId,
+                      onExpired: () => setState(() {
+                        _session = null;
+                        _message = 'Сессия завершилась. Войдите снова.';
+                      }),
+                    ),
+                    const SizedBox(height: 24),
                     const Text('Ваш user-id'),
                     SelectableText(_session!.userId),
                     const SizedBox(height: 24),

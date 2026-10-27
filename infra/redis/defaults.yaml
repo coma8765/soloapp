@@ -1,0 +1,12 @@
+image: redis:7.2.17-bookworm@sha256:970b15b21c03379328b8ce6b0203dac68a463b22f0b437f27df548a12898ed62
+master_name: soloapp-chat
+port: 16379
+sentinel_port: 26379
+quorum: 2
+down_after_ms: 5000
+failover_timeout_ms: 15000
+maxmemory: 128mb
+redis_memory: 256m
+sentinel_memory: 64m
+# A single surviving copy can accept chat messages. Replication remains async.
+min_replicas_to_write: 0

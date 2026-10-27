@@ -31,6 +31,7 @@
     tags:
     - certificates
   become: true
+- ansible.builtin.import_playbook: ../network/isolate.yaml
 - ansible.builtin.import_playbook: apps.yaml
 - name: Maintain ingress
   hosts: ingress
