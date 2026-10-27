@@ -28,3 +28,7 @@ history or Redis asynchronous-replication loss cannot be recovered.
 Deploy Redis ACL first, then app-api, nginx and web. Existing HTTP chat clients remain
 compatible throughout. nginx explicitly proxies Upgrade/Connection and allows 45s idle
 reads, longer than the heartbeat; HAProxy's 20s idle timeout also exceeds the heartbeat.
+
+HTTP latency panels and the app-api latency alert exclude status 101: nginx records
+the complete upgraded connection lifetime, which is not message-delivery latency.
+Status counters still include WebSocket handshakes.
