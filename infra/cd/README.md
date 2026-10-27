@@ -10,6 +10,8 @@ GitHub-hosted CI builds only the selected runtime image (auth, whoami for app-ap
 
 Rollout order: YC → home → public API and web smoke tests. Each site waits only for the selected deployment; `all` waits for all four. Failed rollouts stop the workflow. To roll back without rebuilding, run `Deploy production` on main with `rollback_revision` set to a full previously deployed SHA. The gate permits only recorded successful releases and checks their original image digests. Database migrations are not reverted. Infrastructure and installed gate changes remain operator-managed.
 
+Mandatory analysis, style, format and merge protection are documented in [CI](../ci/README.md).
+
 ## Operator installation and rotation
 
 Prerequisites: existing two-site deployment, Docker/k3s, private inventory/cloud resource configuration, and SSH administration access. Controller image dependencies are pinned in Dockerfile. Inspect/update the installed root-owned gate explicitly when its implementation changes; production releases cannot self-update it.

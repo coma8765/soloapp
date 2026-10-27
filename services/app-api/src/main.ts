@@ -4,7 +4,9 @@ import { AppModule } from './app.module.js';
 import { configureApp } from './configure-app.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
   configureApp(app);
   await app.listen(
     process.env.PORT ?? 8080,

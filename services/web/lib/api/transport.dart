@@ -12,11 +12,14 @@ class ApiException implements Exception {
 /// The client owns no credentials; the UI retains its session only in memory.
 class ApiTransport {
   ApiTransport({http.Client? client, Uri? origin})
-      : client = client ?? http.Client(), origin = origin ?? Uri.base;
+    : client = client ?? http.Client(),
+      origin = origin ?? Uri.base;
   final http.Client client;
   final Uri origin;
 
-  Future<Map<String, dynamic>> request(String method, String path, {
+  Future<Map<String, dynamic>> request(
+    String method,
+    String path, {
     required int expectedStatus,
     required Duration timeout,
     Map<String, dynamic>? body,
@@ -32,8 +35,10 @@ class ApiTransport {
       request.body = jsonEncode(body);
     }
     // Includes body consumption in the deadline. Mutations are never retried.
-    final response = await client.send(request)
-        .then(http.Response.fromStream).timeout(timeout);
+    final response = await client
+        .send(request)
+        .then(http.Response.fromStream)
+        .timeout(timeout);
     if (response.statusCode != expectedStatus) {
       throw ApiException(response.statusCode, switch (response.statusCode) {
         400 => 'Проверьте имя пользователя и пароль.',

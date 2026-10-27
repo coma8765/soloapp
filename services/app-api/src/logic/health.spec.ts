@@ -24,8 +24,11 @@ describe('HealthCircuit', () => {
     expect(health.ready(3499)).toBe(false);
     expect(health.ready(3500)).toBe(true);
   });
-  it.each(['0', '-1', '10oops', '3601', '1.5'])('rejects invalid config %s', (value) => {
-    vi.stubEnv('HEALTH_COOLDOWN_SECONDS', value);
-    expect(() => new HealthCircuit()).toThrow('Invalid health setting');
-  });
+  it.each(['0', '-1', '10oops', '3601', '1.5'])(
+    'rejects invalid config %s',
+    (value) => {
+      vi.stubEnv('HEALTH_COOLDOWN_SECONDS', value);
+      expect(() => new HealthCircuit()).toThrow('Invalid health setting');
+    },
+  );
 });

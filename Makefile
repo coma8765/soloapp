@@ -83,3 +83,19 @@ test-alerts: check-alerts
 	cp infra/observability/tests/alerts.test.yaml work/alert-tests/tests.yaml
 	docker run --rm --entrypoint /bin/promtool -v "$(PROJECT_ROOT)/work/alert-tests:/tests:ro" prom/prometheus:v3.15.1 check rules /tests/rules.yaml
 	docker run --rm --entrypoint /bin/promtool -v "$(PROJECT_ROOT)/work/alert-tests:/tests:ro" prom/prometheus:v3.15.1 test rules /tests/tests.yaml
+
+.PHONY: check-quality check-python check-cpp check-javascript check-dart
+check-quality: check-python check-cpp check-javascript check-dart
+	actionlint .github/workflows/ci.yaml .github/workflows/deploy.yaml
+check-python:
+	$(PYTHON) infra/ci/check.py python
+check-cpp:
+	$(PYTHON) infra/ci/check.py cpp-format
+	$(PYTHON) infra/ci/check.py cpp-analysis
+check-javascript:
+	npm --prefix services/app-api run format:check
+	npm --prefix services/app-api run lint
+	services/app-api/node_modules/.bin/prettier --check infra/telegram-relay/src infra/telegram-relay/tests
+	services/app-api/node_modules/.bin/oxlint infra/telegram-relay/src infra/telegram-relay/tests
+check-dart:
+	$(PYTHON) infra/ci/check.py dart-format

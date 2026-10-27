@@ -46,6 +46,7 @@ Registry releases still contain auth/whoami/web, so old releases remain rollback
 ```sh
 npm ci
 npm run build
+npm run format:check
 npm run lint
 npm test
 npm run test:e2e
@@ -60,7 +61,7 @@ Builds run on developer machines or GitHub runners, never production hosts.
 ## GitHub CI/CD
 
 `Validate source` has an explicit **app-api (NestJS)** job on pushes and pull requests.
-It runs `make test-app-api` (Node.js 24 build, lint, unit and e2e tests) and builds the
+It runs `make test-app-api` (Node.js 24 build, format, lint, unit and e2e tests) and builds the
 production image with `make build-app-api`. The source job checks generated API routes.
 
 For an isolated production release, open **Deploy production → Run workflow**, select

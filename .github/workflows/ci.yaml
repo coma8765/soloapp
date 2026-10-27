@@ -24,6 +24,10 @@ jobs:
           python3 -m unittest discover -s infra/cd/tests -v
           python3 -m unittest discover -s infra/registry/tests -v
           .venv-codegen/bin/python -m unittest discover -s infra/object-storage/tests -v
+      - name: Verify merge gate and monitoring exporter
+        run: |
+          .venv-codegen/bin/python -m unittest discover -s infra/ci/tests -v
+          .venv-codegen/bin/python -m unittest discover -s infra/observability/tests -p 'test_*.py' -v
       - name: Test Telegram relay authorization and delivery
         run: node --test infra/telegram-relay/tests/worker.test.mjs
       - name: Install verified secret scanner
@@ -35,6 +39,38 @@ jobs:
           echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
       - name: Scan publication files and history
         run: make public-check
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Install analysis tools
+        run: |
+          python3 -m venv .venv-quality
+          .venv-quality/bin/pip install -r infra/ci/requirements.txt
+          echo "$PWD/.venv-quality/bin" >> "$GITHUB_PATH"
+          sudo apt-get update
+          sudo apt-get install -y cppcheck shellcheck
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.11
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          npm --prefix services/app-api ci
+      - name: Python static analysis and formatting
+        run: python3 infra/ci/check.py python
+      - name: C++ formatting and static analysis
+        run: |
+          python3 infra/ci/check.py cpp-format
+          python3 infra/ci/check.py cpp-analysis
+      - name: Worker JavaScript style and analysis
+        run: |
+          services/app-api/node_modules/.bin/prettier --check infra/telegram-relay/src infra/telegram-relay/tests
+          services/app-api/node_modules/.bin/oxlint infra/telegram-relay/src infra/telegram-relay/tests
+      - name: Validate GitHub Actions and embedded shell
+        run: actionlint .github/workflows/ci.yaml .github/workflows/deploy.yaml
   services:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -56,7 +92,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - name: Build NestJS and run lint, unit and e2e tests
+      - name: Build NestJS and run format, lint, unit and e2e tests
         run: make test-app-api
       - name: Build production NestJS image
         run: make build-app-api
@@ -75,7 +111,9 @@ jobs:
           flutter-version: '3.44.8'
           channel: stable
       - run: flutter pub get --enforce-lockfile
-      - run: flutter analyze
+      - name: Check Dart formatting
+        run: python3 ../../infra/ci/check.py dart-format
+      - run: flutter analyze --fatal-infos --fatal-warnings
       - run: flutter test
       - name: Build and validate versioned web bundle
         env:
@@ -83,3 +121,18 @@ jobs:
         run: |
           flutter build web --release --no-web-resources-cdn --base-href "/web/releases/$SHA/" --dart-define="APP_VERSION=$SHA"
           python3 deploy/package.py "$SHA" "$RUNNER_TEMP/web.tar.gz"
+
+  required:
+    name: Required checks
+    if: always()
+    needs: [source, quality, services, app-api, web]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Reject failed, skipped or cancelled checks
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 infra/ci/gate.py

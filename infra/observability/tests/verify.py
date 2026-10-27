@@ -1,24 +1,55 @@
 """Check provisioned dashboards and actual data on each independent store.
 Runs read-only API requests with a Viewer token fetched from Lockbox inside each pod.
 """
-import json,sys
+
+import json
+import sys
 from pathlib import Path
-sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'operations'))
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "operations"))
 from remote import ROOT
-sys.path.insert(0,str(ROOT))
-from libs.monitoring.grafana import run_grafana
+
+sys.path.insert(0, str(ROOT))
 from libs.monitoring.dashboards import load_dashboards
-dashboards=[]
-queries=[]
+from libs.monitoring.grafana import run_grafana
+
+dashboards = []
+queries = []
 for name, entry in load_dashboards().items():
- dashboard=entry['dashboard']
- metric_service=entry.get('metrics_service',name)
- dashboards.append({'uid':dashboard['uid'],'panels':len(dashboard['panels']),'title':dashboard['title'],'folder':'Services' if entry['folder']=='services' else 'Soloapp'})
- for panel in dashboard['panels']:
-  for t in panel.get('targets',[]):
-   expr=t['expr'].replace('$__rate_interval','2m').replace('$__range','1h').replace('$dc','.+').replace('$pod',(metric_service+'-.+') if entry['folder']=='services' else '.+').replace('$route','.*').replace('$search','.*').replace('$ingress','.+').replace('$observer','.+')
-   queries.append({'dashboard':name,'title':panel['title'],'datasource':t['datasource']['uid'],'expr':expr})
-remote='''import json,urllib.request,urllib.parse,base64
+    dashboard = entry["dashboard"]
+    metric_service = entry.get("metrics_service", name)
+    dashboards.append(
+        {
+            "uid": dashboard["uid"],
+            "panels": len(dashboard["panels"]),
+            "title": dashboard["title"],
+            "folder": "Services" if entry["folder"] == "services" else "Soloapp",
+        }
+    )
+    for panel in dashboard["panels"]:
+        for t in panel.get("targets", []):
+            expr = (
+                t["expr"]
+                .replace("$__rate_interval", "2m")
+                .replace("$__range", "1h")
+                .replace("$dc", ".+")
+                .replace(
+                    "$pod", (metric_service + "-.+") if entry["folder"] == "services" else ".+"
+                )
+                .replace("$route", ".*")
+                .replace("$search", ".*")
+                .replace("$ingress", ".+")
+                .replace("$observer", ".+")
+            )
+            queries.append(
+                {
+                    "dashboard": name,
+                    "title": panel["title"],
+                    "datasource": t["datasource"]["uid"],
+                    "expr": expr,
+                }
+            )
+remote = """import json,urllib.request,urllib.parse,base64
 from pathlib import Path
 headers=GRAFANA_HEADERS
 def get(path):
@@ -70,10 +101,12 @@ for name,(expr,count) in routing_checks.items():
  rows=get('datasources/proxy/uid/prometheus/api/v1/query?'+urllib.parse.urlencode({'query':expr}))['data']['result']
  assert len(rows)==count, (name,len(rows),count)
 print(json.dumps({'dashboard_uids':[d['uid'] for d in DASHBOARDS],'panels':results,'scrape_targets':6,'http_probe_targets':counts}))
-'''.replace('QUERIES',repr(queries)).replace('DASHBOARDS',repr(dashboards))
-report={}
-for host in ('yc','home'):
- result=run_grafana(host,remote,check=False)
- if result.returncode:raise RuntimeError(result.stderr)
- report[host]=json.loads(result.stdout);print(host,'verified',len(report[host]['panels']),'queries')
-(ROOT/'work/observability-verification.json').write_text(json.dumps(report,indent=2)+'\n')
+""".replace("QUERIES", repr(queries)).replace("DASHBOARDS", repr(dashboards))
+report = {}
+for host in ("yc", "home"):
+    result = run_grafana(host, remote, check=False)
+    if result.returncode:
+        raise RuntimeError(result.stderr)
+    report[host] = json.loads(result.stdout)
+    print(host, "verified", len(report[host]["panels"]), "queries")
+(ROOT / "work/observability-verification.json").write_text(json.dumps(report, indent=2) + "\n")

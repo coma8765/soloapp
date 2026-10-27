@@ -37,10 +37,14 @@ describe('Signed identity', () => {
     const module = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
-    const expressApp = module.createNestApplication<NestExpressApplication>({ rawBody: true });
+    const expressApp = module.createNestApplication<NestExpressApplication>({
+      rawBody: true,
+    });
     configureApp(expressApp);
     app = expressApp;
-    expressApp.getHttpAdapter().get('/test-error', (_req, res) => res.status(500).end());
+    expressApp
+      .getHttpAdapter()
+      .get('/test-error', (_req, res) => res.status(500).end());
     await app.init();
   });
 
@@ -176,11 +180,15 @@ describe('Signed identity', () => {
   });
 
   it('rejects unsupported methods on the identity endpoint', async () => {
-    await request(app.getHttpServer()).post(ENDPOINT).set(headers()).expect(405);
+    await request(app.getHttpServer())
+      .post(ENDPOINT)
+      .set(headers())
+      .expect(405);
   });
 
   it('ejects after actual HTTP 5xx, without turning liveness or probes into failures', async () => {
-    for (let i = 0; i < 3; i++) await request(app.getHttpServer()).get('/test-error').expect(500);
+    for (let i = 0; i < 3; i++)
+      await request(app.getHttpServer()).get('/test-error').expect(500);
     await request(app.getHttpServer()).get('/health/ready').expect(503);
     await request(app.getHttpServer()).get('/healthz').expect(200);
     const health = app.get(HealthCircuit);
