@@ -22,6 +22,9 @@ items:
         labels: {app: client-notify, soloapp.io/backend: client-notify}
       spec:
         automountServiceAccountToken: false
+        hostAliases:
+        - ip: "{{ private_ip }}"
+          hostnames: ["node-{{ inventory_hostname }}"]
         serviceAccountName: client-notify-secrets
         terminationGracePeriodSeconds: {{ notify_config.termination_grace_seconds }}
         securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
@@ -42,6 +45,7 @@ items:
           resources: {{ notify_config.resources | to_json }}
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
           volumeMounts:
+          - {name: uploads, mountPath: /uploads}
           - {name: secrets, mountPath: /run/soloapp-secrets, readOnly: true}
           lifecycle:
             preStop:
@@ -97,6 +101,8 @@ items:
           - {name: identity, mountPath: /run/identity, readOnly: true}
           - {name: secrets, mountPath: /run/soloapp-secrets}
         volumes:
+        - name: uploads
+          emptyDir: {medium: Memory, sizeLimit: 8Mi}
         - name: secrets
           emptyDir: {medium: Memory, sizeLimit: 4Mi}
         - name: identity
