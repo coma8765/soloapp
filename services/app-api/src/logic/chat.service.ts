@@ -105,13 +105,15 @@ export class ChatService implements OnModuleDestroy {
         }),
       };
     } catch {
-      throw new ServiceUnavailableException('chat_temporarily_unavailable');
+      throw new ServiceUnavailableException({
+        error: 'chat_temporarily_unavailable',
+      });
     }
   }
 
   async send(userId: string, body: unknown): Promise<ChatMessage> {
     if (!body || typeof body !== 'object' || Array.isArray(body))
-      throw new BadRequestException('invalid_message');
+      throw new BadRequestException({ error: 'invalid_message' });
     const data = body as Record<string, unknown>;
     if (
       Object.keys(data).some((k) => !['text', 'client_id'].includes(k)) ||
@@ -121,7 +123,7 @@ export class ChatService implements OnModuleDestroy {
       typeof data.client_id !== 'string' ||
       !/^[0-9a-f]{32}$/.test(data.client_id)
     )
-      throw new BadRequestException('invalid_message');
+      throw new BadRequestException({ error: 'invalid_message' });
     let result: unknown;
     try {
       result = await (
@@ -137,10 +139,12 @@ export class ChatService implements OnModuleDestroy {
         Date.now(),
       );
     } catch {
-      throw new ServiceUnavailableException('chat_temporarily_unavailable');
+      throw new ServiceUnavailableException({
+        error: 'chat_temporarily_unavailable',
+      });
     }
     if (result === 'RATE_LIMIT')
-      throw new HttpException('chat_rate_limited', 429);
+      throw new HttpException({ error: 'chat_rate_limited' }, 429);
     return JSON.parse(String(result)) as ChatMessage;
   }
   onModuleDestroy(): void {

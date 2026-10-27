@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+# Home's transparent VPN redirects TCP before NetworkPolicy sees its destination.
+# Bypass that redirect only for pod HTTPS; ordinary Kubernetes egress policy still
+# authorizes the original destination and rejects unlisted workloads.
+{% if network_direct_https_mark | default('') | length > 0 %}
+nft list table inet solo_pod_https >/dev/null 2>&1 || nft add table inet solo_pod_https
+nft -f - <<'NFT'
+flush table inet solo_pod_https
+table inet solo_pod_https {
+  chain before_transparent_proxy {
+    type filter hook prerouting priority -310; policy accept;
+    iifname "cni0" ip saddr 10.{{ cluster_octet }}.0.0/16 tcp dport 443 meta mark set {{ network_direct_https_mark }} ct mark set {{ network_direct_https_mark }}
+  }
+}
+NFT
+{% endif %}

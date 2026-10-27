@@ -5,6 +5,21 @@
   become: true
   gather_facts: false
   tasks:
+  - name: Validate optional transparent proxy bypass mark
+    ansible.builtin.assert:
+      that: network_direct_https_mark | default('') is match('^(0x[0-9a-fA-F]{1,8})?$')
+      quiet: true
+  - name: Install scoped pod HTTPS routing compatibility
+    ansible.builtin.template:
+      src: '{{ project_root }}/infra/network/templates/pod-egress.sh.j2'
+      dest: '{{ remote_root }}/pod-egress.sh'
+      mode: '0700'
+  - name: Apply scoped pod HTTPS routing compatibility
+    ansible.builtin.command: '{{ remote_root }}/pod-egress.sh'
+    changed_when: false
+    when: not ansible_check_mode
+  - name: Persist the scoped HTTPS hook in the existing network guard
+    ansible.builtin.include_tasks: '{{ project_root }}/infra/network/tasks/nodeports.yaml'
   - name: Require the k3s network policy controller
     ansible.builtin.command: iptables -S KUBE-ROUTER-FORWARD
     changed_when: false
@@ -32,5 +47,22 @@
     when: not ansible_check_mode
   - name: Verify denied and explicitly allowed pod connectivity
     ansible.builtin.command: python3 {{ remote_root }}/network-probe.py
+    changed_when: false
+    when: not ansible_check_mode
+  - name: Verify permitted web dependencies after isolation
+    ansible.builtin.command:
+      argv:
+      - k3s
+      - kubectl
+      - -n
+      - soloapp
+      - exec
+      - deployment/web
+      - -c
+      - refresh-secrets
+      - --
+      - python3
+      - -c
+      - "import socket, ssl; c = ssl.create_default_context(); s = c.wrap_socket(socket.create_connection(('auth.yandex.cloud', 443), 10), server_hostname='auth.yandex.cloud'); s.close(); s = socket.create_connection(('{{ private_ip }}', 18333), 10); s.close(); print('IAM TLS and local S3 reachable')"
     changed_when: false
     when: not ansible_check_mode

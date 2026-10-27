@@ -72,6 +72,9 @@ host_egress:
   hosts: [{{ hostvars.yc.private_ip }}, {{ hostvars.home.private_ip }}]
   ports: [{{ obs.alertmanager.cluster_port }}]
   protocols: [TCP, UDP]
+# Docker DNAT is applied before the pod egress policy on these nodes.
+# This permission is restricted to the web workload and S3 container port.
+docker_s3_cidr: 172.17.0.0/16
 host_ingress:
 - namespace: soloapp
   app: nginx

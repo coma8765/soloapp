@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
+if [ -x {{ remote_root }}/pod-egress.sh ]; then {{ remote_root }}/pod-egress.sh; fi
 iptables -t raw -N SOLO_NODEPORT 2>/dev/null || true
 iptables -t raw -F SOLO_NODEPORT
 # Only private WireGuard destination on WG or the local ingress Docker bridge.

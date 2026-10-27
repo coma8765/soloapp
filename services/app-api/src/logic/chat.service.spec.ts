@@ -96,7 +96,7 @@ describe('Chat business rules', () => {
     fake.xrevrange.mockRejectedValue(new Error('private connection detail'));
     await expect(service.history()).rejects.toMatchObject({
       status: 503,
-      message: 'chat_temporarily_unavailable',
+      response: { error: 'chat_temporarily_unavailable' },
     });
   });
 });

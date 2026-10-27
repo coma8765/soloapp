@@ -51,7 +51,7 @@ http {
     }
 {% endif %}
 {{ lookup('template', project_root ~ '/services/nginx/deploy/generated/routes.conf.j2') | indent(4, true) }}
-{% if web_config.release | length > 0 %}
+{% if nginx_web_enabled | default(web_config.release | length > 0) %}
     location = / {
       if ($request_method !~ ^(GET|HEAD)$) { return 405; }
       proxy_set_header Authorization "";

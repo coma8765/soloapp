@@ -110,3 +110,16 @@ items:
 {% endfor %}
       ports: [{port: {{ link.port }}, protocol: TCP}]
 {% endfor %}
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: allow-web-s3-dnat
+    namespace: soloapp
+    labels: {soloapp.io/network-policy: isolation}
+  spec:
+    podSelector: {matchLabels: {app: web}}
+    policyTypes: [Egress]
+    egress:
+    - to:
+      - ipBlock: {cidr: {{ policy.docker_s3_cidr }}}
+      ports: [{port: 8333, protocol: TCP}]

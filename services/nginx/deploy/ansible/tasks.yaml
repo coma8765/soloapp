@@ -1,3 +1,11 @@
+- name: Discover an existing web Service during isolated nginx rollout
+  ansible.builtin.command: k3s kubectl -n soloapp get service web --ignore-not-found -o name
+  register: nginx_web_service
+  changed_when: false
+  check_mode: false
+- name: Keep web routes when web is already deployed
+  ansible.builtin.set_fact:
+    nginx_web_enabled: '{{ web_config.release | length > 0 or nginx_web_service.stdout | length > 0 }}'
 - name: Verify generated routes match service API contracts before rollout
   ansible.builtin.command:
     argv:

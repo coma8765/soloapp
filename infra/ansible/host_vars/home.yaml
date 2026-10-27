@@ -8,3 +8,4 @@ service_overrides:
     replicas: 2
   web:
     replicas: 2
+network_direct_https_mark: '0x2024'
