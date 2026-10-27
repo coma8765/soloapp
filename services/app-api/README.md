@@ -56,3 +56,19 @@ HMAC_KEY_FILE=/path/to/userid-hmac npm run start:dev
 From the repository root, `make build-whoami` and `make test-whoami` build/test this
 NestJS application. `make build-app-api` remains a standalone development alias.
 Builds run on developer machines or GitHub runners, never production hosts.
+
+## GitHub CI/CD
+
+`Validate source` has an explicit **app-api (NestJS)** job on pushes and pull requests.
+It runs `make test-app-api` (Node.js 24 build, lint, unit and e2e tests) and builds the
+production image with `make build-app-api`. The source job checks generated API routes.
+
+For an isolated production release, open **Deploy production → Run workflow**, select
+branch `main` and `service=app-api` (the default). Green main CI is required. GitHub builds
+only `services/app-api/deploy/Dockerfile`, publishes the image to both private registries,
+then rolls YC followed by home and runs the public API authentication smoke tests.
+Auth, nginx and web are not applied. The internal image/Deployment name remains `whoami`
+to preserve existing identities and rollback history; the application code is NestJS.
+
+Set `rollback_revision` to a previously deployed `v0.1.P` or SHA to restore that service's
+recorded digest without a rebuild. Builds run locally or on GitHub, never on the servers.

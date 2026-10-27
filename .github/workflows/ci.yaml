@@ -41,13 +41,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [auth, whoami]
+        service: [auth]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - name: Build and run isolated testsuite
         run: make test-${{ matrix.service }}
+  app-api:
+    name: app-api (NestJS)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Build NestJS and run lint, unit and e2e tests
+        run: make test-app-api
+      - name: Build production NestJS image
+        run: make build-app-api
   web:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

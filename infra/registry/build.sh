@@ -14,8 +14,11 @@ case "$scope" in
   *) echo 'Expected auth, app-api, web or all' >&2; exit 2 ;;
 esac
 for service in "${services[@]}"; do
+  dockerfile="services/$service/deploy/Dockerfile"
+  # Keep the deployed image identity for digest-based rollback compatibility.
+  if [ "$service" = whoami ]; then dockerfile=services/app-api/deploy/Dockerfile; fi
   docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
     --target runtime --label "org.opencontainers.image.revision=$sha" --label "org.opencontainers.image.version=${RELEASE_VERSION:-$sha}" \
-    -f "services/$service/deploy/Dockerfile" \
+    -f "$dockerfile" \
     --output "type=oci,dest=$out/$service.oci.tar" .
 done
