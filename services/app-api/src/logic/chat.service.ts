@@ -5,6 +5,7 @@ import {
   OnModuleDestroy,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { Redis } from 'ioredis';
 
@@ -40,6 +41,13 @@ return message
 @Injectable()
 export class ChatService implements OnModuleDestroy {
   private client?: Redis;
+  private reader?: Redis;
+  private watching = false;
+  private destroyed = false;
+  private readonly listeners = new Set<{
+    message: (event: object) => void;
+    failure: () => void;
+  }>();
   private configText?: string;
   private opening?: Promise<Redis>;
 
@@ -152,7 +160,114 @@ export class ChatService implements OnModuleDestroy {
       throw new HttpException({ error: 'chat_rate_limited' }, 429);
     return JSON.parse(String(result)) as ChatMessage;
   }
+  async ticket(
+    userId: string,
+  ): Promise<{ ticket: string; expires_in: number }> {
+    const ticket = randomBytes(32).toString('hex');
+    try {
+      const result = await (
+        await this.redis()
+      ).eval(
+        `local n = redis.call('INCR', KEYS[1])
+         if n == 1 then redis.call('EXPIRE', KEYS[1], 10) end
+         if n > 10 then return 0 end
+         redis.call('SET', KEYS[2], ARGV[1], 'EX', 30)
+         return 1`,
+        2,
+        `soloapp:chat:ticket-rate:${userId}`,
+        `soloapp:chat:ticket:${ticket}`,
+        userId,
+      );
+      if (result !== 1)
+        throw new HttpException({ error: 'chat_rate_limited' }, 429);
+      return { ticket, expires_in: 30 };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new ServiceUnavailableException({
+        error: 'chat_temporarily_unavailable',
+      });
+    }
+  }
+
+  async consumeTicket(ticket: string): Promise<string | null> {
+    if (!/^[0-9a-f]{64}$/.test(ticket)) return null;
+    // Atomic and shared across DCs: a ticket cannot open two sockets on a healthy primary.
+    return (await this.redis()).getdel(`soloapp:chat:ticket:${ticket}`);
+  }
+
+  watch(message: (event: object) => void, failure: () => void): () => void {
+    const listener = { message, failure };
+    this.listeners.add(listener);
+    if (!this.watching) void this.readStream();
+    return () => this.listeners.delete(listener);
+  }
+
+  private emit(event: object): void {
+    for (const listener of this.listeners) listener.message(event);
+  }
+
+  private async readStream(): Promise<void> {
+    this.watching = true;
+    try {
+      const initial = await this.history();
+      let cursor = initial.messages.at(-1)?.id ?? '0-0';
+      this.emit({ type: 'history', ...initial });
+      const base = await this.redis();
+      this.reader = base.duplicate();
+      this.reader.on('error', () => undefined);
+      await new Promise<void>((resolve, reject) => {
+        if (this.reader!.status === 'ready') {
+          resolve();
+          return;
+        }
+        this.reader!.once('ready', resolve);
+        this.reader!.once('error', reject);
+      });
+      while (!this.destroyed && this.listeners.size) {
+        if ((await this.redis()) !== base)
+          throw new Error('Redis credentials rotated');
+        // One blocking reader per pod, never one connection per browser.
+        // BLOCK bounds shutdown time; new messages wake XREAD immediately.
+        const streams = await this.reader.xread(
+          'COUNT',
+          100,
+          'BLOCK',
+          1000,
+          'STREAMS',
+          'soloapp:chat:messages',
+          cursor,
+        );
+        for (const [, rows] of streams ?? []) {
+          for (const [id, fields] of rows) {
+            const data: Record<string, string> = {};
+            for (let i = 0; i < fields.length; i += 2)
+              data[fields[i]] = fields[i + 1];
+            cursor = id;
+            this.emit({
+              type: 'message',
+              message: {
+                id,
+                user_id: data.user_id,
+                text: data.text,
+                sent_at: Number(data.sent_at),
+              },
+            });
+          }
+        }
+      }
+    } catch {
+      // Force history recovery on a new ticket after Sentinel/connection failure.
+      for (const listener of this.listeners) listener.failure();
+    } finally {
+      this.reader?.disconnect();
+      this.reader = undefined;
+      this.watching = false;
+    }
+  }
+
   onModuleDestroy(): void {
+    this.destroyed = true;
+    this.reader?.disconnect();
     this.client?.disconnect();
   }
 }

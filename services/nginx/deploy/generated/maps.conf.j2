@@ -6,6 +6,8 @@ map $uri $observed_route {
   ~^/web/releases/ /web/releases/;
   ~^/grafana/ /grafana/;
   /api/v1/app-api/v1/chat/messages /api/v1/app-api/v1/chat/messages;
+  /api/v1/app-api/v1/chat/socket-ticket /api/v1/app-api/v1/chat/socket-ticket;
+  /api/v1/app-api/v1/chat/ws /api/v1/app-api/v1/chat/ws;
   /api/v1/app-api/v1/user-id /api/v1/app-api/v1/user-id;
   /api/v1/auth/v1/login /api/v1/auth/v1/login;
   /api/v1/auth/v1/logout /api/v1/auth/v1/logout;
@@ -19,6 +21,8 @@ map $uri $observed_service {
   / web;
   ~^/web/releases/ web;
   /api/v1/app-api/v1/chat/messages whoami;
+  /api/v1/app-api/v1/chat/socket-ticket whoami;
+  /api/v1/app-api/v1/chat/ws whoami;
   /api/v1/app-api/v1/user-id whoami;
   /api/v1/auth/v1/login auth;
   /api/v1/auth/v1/logout auth;

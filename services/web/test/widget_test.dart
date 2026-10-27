@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'fake_socket.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -31,9 +32,9 @@ void main() {
           expect(request.headers['Authorization'], 'Bearer test-token');
           expect(request.headers.containsKey('X-Verified-User-Id'), false);
           return http.Response('{"user_id":"user-123"}', 200);
-        case '/api/v1/app-api/v1/chat/messages':
+        case '/api/v1/app-api/v1/chat/socket-ticket':
           expect(request.headers['Authorization'], 'Bearer test-token');
-          return http.Response('{"messages":[]}', 200);
+          return http.Response('{"ticket":"fixture","expires_in":30}', 201);
         case '/api/v1/auth/v1/logout':
           expect(request.headers['Authorization'], 'Bearer test-token');
           return http.Response('', 204);
@@ -45,6 +46,7 @@ void main() {
       SoloApp(
         transport: ApiTransport(
           client: client,
+          socketConnector: (_, _) => FakeSocket(),
           origin: Uri.parse('https://example.invalid'),
         ),
       ),
@@ -65,7 +67,7 @@ void main() {
     await tester.tap(find.text('Выйти'));
     await tester.pumpAndSettle();
     expect(find.text('Вход в аккаунт'), findsOneWidget);
-    expect(calls.where((p) => !p.endsWith('/chat/messages')).length, 3);
+    expect(calls.where((p) => !p.endsWith('/chat/socket-ticket')).length, 3);
   });
 
   testWidgets('401 keeps login form and presents an error', (tester) async {

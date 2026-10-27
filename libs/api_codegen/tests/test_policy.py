@@ -46,6 +46,18 @@ class PolicyTests(unittest.TestCase):
         self.assertIn('proxy_set_header Authorization "";', route)
         self.assertIn("whoami.soloapp.svc.cluster.local:{{ whoami_config.port }};", route)
 
+    def test_websocket_upgrade_is_explicit_and_ticket_issuance_stays_protected(self):
+        text = render(self.root)["routes.conf.j2"]
+        websocket = text.split("location = /api/v1/app-api/v1/chat/ws {", 1)[1].split("\n}", 1)[0]
+        ticket = text.split("location = /api/v1/app-api/v1/chat/socket-ticket {", 1)[1].split(
+            "\n}", 1
+        )[0]
+        self.assertIn("proxy_set_header Upgrade $http_upgrade;", websocket)
+        self.assertIn("proxy_http_version 1.1;", websocket)
+        self.assertIn("proxy_buffering off;", websocket)
+        self.assertIn("auth_request /_verify;", ticket)
+        self.assertNotIn("proxy_set_header Upgrade", ticket)
+
     def test_public_to_internal_removes_route(self):
         self.specs["auth"]["paths"]["/api/v1/auth/v1/register"]["post"]["x-route"]["exposure"] = (
             "internal"

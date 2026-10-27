@@ -55,7 +55,7 @@ groups:
       action: Проверьте список pod и события Deployment. Восстановите реплики или откатите неудачную раскатку.
     keep_firing_for: 3m
   - alert: ContainerCpuRequestHigh
-    expr: soloapp:container:cpu_request_ratio > 0.8
+    expr: soloapp:container:cpu_request_ratio{service!="grafana"} > 0.8
     for: 5m
     labels:
       severity: warning
@@ -68,7 +68,7 @@ groups:
         выросло — проверьте профиль нагрузки.
     keep_firing_for: 3m
   - alert: ContainerMemoryRequestHigh
-    expr: soloapp:container:memory_request_ratio > 0.8
+    expr: soloapp:container:memory_request_ratio{service!="grafana"} > 0.8
     for: 5m
     labels:
       severity: warning

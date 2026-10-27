@@ -19,7 +19,16 @@ def render(root=ROOT):
             require(method in ("get", "post"), "Unsupported Nest method")
             name = op["operationId"]
             require(
-                name in ("user_id", "healthz", "health_ready", "chat_messages", "chat_send"),
+                name
+                in (
+                    "user_id",
+                    "healthz",
+                    "health_ready",
+                    "chat_messages",
+                    "chat_send",
+                    "chat_socket_ticket",
+                    "chat_socket",
+                ),
                 "Unsupported Nest operation",
             )
             paths = [path] + op.get("x-backend-aliases", [])

@@ -197,7 +197,9 @@ No service images need rebuilding to update dashboards/rules.
 | PodHealthProbeFailed | Per-pod health/readiness/DB probe fails | 1m |
 | PostgresConnectionsHigh | All client connections / max_connections > 70% | 1m |
 
-CPU/memory checks include helper containers, not only the main process. A request is a
+CPU/memory alerts exclude the Grafana workload (`service="grafana"`), including its
+helper containers. Grafana resource metrics, dashboard panels and availability alerts
+remain enabled. Other workloads include helper containers, not only the main process. A request is a
 scheduler reservation, not a hard limit: legitimate steady usage may exceed 80%.
 Zero/missing resource requests are excluded from division. PG connections are summed
 per observer before choosing a maximum across observers, so duplicate observation does

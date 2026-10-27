@@ -3,6 +3,7 @@ import { ChatService } from './chat.service.js';
 const fake = vi.hoisted(() => ({
   xrevrange: vi.fn(),
   eval: vi.fn(),
+  getdel: vi.fn(),
   disconnect: vi.fn(),
   on: vi.fn(),
   options: vi.fn(),
@@ -83,6 +84,22 @@ describe('Chat business rules', () => {
         autoResendUnfulfilledCommands: false,
       }),
     );
+  });
+  it('issues bounded single-use tickets scoped to the authenticated user', async () => {
+    fake.eval.mockResolvedValue(1);
+    const ticket = await service.ticket('ab'.repeat(16));
+    expect(ticket.ticket).toMatch(/^[0-9a-f]{64}$/);
+    expect(ticket.expires_in).toBe(30);
+    fake.getdel
+      .mockResolvedValueOnce('ab'.repeat(16))
+      .mockResolvedValueOnce(null);
+    expect(await service.consumeTicket(ticket.ticket)).toBe('ab'.repeat(16));
+    expect(await service.consumeTicket(ticket.ticket)).toBeNull();
+    expect(fake.getdel).toHaveBeenCalledWith(
+      `soloapp:chat:ticket:${ticket.ticket}`,
+    );
+    expect(await service.consumeTicket('bad')).toBeNull();
+    expect(fake.getdel).toHaveBeenCalledTimes(2);
   });
   it('reports shared Redis rate limits as 429', async () => {
     fake.eval.mockResolvedValue('RATE_LIMIT');

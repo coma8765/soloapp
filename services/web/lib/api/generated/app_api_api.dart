@@ -79,6 +79,20 @@ class ApiChatHistory {
   };
 }
 
+class ApiChatSocketTicket {
+  const ApiChatSocketTicket({required this.ticket, required this.expiresIn});
+  final String ticket;
+  final int expiresIn;
+  factory ApiChatSocketTicket.fromJson(Map<String, dynamic> json) => ApiChatSocketTicket(
+    ticket: json['ticket'] as String,
+    expiresIn: json['expires_in'] as int,
+  );
+  Map<String, dynamic> toJson() => {
+    'ticket': ticket,
+    'expires_in': expiresIn,
+  };
+}
+
 class AppApiApi {
   const AppApiApi(this.transport);
   final ApiTransport transport;
@@ -107,4 +121,13 @@ class AppApiApi {
     );
     return ApiChatMessage.fromJson(data);
   }
+  Future<ApiChatSocketTicket> chatSocketTicket(String accessToken) async {
+    final data = await transport.request('POST', '/api/v1/app-api/v1/chat/socket-ticket',
+      expectedStatus: 201,
+      timeout: const Duration(seconds: 10),
+      accessToken: accessToken,
+    );
+    return ApiChatSocketTicket.fromJson(data);
+  }
+  static const chatSocketPath = '/api/v1/app-api/v1/chat/ws';
 }

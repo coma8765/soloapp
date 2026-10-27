@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:http/http.dart' as http;
 
 class ApiException implements Exception {
@@ -11,11 +12,21 @@ class ApiException implements Exception {
 
 /// The client owns no credentials; the UI retains its session only in memory.
 class ApiTransport {
-  ApiTransport({http.Client? client, Uri? origin})
+  ApiTransport({http.Client? client, Uri? origin, this.socketConnector})
     : client = client ?? http.Client(),
       origin = origin ?? Uri.base;
   final http.Client client;
   final Uri origin;
+  final WebSocketChannel Function(Uri, Iterable<String>)? socketConnector;
+
+  WebSocketChannel openSocket(String path, String ticket) {
+    final uri = origin
+        .resolve(path)
+        .replace(scheme: origin.scheme == 'https' ? 'wss' : 'ws');
+    final protocols = ['soloapp.chat.v1', 'ticket.$ticket'];
+    return socketConnector?.call(uri, protocols) ??
+        WebSocketChannel.connect(uri, protocols: protocols);
+  }
 
   Future<Map<String, dynamic>> request(
     String method,

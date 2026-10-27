@@ -45,6 +45,11 @@ describe('Chat authorization boundary', () => {
         .expect(401);
     },
   );
+  it('requires a verified session to issue WebSocket tickets', async () => {
+    await request(app.getHttpServer())
+      .post('/api/v1/app-api/v1/chat/socket-ticket')
+      .expect(401);
+  });
   it('reads messages with signed identity', async () => {
     await request(app.getHttpServer())
       .get(path)
