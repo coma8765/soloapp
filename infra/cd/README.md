@@ -1,6 +1,6 @@
 # Continuous deployment
 
-`Validate source` runs codegen/policy tests, secret/history scanning, Docker testsuite for auth/whoami, and Flutter analyze/test/web build. Public PRs run only on GitHub-hosted runners and receive no production environment secrets.
+`Validate source` runs codegen/policy tests, secret/history scanning, Docker testsuite for auth plus the explicit app-api (NestJS) build/lint/unit/e2e and production-image job, and Flutter analyze/test/web build. Public PRs run only on GitHub-hosted runners and receive no production environment secrets.
 
 `Deploy production` is manually started through Actions (`workflow_dispatch`, main only). Deploy one service at a time (recommended); `all` is an explicit coordinated release. A push still runs validation, but no longer automatically rolls every service. It rechecks the current main SHA and green CI; the server independently checks the same conditions. The production environment permits only the main branch. Older queued revisions fail closed when main has advanced. GitHub concurrency and per-server file locks prevent overlapping deployments.
 
@@ -9,6 +9,8 @@ Each site has a separate expiring Ed25519 key, stored in GitHub Environment Secr
 GitHub-hosted CI builds only the selected runtime image (auth, whoami for app-api, or web), or all three for `all`, labels the approved commit, then publishes identical OCI content to both private S3-backed registries over the restricted SSH gate. Servers never build images. The gate checks matching selected image digests; web/all also require both static release markers, then runs Ansible using a namespace-scoped 20-minute token. Kubernetes pulls pinned digests through mTLS registry mirrors. See `infra/registry/README.md` for storage and access details.
 
 Rollout order: YC → home → public API and web smoke tests. Each site waits only for the selected deployment; `all` waits for all four. Failed rollouts stop the workflow. To roll back without rebuilding, run `Deploy production` on main with `rollback_revision` set to a full previously deployed SHA. The gate permits only recorded successful releases and checks their original image digests. Database migrations are not reverted. Infrastructure and installed gate changes remain operator-managed.
+
+Mandatory analysis, style, format and merge protection are documented in [CI](../ci/README.md).
 
 ## Operator installation and rotation
 

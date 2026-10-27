@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       service:
-        description: 'Recommended: deploy one service. all = explicit coordinated release'
+        description: 'Recommended: one service. app-api = NestJS; all = coordinated release'
         required: true
         type: choice
         default: app-api

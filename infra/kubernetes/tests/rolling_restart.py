@@ -1,7 +1,11 @@
-import sys,json,time,subprocess,concurrent.futures
+import json
+import sys
 from pathlib import Path
-sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'operations'));from remote import run
-script=r'''python3 - <<'INNER'
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "operations"))
+from remote import run
+
+script = r"""python3 - <<'INNER'
 import subprocess,time,json
 k=['k3s','kubectl','-n','soloapp'];results=[]
 for service in ('whoami','auth','nginx'):
@@ -19,9 +23,12 @@ for service in ('whoami','auth','nginx'):
  results.append({'service':service,'min_ready_endpoints':minimum,'samples':samples,'seconds':round(time.monotonic()-started,2)})
 print('REPORT '+json.dumps(results))
 INNER
-'''
-report={}
-for site in ('yc','home'):
- result=run(site,script,capture=True);print(site,result.stdout,flush=True)
- report[site]=json.loads(next(x[7:] for x in result.stdout.splitlines() if x.startswith('REPORT ')))
- Path('outputs/rolling-update-endpoints.json').write_text(json.dumps(report,indent=2))
+"""
+report = {}
+for site in ("yc", "home"):
+    result = run(site, script, capture=True)
+    print(site, result.stdout, flush=True)
+    report[site] = json.loads(
+        next(x[7:] for x in result.stdout.splitlines() if x.startswith("REPORT "))
+    )
+    Path("outputs/rolling-update-endpoints.json").write_text(json.dumps(report, indent=2))

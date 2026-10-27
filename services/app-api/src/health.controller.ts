@@ -25,7 +25,8 @@ export class HealthController {
   @Get(routes.health_ready)
   @Header('Cache-Control', 'no-store')
   async ready() {
-    if (!this.health.ready()) throw new ServiceUnavailableException({ status: "cooldown" });
+    if (!this.health.ready())
+      throw new ServiceUnavailableException({ status: 'cooldown' });
     try {
       const key = await this.identity.readKey();
       key.fill(0);
