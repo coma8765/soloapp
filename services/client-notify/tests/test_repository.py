@@ -18,7 +18,7 @@ async def test_deadline_30_seconds():
 
 async def test_odb_lease_fences_stale_completion(pgsql, pgsql_local, tmp_path):
     path = tmp_path / "dsn"
-    path.write_text(pgsql_local["notifydb"].get_dsn())
+    path.write_text(pgsql_local["leasedb"].get_dsn())
     process = await asyncio.create_subprocess_exec(
         os.environ["UNIT_PROBE"],
         stdout=asyncio.subprocess.PIPE,
