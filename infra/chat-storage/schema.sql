@@ -117,6 +117,7 @@ $$;
 CREATE OR REPLACE FUNCTION chat.delivery_ack(i text,a bigint,u text) RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,chat AS $$
 DECLARE changed integer;
 BEGIN
+ PERFORM 1 FROM public.notify_tasks WHERE task_id=i FOR UPDATE;
  UPDATE chat.receipts r SET done=true FROM public.notify_tasks t
  WHERE r.task_id=i AND t.task_id=i AND r.recipient=u AND r.attempt=a AND t.attempt=a
  AND t.state='inflight' AND NOT r.cancelled AND least(r.deadline_ms,t.lease_ms)>(extract(epoch FROM clock_timestamp())*1000)::bigint;

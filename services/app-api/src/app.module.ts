@@ -17,12 +17,7 @@ import { HealthController } from './health.controller.js';
     HealthController,
     ChatController,
   ],
-  providers: [
-    AppService,
-    IdentityService,
-    HealthCircuit,
-    ChatService,
-  ],
+  providers: [AppService, IdentityService, HealthCircuit, ChatService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

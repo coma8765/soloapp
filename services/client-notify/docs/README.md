@@ -1,9 +1,10 @@
 # client-notify
 
 C++17/Drogon delivery worker with PostgreSQL/ODB and a RabbitMQ **quorum queue**, not Streams.
-The service is implemented independently of the chat transport migration. It is not yet wired
-into the public chat or a production broker. `infra/chat-storage` and `libs/chat_runtime` are
-separate unfinished migration work and are not dependencies of this service.
+Each DC has an independent two-node RabbitMQ cluster and two client-notify pods.
+Both deployments share PostgreSQL task state. The surviving site's reconciler
+republishes expired unfinished tasks into its local queue; it does not depend on
+queue replication between the clusters. See `infra/rabbitmq/README.md`.
 
 ## Contract
 
@@ -48,7 +49,7 @@ On failed delivery a bounded independent worker submits `/internal/delivery/canc
 delivery loop. A later cancellation of attempt N must NEVER cancel N+1. Local timeout cannot
 undo a remote side effect: the gateway contract below is required, not optional.
 
-## Gateway contract (receiver implementation required)
+## Gateway contract
 
 Request headers: `Authorization: Bearer <gateway token>`, `Idempotency-Key: <task_id>`.
 Body: `{task_id, attempt, deadline_ms, recipient, payload}`. The attempt number is monotonic;
@@ -80,7 +81,7 @@ libpq DSN with `target_session_attrs=read-write`, `connect_timeout=2`, `statemen
 and `lock_timeout=2000`. Apply `deploy/schema.sql` once as the migration owner.
 
 Broker vhost `/soloapp`; operator declares durable quorum queue `client-notify` with
-`x-delivery-limit=-1`. Runtime permissions: configure `^$`, write/read `^client-notify$`.
+`x-delivery-limit=-1`. Runtime permissions: configure `^$`, write `^amq\.default$`, read `^client-notify$`.
 No TTL, max-length drop policy or finite delivery limit: failures remain pending until success.
 Alert on age/attempts and outbox growth; unlimited retry is not unlimited disk capacity.
 The pending task table contains user payloads. No automatic task deletion is configured;
@@ -91,9 +92,10 @@ an explicitly provisioned identity. Deployment does not create IAM privileges or
 `deploy/k8s/networkpolicy.yaml.j2` is an explicit allowlist to combine with default-deny.
 TLS verification is mandatory; plaintext is allowed only with the explicit test-only env
 `NOTIFY_TEST_ALLOW_PLAINTEXT`. Broker passwords and gateway token are loaded at startup;
-rotate via overlapping credentials and rolling restart. No production deployment was run.
+rotate via overlapping credentials and rolling restart. Deployments use the separate `client-gateway` receiver.
 
-Broker topology is still a separate decision: one 2+2 quorum cluster cannot survive loss
-of half its replicas. Two independent clusters require publication/consumption routing that
-is aware of the destination site; the current service configuration targets one broker
-endpoint/vhost per deployment. Do not infer DC failover from pod replica count.
+A task becomes eligible on the surviving site when it is unfinished and due, and
+its publication/worker lease expires (or needs_publish is set). This is checked
+once per second. Republishing an expired in-flight task never renews the dead
+worker lease. PostgreSQL must have a writable primary; a broker alone cannot
+complete deliveries while the task database is unavailable.
