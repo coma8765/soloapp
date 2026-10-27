@@ -45,14 +45,6 @@ host_egress:
   hosts: [{{ hostvars.yc.private_ip }}, {{ hostvars.home.private_ip }}]
   ports: [55432]
 - namespace: soloapp
-  apps: [whoami]
-  hosts: [{{ hostvars.yc.private_ip }}, {{ hostvars.home.private_ip }}]
-  ports: [16379]
-- namespace: soloapp
-  apps: [whoami]
-  hosts: [{{ hostvars.yc.private_ip }}, {{ hostvars.home.private_ip }}, {{ hostvars.edge.private_ip }}]
-  ports: [26379]
-- namespace: soloapp
   apps: [web]
   hosts: [{{ hostvars.yc.private_ip }}, {{ hostvars.home.private_ip }}]
   ports: [18333]

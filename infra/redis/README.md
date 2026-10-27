@@ -1,3 +1,11 @@
+> Retired from the chat delivery path. PostgreSQL + independent RabbitMQ clusters
+> + client-notify/client-gateway replace Redis Streams/Sentinel. After verifying
+> migration and both site-failure tests, run `ansible-playbook infra/redis/retire.yaml`
+> and `ansible-playbook infra/network/isolate.yaml`. Retirement stops/disables only
+> the project Redis/Sentinel services and secret-refresh timer; persisted data and
+> Lockbox secrets remain for explicit rollback. The legacy deployment below is
+> retained as rollback documentation, not part of normal deployment.
+
 # Redis Sentinel / общий чат
 
 Две Redis 7.2.17 (YC/home), три Sentinel (YC/home/edge), quorum 2. Падение одной площадки оставляет два голоса. Это primary/replica с Sentinel, **не Redis Cluster**. Сервисы получают master через все три Sentinel; Redis не выставляется во внешний балансер.
