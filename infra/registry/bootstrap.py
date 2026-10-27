@@ -47,7 +47,7 @@ def main():
     def s3key(): return {'accessKey':'solo'+secrets.token_hex(12),'secretKey':secrets.token_hex(32)}
     writer,reader=s3key(),s3key()
     bucket='soloapp-registry'
-    s3['identities'] += [dict(name='registry-publisher',credentials=[writer],actions=['Read:'+bucket,'Write:'+bucket,'List:'+bucket]),dict(name='registry-reader',credentials=[reader],actions=['Read:'+bucket,'List:'+bucket])]
+    s3['identities'] += [dict(name='registry-publisher',credentials=[writer],actions=['Read:'+bucket,'Write:'+bucket,'WriteAcp:'+bucket,'List:'+bucket]),dict(name='registry-reader',credentials=[reader],actions=['Read:'+bucket,'List:'+bucket])]
     entries['s3.json']=json.dumps(s3)
     yc('lockbox','secret','add-version',cloud['secrets']['s3-server'],'--payload','-',payload=json.dumps([{'key':k,'textValue':v} for k,v in entries.items()]))
     for site,ip in [('yc','10.77.26.11'),('home','10.77.26.12')]:

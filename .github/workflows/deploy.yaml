@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       rollback_revision:
-        description: Previously deployed full commit SHA; leave empty for a new release
+        description: Previously deployed v0.1.P or full commit SHA; empty for a new release
         required: false
         type: string
 permissions:
@@ -17,7 +17,15 @@ concurrency:
   group: production
   cancel-in-progress: false
 jobs:
-  deploy:
+  prepare:
+    permissions:
+      contents: write
+      actions: read
+    outputs:
+      sha: ${{ steps.revision.outputs.sha }}
+      target: ${{ steps.version.outputs.target }}
+      version: ${{ steps.version.outputs.version }}
+      operation: ${{ steps.version.outputs.operation }}
     if: >-
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'workflow_dispatch' ||
@@ -25,7 +33,7 @@ jobs:
         github.event.workflow_run.event == 'push' &&
         github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 10
     environment: production
     steps:
       - name: Select current green main revision
@@ -45,6 +53,28 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ steps.revision.outputs.sha }}
+          persist-credentials: false
+      - name: Reserve version or resolve rollback
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.revision.outputs.sha }}
+          ROLLBACK: ${{ inputs.rollback_revision }}
+        run: |
+          if [ -n "$ROLLBACK" ]; then
+            python3 infra/cd/version.py resolve "$ROLLBACK"
+          else
+            python3 infra/cd/version.py reserve "$SHA"
+          fi
+  deploy:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment: production
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
           persist-credentials: false
       - name: Prepare restricted deployment identities
         env:
@@ -66,17 +96,18 @@ jobs:
         if: inputs.rollback_revision == ''
         working-directory: services/web
         env:
-          SHA: ${{ steps.revision.outputs.sha }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           flutter pub get --enforce-lockfile
-          flutter build web --release --no-web-resources-cdn --base-href "/web/releases/$SHA/" --dart-define="APP_VERSION=$SHA"
+          flutter build web --release --no-web-resources-cdn --base-href "/web/releases/$SHA/" --dart-define="APP_VERSION=$VERSION"
           python3 deploy/package.py "$SHA" "$RUNNER_TEMP/web.tar.gz"
       - name: Publish and verify both S3 replicas before activation
         if: inputs.rollback_revision == ''
         env:
           HOST: ${{ secrets.CD_YC_HOST }}
           PORT: ${{ secrets.CD_YC_PORT }}
-          SHA: ${{ steps.revision.outputs.sha }}
+          SHA: ${{ needs.prepare.outputs.sha }}
         run: |
           ssh -i "$RUNNER_TEMP/cd/yc" -p "$PORT" -o IdentitiesOnly=yes -o BatchMode=yes \
             -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/cd/known_hosts" \
@@ -85,14 +116,15 @@ jobs:
       - name: Build runtime images on GitHub runner
         if: inputs.rollback_revision == ''
         env:
-          SHA: ${{ steps.revision.outputs.sha }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           docker buildx create --use
           bash infra/registry/build.sh "$SHA" "$RUNNER_TEMP/images"
       - name: Publish identical runtime images to both private registries
         if: inputs.rollback_revision == ''
         env:
-          SHA: ${{ steps.revision.outputs.sha }}
+          SHA: ${{ needs.prepare.outputs.sha }}
           YC_HOST: ${{ secrets.CD_YC_HOST }}
           HOME_HOST: ${{ secrets.CD_HOME_HOST }}
           YC_PORT: ${{ secrets.CD_YC_PORT }}
@@ -112,8 +144,8 @@ jobs:
         env:
           HOST: ${{ secrets.CD_YC_HOST }}
           PORT: ${{ secrets.CD_YC_PORT }}
-          SHA: ${{ inputs.rollback_revision || steps.revision.outputs.sha }}
-          OPERATION: ${{ inputs.rollback_revision && 'rollback' || 'deploy' }}
+          SHA: ${{ needs.prepare.outputs.target }}
+          OPERATION: ${{ needs.prepare.outputs.operation }}
           SOLOAPP_BASE_URL: ${{ secrets.SOLOAPP_BASE_URL }}
         run: |
           ssh -i "$RUNNER_TEMP/cd/yc" -p "$PORT" -o IdentitiesOnly=yes -o BatchMode=yes \
@@ -124,8 +156,8 @@ jobs:
         env:
           HOST: ${{ secrets.CD_HOME_HOST }}
           PORT: ${{ secrets.CD_HOME_PORT }}
-          SHA: ${{ inputs.rollback_revision || steps.revision.outputs.sha }}
-          OPERATION: ${{ inputs.rollback_revision && 'rollback' || 'deploy' }}
+          SHA: ${{ needs.prepare.outputs.target }}
+          OPERATION: ${{ needs.prepare.outputs.operation }}
           SOLOAPP_BASE_URL: ${{ secrets.SOLOAPP_BASE_URL }}
         run: |
           ssh -i "$RUNNER_TEMP/cd/home" -p "$PORT" -o IdentitiesOnly=yes -o BatchMode=yes \

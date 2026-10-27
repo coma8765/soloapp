@@ -7,7 +7,7 @@ out=${2:?output directory required}
 mkdir -p "$out"
 for service in auth whoami web; do
   docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
-    --target runtime --label "org.opencontainers.image.revision=$sha" \
+    --target runtime --label "org.opencontainers.image.revision=$sha" --label "org.opencontainers.image.version=${RELEASE_VERSION:-$sha}" \
     -f "services/$service/deploy/Dockerfile" \
     --output "type=oci,dest=$out/$service.oci.tar" .
 done
