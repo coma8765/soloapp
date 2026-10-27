@@ -33,6 +33,12 @@ def ci_passed(data, revision, repository):
 
 
 def run(argv, *, cwd=None, capture=False, env=None):
+    if argv[0] == 'git':
+        argv = ['docker', 'run', '--rm', '--user', '0:0', '--cap-drop=ALL',
+                '--security-opt', 'no-new-privileges', '-v', str(STATE) + ':' + str(STATE),
+                '-w', str(cwd or STATE), '--entrypoint', 'git',
+                'soloapp/deploy-controller:1'] + argv[1:]
+        cwd = None
     return subprocess.run(argv, cwd=cwd, check=True, text=True,
                           stdout=subprocess.PIPE if capture else None, env=env).stdout
 
@@ -105,7 +111,7 @@ def main():
                    '--security-opt', 'no-new-privileges', '--user', '10004:10004', '--tmpfs', '/tmp:rw,nosuid,nodev',
                    '-e', 'KUBECONFIG=/run/cd/kubeconfig.json', '-e', 'HOME=/tmp',
                    '-v', str(source) + ':/src:ro', '-v', str(runtime) + ':/run/cd:ro',
-                   '-v', str(manifests) + ':/manifests', '-v', '/usr/local/bin/k3s:/usr/local/bin/k3s:ro',
+                   '-v', str(manifests) + ':/manifests',
                    '-w', '/src', 'soloapp/deploy-controller:1', '-i', '/run/cd/inventory.yaml',
                    'infra/ansible/apps.yaml', '--limit', cfg['site'], '-e', '@/run/cd/extra.json']
             # Validate before any mutation, then use existing rolling rollout gates.

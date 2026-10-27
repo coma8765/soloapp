@@ -6,7 +6,7 @@
 
 Each site has a separate expiring Ed25519 key, stored in GitHub Environment Secrets. SSH uses pinned host keys, a root-owned forced command, and disables PTY/forwarding. The login has no general sudo; only the fixed gate accepts `probe` or a validated commit SHA. Possession of this key grants deployment of current green main, not a shell. People allowed to change main/workflows remain trusted deployers; changes there must be reviewed.
 
-The gate builds runtime images **on each site** from the exact commit, tags them `git-<full SHA>`, imports them into k3s, and runs the existing Ansible app playbook in an unprivileged, read-only container. Its Kubernetes token expires after 20 minutes and has rights only in `soloapp`; it is kept in `/run` and removed after the command. Production Lockbox payloads and application keys are not copied into GitHub. There is no self-hosted GitHub runner on the production network and no public binary/image release.
+The gate builds runtime images **on each site** from the exact commit, tags them `git-<full SHA>`, imports them into k3s, and runs the existing Ansible app playbook in an unprivileged, read-only container. Git and the pinned kubectl client also run in the controller image, without installing host packages. Its Kubernetes token expires after 20 minutes and has rights only in `soloapp`; it is kept in `/run` and removed after the command. Production Lockbox payloads and application keys are not copied into GitHub. There is no self-hosted GitHub runner on the production network and no public binary/image release.
 
 Rollout order: YC → public API smoke test → home → public API smoke test. Every site's Ansible playbook waits for all three deployments to become ready. RollingUpdate preserves existing ready pods. A failure stops the pipeline, preserving the other site; it does not automatically revert configuration or database changes. Roll back with a reviewed revert commit on main and green CI. Only auth/whoami/nginx app deployments are automated; PostgreSQL, IAM, certificates, observability and the initial Flutter scaffold require separate explicit rollout work.
 
@@ -15,7 +15,7 @@ Rollout order: YC → public API smoke test → home → public API smoke test. 
 Prerequisites: existing two-site deployment, Docker/k3s, private inventory/cloud resource configuration, and SSH administration access. Controller image dependencies are pinned in Dockerfile. Inspect/update the installed root-owned gate explicitly when its implementation changes; production releases cannot self-update it.
 
 1. Generate a unique Ed25519 key per site into a temporary protected directory outside Git (for example `work/cd-keys/`). Do not reuse an administrator key.
-2. Set an expiry (UTC, `YYYYMMDDHHMMSSZ`, recommended 90 days), then run:
+2. Set an expiry (UTC, `YYYYMMDDHHMMSSZ`, recommended 90 days; installer converts it to the local-time syntax supported by older OpenSSH), then run:
 
 ```sh
 ansible-playbook infra/cd/install.yaml \
