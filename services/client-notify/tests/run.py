@@ -49,6 +49,10 @@ def main():
         else:
             raise RuntimeError("Test RabbitMQ did not start")
         run("run", "--rm", "--network", name, "-e", "RABBIT_HOST=rabbit", args.image)
+    except Exception:
+        run("logs", "--tail", "150", name, check=False)
+        run("inspect", "--format", "{{json .State}}", name, check=False)
+        raise
     finally:
         run("rm", "-f", name, check=False)
         run("network", "rm", name, check=False)
