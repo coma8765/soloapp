@@ -63,7 +63,7 @@ jobs:
         run: |
           flutter pub get --enforce-lockfile
           flutter build web --release --no-web-resources-cdn --base-href "/web/releases/$SHA/" --dart-define="APP_VERSION=$SHA"
-          tar -czf "$RUNNER_TEMP/web.tar.gz" -C build/web .
+          python3 deploy/package.py "$SHA" "$RUNNER_TEMP/web.tar.gz"
       - name: Publish and verify both S3 replicas before activation
         env:
           HOST: ${{ secrets.CD_YC_HOST }}

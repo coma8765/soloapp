@@ -31,7 +31,7 @@ def publish(bucket, stores, sha, files, manifest):
     for store in stores:
         store.head_bucket(Bucket=bucket)
         try:
-            if get(store, bucket, prefix + 'manifest.json') != manifest:
+            if get(store, bucket, prefix + '_release.json') != manifest:
                 raise ValueError('This revision already has a different build')
         except ClientError as error:
             if error.response['ResponseMetadata']['HTTPStatusCode'] != 404: raise
@@ -41,7 +41,7 @@ def publish(bucket, stores, sha, files, manifest):
                              ContentType=mimetypes.guess_type(name)[0] or 'application/octet-stream')
             if hashlib.sha256(get(store, bucket, prefix + name)).digest() != hashlib.sha256(data).digest():
                 raise ValueError('Read-back verification failed')
-        store.put_object(Bucket=bucket, Key=prefix + 'manifest.json', Body=manifest, ContentType='application/json')
+        store.put_object(Bucket=bucket, Key=prefix + '_release.json', Body=manifest, ContentType='application/json')
     # Only after every object has been read back from both sites.
     for store in stores:
         store.put_object(Bucket=bucket, Key=prefix + 'committed.json', Body=manifest, ContentType='application/json')

@@ -33,7 +33,7 @@ def unpack(data, sha):
             name = member.name.removeprefix('./')
             if member.isdir(): continue
             safe_path(name)
-            if name in ('manifest.json', 'committed.json'): raise ValueError('Reserved manifest name')
+            if name in ('_release.json', 'committed.json'): raise ValueError('Reserved manifest name')
             if not member.isfile() or name in files: raise ValueError('Non-regular or duplicate member')
             size += member.size
             if size > MAX_EXPANDED: raise ValueError('Expanded bundle too large')

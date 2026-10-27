@@ -61,4 +61,9 @@ jobs:
       - run: flutter pub get --enforce-lockfile
       - run: flutter analyze
       - run: flutter test
-      - run: flutter build web --release --no-web-resources-cdn
+      - name: Build and validate versioned web bundle
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          flutter build web --release --no-web-resources-cdn --base-href "/web/releases/$SHA/" --dart-define="APP_VERSION=$SHA"
+          python3 deploy/package.py "$SHA" "$RUNNER_TEMP/web.tar.gz"

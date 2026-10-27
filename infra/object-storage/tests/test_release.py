@@ -18,6 +18,13 @@ class Store:
   return {'Body':io.BytesIO(self.data[Key])}
 
 class ReleaseTests(unittest.TestCase):
+ def test_flutter_web_manifest_is_a_valid_asset(self):
+  buf=io.BytesIO()
+  with tarfile.open(fileobj=buf,mode='w:gz') as tf:
+   for name,data in {'index.html':f'<base href="/web/releases/{SHA}/">'.encode(),'main.dart.js':b'code','flutter_bootstrap.js':b'boot','manifest.json':b'{"name":"web"}'}.items():
+    info=tarfile.TarInfo(name);info.size=len(data);tf.addfile(info,io.BytesIO(data))
+  files,_=unpack(buf.getvalue(),SHA)
+  self.assertIn('manifest.json',files)
  def test_paths_and_links(self):
   for path in ('../secret','/etc/passwd','a/../b','a\\b','a//b'):
    with self.assertRaises(ValueError):safe_path(path)
@@ -46,7 +53,7 @@ class ReleaseTests(unittest.TestCase):
   with self.assertRaises(ValueError):publish('web',stores,SHA,{'index.html':b'html'},b'{}')
   for store in stores:self.assertNotIn(f'releases/{SHA}/committed.json',store.data)
  def test_existing_revision_cannot_change(self):
-  stores=[Store(),Store()];stores[1].data[f'releases/{SHA}/manifest.json']=b'previous'
+  stores=[Store(),Store()];stores[1].data[f'releases/{SHA}/_release.json']=b'previous'
   with self.assertRaises(ValueError):publish('web',stores,SHA,{},b'other')
   self.assertEqual(stores[0].data,{})
 
