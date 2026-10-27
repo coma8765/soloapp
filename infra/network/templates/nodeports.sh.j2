@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+iptables -t raw -N SOLO_NODEPORT 2>/dev/null || true
+iptables -t raw -F SOLO_NODEPORT
+# Only private WireGuard destination on WG or the local ingress Docker bridge.
+iptables -t raw -A SOLO_NODEPORT -d {{ private_ip }}/32 -i wg-solo -s 10.77.26.0/24 -j RETURN
+iptables -t raw -A SOLO_NODEPORT -d {{ private_ip }}/32 -i docker0 -j RETURN
+iptables -t raw -A SOLO_NODEPORT -j DROP
+# Match only this node's addresses, not transit Docker -> another site traffic.
+iptables -t raw -C PREROUTING -m addrtype --dst-type LOCAL -p tcp --dport {{ nginx_config.node_port }} -j SOLO_NODEPORT 2>/dev/null || iptables -t raw -I PREROUTING 1 -m addrtype --dst-type LOCAL -p tcp --dport {{ nginx_config.node_port }} -j SOLO_NODEPORT
+iptables -t raw -D PREROUTING -p tcp --dport {{ nginx_config.node_port }} -j SOLO_NODEPORT 2>/dev/null || true
+ip6tables -t raw -C PREROUTING -p tcp --dport {{ nginx_config.node_port }} -j DROP 2>/dev/null || ip6tables -t raw -I PREROUTING 1 -p tcp --dport {{ nginx_config.node_port }} -j DROP
+
+{% if inventory_hostname in groups['app_sites'] %}
+iptables -t raw -C PREROUTING -m addrtype --dst-type LOCAL -p tcp --dport {{ obs.gateway_node_port }} -j SOLO_NODEPORT 2>/dev/null || iptables -t raw -I PREROUTING 1 -m addrtype --dst-type LOCAL -p tcp --dport {{ obs.gateway_node_port }} -j SOLO_NODEPORT
+ip6tables -t raw -C PREROUTING -p tcp --dport {{ obs.gateway_node_port }} -j DROP 2>/dev/null || ip6tables -t raw -I PREROUTING 1 -p tcp --dport {{ obs.gateway_node_port }} -j DROP
+# Local monitoring and gateway clients originate in the normal local pod network.
+iptables -t raw -I SOLO_NODEPORT 1 -d {{ private_ip }}/32 -i cni0 -s 10.{{ cluster_octet }}.0.0/16 -j RETURN
+{% endif %}

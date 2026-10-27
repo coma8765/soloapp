@@ -1,0 +1,225 @@
+logging { level = "warn" }
+discovery.kubernetes "pods" {
+  role = "pod"
+  namespaces { names = ["soloapp"] }
+}
+discovery.relabel "logs" {
+  targets = discovery.kubernetes.pods.targets
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    regex = "auth|nginx|whoami"
+    action = "keep"
+  }
+  rule { source_labels = ["__meta_kubernetes_pod_name"]
+    target_label = "pod" }
+  rule { source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label = "container" }
+  rule { source_labels = ["__meta_kubernetes_pod_label_app"]
+    target_label = "service" }
+  rule { target_label = "dc"
+    replacement = "{{ inventory_hostname }}" }
+}
+loki.source.kubernetes "pods" {
+  targets = discovery.relabel.logs.output
+  forward_to = [loki.process.requests.receiver]
+}
+loki.process "requests" {
+  forward_to = [{% for site in groups['app_sites'] %}loki.write.{{ site }}.receiver{% if not loop.last %}, {% endif %}{% endfor %}]
+  stage.match {
+    selector = "{container=\"nginx\"} |= \"request_time\""
+    stage.json {
+      expressions = { route = "route", method = "method", status = "status", duration = "request_time", api_service = "service" }
+    }
+    stage.labels { values = { route = "route", method = "method", status = "status", service = "api_service" } }
+    stage.metrics {
+      metric.counter {
+        name = "http_requests_total"
+        prefix = "soloapp_"
+        match_all = true
+        action = "inc"
+        max_idle_duration = "24h"
+      }
+      metric.histogram {
+        name = "http_request_duration_seconds"
+        prefix = "soloapp_"
+        source = "duration"
+        buckets = [0.005,0.01,0.025,0.05,0.1,0.25,0.5,1,2,5,10,20]
+        max_idle_duration = "24h"
+      }
+    }
+  }
+}
+{% for site in groups['app_sites'] %}
+loki.write "{{ site }}" {
+  endpoint {
+    url = "https://{{ hostvars[site].private_ip }}:{{ obs.gateway_node_port }}/loki/api/v1/push"
+    tls_config {
+      ca_file = "/run/soloapp-secrets/data/ca.crt"
+      cert_file = "/run/soloapp-secrets/data/tls.crt"
+      key_file = "/run/soloapp-secrets/data/tls.key"
+      server_name = "{{ obs.gateway_names[site] }}"
+    }
+  }
+}
+{% endfor %}
+prometheus.scrape "alloy" {
+  targets = [{__address__ = "127.0.0.1:12345", job = "alloy", dc = "{{ inventory_hostname }}"}]
+  scrape_interval = "{{ obs.scrape_interval }}"
+  forward_to = [prometheus.remote_write.central.receiver]
+}
+prometheus.scrape "state" {
+  targets = [{__address__ = "kube-state-metrics:8080", job = "kube-state-metrics", dc = "{{ inventory_hostname }}"}]
+  scrape_interval = "{{ obs.state_scrape_interval }}"
+  scrape_timeout = "{{ obs.routing_scrape_timeout }}"
+  forward_to = [prometheus.remote_write.central.receiver]
+}
+prometheus.scrape "cadvisor" {
+  targets = [{__address__ = "{{ private_ip }}:10250", job = "cadvisor", dc = "{{ inventory_hostname }}"}]
+  metrics_path = "/metrics/cadvisor"
+  scheme = "https"
+  authorization { credentials_file = "/var/run/secrets/kubernetes.io/serviceaccount/token" }
+  tls_config { ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt" }
+  scrape_interval = "{{ obs.scrape_interval }}"
+  forward_to = [prometheus.relabel.resources.receiver]
+}
+prometheus.relabel "resources" {
+  forward_to = [prometheus.remote_write.central.receiver]
+  rule {
+    source_labels = ["__name__"]
+    regex = "container_cpu_usage_seconds_total|container_cpu_cfs_throttled_seconds_total|container_memory_working_set_bytes|container_memory_rss|container_spec_memory_limit_bytes|container_network_receive_bytes_total|container_network_transmit_bytes_total|machine_memory_bytes|machine_cpu_cores|up"
+    action = "keep"
+  }
+}
+prometheus.remote_write "central" {
+{% for site in groups['app_sites'] %}
+  endpoint {
+    url = "https://{{ hostvars[site].private_ip }}:{{ obs.gateway_node_port }}/api/v1/write"
+    tls_config {
+      ca_file = "/run/soloapp-secrets/data/ca.crt"
+      cert_file = "/run/soloapp-secrets/data/tls.crt"
+      key_file = "/run/soloapp-secrets/data/tls.key"
+      server_name = "{{ obs.gateway_names[site] }}"
+    }
+    queue_config { capacity = 1000
+      max_shards = 2 }
+  }
+{% endfor %}
+}
+
+// HTTP probes are independent of kubelet probes and do not feed business RPS.
+{% for check in ['healthz', 'readiness', 'db-ready'] %}
+discovery.relabel "probe_{{ check | replace('-', '_') }}" {
+  targets = discovery.kubernetes.pods.targets
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app", "__meta_kubernetes_pod_container_name", "__meta_kubernetes_pod_container_port_name"]
+    regex = "{% if check == 'db-ready' %}auth;auth;http{% else %}auth;auth;http|whoami;whoami;http|nginx;nginx;https{% endif %}"
+    action = "keep"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_phase"]
+    regex = "Running"
+    action = "keep"
+  }
+{% for service, port in [('auth', auth_config.port), ('whoami', whoami_config.port), ('nginx', nginx_config.health_port)] %}
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app", "__meta_kubernetes_pod_ip"]
+    regex = "{{ service }};(.+)"
+    target_label = "address"
+    replacement = "http://${1}:{{ port }}/{% if check == 'db-ready' %}ready{% elif check == 'readiness' and service != 'nginx' %}health/ready{% else %}healthz{% endif %}"
+  }
+{% endfor %}
+  rule { source_labels = ["__meta_kubernetes_pod_name"]
+    target_label = "name"
+    replacement = "${1}-{{ check }}" }
+  rule { source_labels = ["__meta_kubernetes_pod_name"]
+    target_label = "pod" }
+  rule { source_labels = ["__meta_kubernetes_pod_label_app"]
+    target_label = "service" }
+  rule { target_label = "dc"
+    replacement = "{{ inventory_hostname }}" }
+  rule { target_label = "check"
+    replacement = "{{ check }}" }
+  rule { target_label = "module"
+    replacement = "http_200" }
+  rule {
+    action = "labelkeep"
+    regex = "name|address|module|pod|service|dc|check"
+  }
+}
+prometheus.exporter.blackbox "{{ check | replace('-', '_') }}" {
+  config = "{ modules: { http_200: { prober: http, timeout: {{ obs.health_probe_timeout }}, http: { method: GET, valid_status_codes: [200], preferred_ip_protocol: ip4, follow_redirects: false } } } }"
+  targets = discovery.relabel.probe_{{ check | replace('-', '_') }}.output
+}
+prometheus.scrape "probe_{{ check | replace('-', '_') }}" {
+  targets = prometheus.exporter.blackbox.{{ check | replace('-', '_') }}.targets
+  scrape_interval = "{{ obs.health_probe_interval }}"
+  scrape_timeout = "{{ obs.health_probe_timeout }}"
+  forward_to = [prometheus.relabel.probes.receiver]
+}
+{% endfor %}
+prometheus.relabel "probes" {
+  forward_to = [prometheus.remote_write.central.receiver]
+  rule { target_label = "job"
+    replacement = "http-probes" }
+  rule {
+    source_labels = ["__name__"]
+    regex = "probe_success|probe_duration_seconds|probe_http_status_code|up"
+    action = "keep"
+  }
+}
+
+// Both observers independently see both ingress proxies. Keep observer separate from target.
+{% for ingress in groups['ingress'] %}
+prometheus.scrape "ingress_{{ ingress }}" {
+  targets = [{__address__ = "{{ hostvars[ingress].private_ip }}:{{ obs.routing_metrics_port }}", job = "haproxy", observer = "{{ inventory_hostname }}", ingress = "{{ ingress }}"}]
+  scheme = "https"
+  tls_config {
+    ca_file = "/run/soloapp-secrets/data/ca.crt"
+    cert_file = "/run/soloapp-secrets/data/tls.crt"
+    key_file = "/run/soloapp-secrets/data/tls.key"
+    server_name = "ingress-{{ ingress }}"
+  }
+  scrape_interval = "{{ obs.routing_scrape_interval }}"
+  scrape_timeout = "{{ obs.routing_scrape_timeout }}"
+  forward_to = [prometheus.relabel.routing.receiver]
+}
+{% endfor %}
+prometheus.relabel "routing" {
+  forward_to = [prometheus.remote_write.central.receiver]
+  rule {
+    source_labels = ["__name__"]
+    regex = "up|haproxy_server_status|haproxy_server_check_status|haproxy_server_check_code|haproxy_server_check_duration_seconds|haproxy_server_check_failures_total|haproxy_server_check_up_down_total|haproxy_server_check_last_change_seconds|haproxy_server_current_sessions|haproxy_server_sessions_total|haproxy_server_weight|haproxy_server_response_errors_total|haproxy_server_http_responses_total"
+    action = "keep"
+  }
+}
+prometheus.scrape "nlb" {
+  targets = [{__address__ = "127.0.0.1:19092", job = "yc-nlb", observer = "{{ inventory_hostname }}"}]
+  scrape_interval = "{{ obs.routing_scrape_interval }}"
+  scrape_timeout = "{{ obs.routing_scrape_timeout }}"
+  forward_to = [prometheus.remote_write.central.receiver]
+}
+
+// Observe both physical PostgreSQL servers; never use a primary-selecting DSN here.
+{% for site in groups['app_sites'] %}
+prometheus.exporter.postgres "{{ site }}" {
+  data_source_names = ["postgresql://monitor_{{ inventory_hostname }}@{{ hostvars[site].private_ip }}:55432/authdb?application_name=soloapp-monitor&sslmode=verify-full&sslrootcert=/run/soloapp-secrets/data/ca.crt&sslcert=/run/soloapp-secrets/data/tls.crt&sslkey=/run/soloapp-secrets/data/tls.key&connect_timeout=2"]
+  disable_default_metrics = true
+  disable_settings_metrics = true
+  custom_queries_config_path = "/etc/alloy/postgres-queries.yaml"
+}
+discovery.relabel "postgres_{{ site }}" {
+  targets = prometheus.exporter.postgres.{{ site }}.targets
+  rule { target_label = "dc"
+    replacement = "{{ site }}" }
+  rule { target_label = "observer"
+    replacement = "{{ inventory_hostname }}" }
+  rule { target_label = "job"
+    replacement = "postgres" }
+}
+prometheus.scrape "postgres_{{ site }}" {
+  targets = discovery.relabel.postgres_{{ site }}.output
+  scrape_interval = "{{ obs.postgres_scrape_interval }}"
+  scrape_timeout = "{{ obs.postgres_scrape_timeout }}"
+  forward_to = [prometheus.remote_write.central.receiver]
+}
+{% endfor %}

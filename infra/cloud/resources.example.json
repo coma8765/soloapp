@@ -1,0 +1,51 @@
+{
+  "folder": "REPLACE_WITH_FOLDER",
+  "identities": {
+    "node-yc": "REPLACE_WITH_IDENTITIES_NODE_YC",
+    "node-home": "REPLACE_WITH_IDENTITIES_NODE_HOME",
+    "node-edge": "REPLACE_WITH_IDENTITIES_NODE_EDGE",
+    "auth-yc": "REPLACE_WITH_IDENTITIES_AUTH_YC",
+    "auth-home": "REPLACE_WITH_IDENTITIES_AUTH_HOME",
+    "cert-issuer": "REPLACE_WITH_IDENTITIES_CERT_ISSUER",
+    "whoami-yc": "REPLACE_WITH_IDENTITIES_WHOAMI_YC",
+    "whoami-home": "REPLACE_WITH_IDENTITIES_WHOAMI_HOME",
+    "nginx-yc": "REPLACE_WITH_IDENTITIES_NGINX_YC",
+    "nginx-home": "REPLACE_WITH_IDENTITIES_NGINX_HOME",
+    "observability-yc": "REPLACE_WITH_IDENTITIES_OBSERVABILITY_YC",
+    "observability-home": "REPLACE_WITH_IDENTITIES_OBSERVABILITY_HOME",
+    "observability-gateway": "REPLACE_WITH_IDENTITIES_OBSERVABILITY_GATEWAY",
+    "grafana-admin": "REPLACE_WITH_IDENTITIES_GRAFANA_ADMIN",
+    "observability-gateway-home": "REPLACE_WITH_IDENTITIES_OBSERVABILITY_GATEWAY_HOME",
+    "grafana-admin-home": "REPLACE_WITH_IDENTITIES_GRAFANA_ADMIN_HOME"
+  },
+  "secrets": {
+    "ca": "REPLACE_WITH_SECRETS_CA",
+    "node-yc": "REPLACE_WITH_SECRETS_NODE_YC",
+    "node-home": "REPLACE_WITH_SECRETS_NODE_HOME",
+    "node-edge": "REPLACE_WITH_SECRETS_NODE_EDGE",
+    "auth-yc": "REPLACE_WITH_SECRETS_AUTH_YC",
+    "auth-home": "REPLACE_WITH_SECRETS_AUTH_HOME",
+    "https": "REPLACE_WITH_SECRETS_HTTPS",
+    "ingress-yc": "REPLACE_WITH_SECRETS_INGRESS_YC",
+    "ingress-edge": "REPLACE_WITH_SECRETS_INGRESS_EDGE",
+    "whoami-yc": "REPLACE_WITH_SECRETS_WHOAMI_YC",
+    "whoami-home": "REPLACE_WITH_SECRETS_WHOAMI_HOME",
+    "acme-state": "REPLACE_WITH_SECRETS_ACME_STATE",
+    "nginx-yc": "REPLACE_WITH_SECRETS_NGINX_YC",
+    "nginx-home": "REPLACE_WITH_SECRETS_NGINX_HOME",
+    "observability-yc": "REPLACE_WITH_SECRETS_OBSERVABILITY_YC",
+    "observability-home": "REPLACE_WITH_SECRETS_OBSERVABILITY_HOME",
+    "observability-gateway": "REPLACE_WITH_SECRETS_OBSERVABILITY_GATEWAY",
+    "grafana-admin": "REPLACE_WITH_SECRETS_GRAFANA_ADMIN",
+    "observability-gateway-home": "REPLACE_WITH_SECRETS_OBSERVABILITY_GATEWAY_HOME",
+    "grafana-admin-home": "REPLACE_WITH_SECRETS_GRAFANA_ADMIN_HOME"
+  },
+  "federations": {
+    "yc": "REPLACE_WITH_FEDERATIONS_YC",
+    "home": "REPLACE_WITH_FEDERATIONS_HOME"
+  },
+  "bucket": "REPLACE_WITH_BUCKET",
+  "target_group": "REPLACE_WITH_TARGET_GROUP",
+  "nlb": "REPLACE_WITH_NLB",
+  "public_ip": "192.0.2.100"
+}

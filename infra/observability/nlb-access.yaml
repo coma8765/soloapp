@@ -1,0 +1,21 @@
+# Explicit operator authorization is required before granting this folder-level role.
+- name: Allow existing monitoring identities to observe NLB decisions
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    resources: "{{ lookup('file', playbook_dir ~ '/../cloud/resources.json') | from_json }}"
+  tasks:
+  - name: Add NLB viewer binding (folder is the narrowest supported scope)
+    ansible.builtin.command:
+      argv:
+      - yc
+      - resource-manager
+      - folder
+      - add-access-binding
+      - '{{ resources.folder }}'
+      - --role
+      - load-balancer.viewer
+      - --service-account-id
+      - '{{ resources.identities[item] }}'
+    loop: [observability-yc, observability-home]

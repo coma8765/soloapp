@@ -1,0 +1,960 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "prometheus",
+        "namespace": "observability"
+      },
+      "data": {
+        "prometheus.yaml": {{ lookup('template', project_root ~ '/infra/observability/templates/prometheus.yaml.j2') | to_json }},
+        "rules.yaml": {{ lookup('template', project_root ~ '/infra/observability/templates/rules.yaml.j2') | to_json }}
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "loki",
+        "namespace": "observability"
+      },
+      "data": {
+        "loki.yaml": {{ lookup('template', project_root ~ '/infra/observability/templates/loki.yaml.j2') | to_json }}
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "gateway",
+        "namespace": "observability"
+      },
+      "data": {
+        "nginx.conf": {{ lookup('template', project_root ~ '/infra/observability/templates/gateway.yaml.j2') | to_json }}
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "grafana",
+        "namespace": "observability"
+      },
+      "data": {
+        "grafana.ini": {{ lookup('template', project_root ~ '/infra/observability/templates/grafana.yaml.j2') | to_json }},
+        "datasources.yaml": {{ lookup('template', project_root ~ '/infra/observability/templates/datasources.yaml.j2') | to_json }},
+        "dashboards.yaml": {{ lookup('template', project_root ~ '/infra/observability/templates/dashboards.yaml.j2') | to_json }}
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "grafana-dashboards",
+        "namespace": "observability"
+      },
+      "data": {
+{% for dashboard in obs.dashboard_files %}
+        "{{ dashboard }}.json": {{ lookup('file', project_root ~ '/infra/observability/dashboards/' ~ dashboard ~ '.json') | to_json }}{% if not loop.last %},{% endif %}
+{% endfor %}
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "prometheus",
+        "namespace": "observability"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "storageClassName": "local-path",
+        "resources": {
+          "requests": {
+            "storage": "{{ obs.prometheus_storage }}"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "prometheus",
+        "namespace": "observability"
+      },
+      "spec": {
+        "selector": {
+          "app": "prometheus"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 9090,
+            "targetPort": 9090
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "loki",
+        "namespace": "observability"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "storageClassName": "local-path",
+        "resources": {
+          "requests": {
+            "storage": "{{ obs.loki_storage }}"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "loki",
+        "namespace": "observability"
+      },
+      "spec": {
+        "selector": {
+          "app": "loki"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 3100,
+            "targetPort": 3100
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "grafana",
+        "namespace": "observability"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "storageClassName": "local-path",
+        "resources": {
+          "requests": {
+            "storage": "{{ obs.grafana_storage }}"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "grafana",
+        "namespace": "observability"
+      },
+      "spec": {
+        "selector": {
+          "app": "grafana"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 3000,
+            "targetPort": 3000
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "gateway",
+        "namespace": "observability"
+      },
+      "spec": {
+        "selector": {
+          "app": "gateway"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 19091,
+            "targetPort": 19091,
+            "nodePort": {{ obs.gateway_node_port }}
+          }
+        ],
+        "type": "NodePort",
+        "externalTrafficPolicy": "Local"
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "prometheus",
+        "namespace": "observability"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "prometheus"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "prometheus"
+            },
+            "annotations": {
+              "checksum/config": "{{ (lookup('template', project_root ~ '/infra/observability/templates/prometheus.yaml.j2') ~ lookup('template', project_root ~ '/infra/observability/templates/rules.yaml.j2')) | hash('sha256') }}"
+            }
+          },
+          "spec": {
+            "automountServiceAccountToken": false,
+            "securityContext": {
+              "runAsNonRoot": true,
+              "runAsUser": 10001,
+              "runAsGroup": 10001,
+              "fsGroup": 10001,
+              "seccompProfile": {
+                "type": "RuntimeDefault"
+              }
+            },
+            "containers": [
+              {
+                "name": "prometheus",
+                "image": "{{ obs.images.prometheus }}",
+                "ports": [
+                  {
+                    "containerPort": 9090
+                  }
+                ],
+                "securityContext": {
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "resources": {{ obs.resources['prometheus'] | to_json }},
+                "args": [
+                  "--config.file=/etc/prometheus/prometheus.yaml",
+                  "--storage.tsdb.path=/prometheus",
+                  "--storage.tsdb.retention.time={{ obs.metrics_retention }}",
+                  "--storage.tsdb.retention.size={{ obs.metrics_retention_size }}",
+                  "--web.enable-remote-write-receiver"
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "config",
+                    "mountPath": "/etc/prometheus",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "data",
+                    "mountPath": "/prometheus",
+                    "readOnly": false
+                  }
+                ],
+                "readinessProbe": {
+                  "httpGet": {
+                    "path": "/-/ready",
+                    "port": 9090
+                  },
+                  "periodSeconds": 5,
+                  "timeoutSeconds": 2
+                },
+                "startupProbe": {
+                  "httpGet": {
+                    "path": "/-/ready",
+                    "port": 9090
+                  },
+                  "periodSeconds": 3,
+                  "failureThreshold": 60
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "config",
+                "configMap": {
+                  "name": "prometheus"
+                }
+              },
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "prometheus"
+                }
+              }
+            ],
+            "terminationGracePeriodSeconds": 45
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "loki",
+        "namespace": "observability"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "loki"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "loki"
+            },
+            "annotations": {
+              "checksum/config": "{{ lookup('template', project_root ~ '/infra/observability/templates/loki.yaml.j2') | hash('sha256') }}"
+            }
+          },
+          "spec": {
+            "automountServiceAccountToken": false,
+            "securityContext": {
+              "runAsNonRoot": true,
+              "runAsUser": 10001,
+              "runAsGroup": 10001,
+              "fsGroup": 10001,
+              "seccompProfile": {
+                "type": "RuntimeDefault"
+              }
+            },
+            "containers": [
+              {
+                "name": "loki",
+                "image": "{{ obs.images.loki }}",
+                "ports": [
+                  {
+                    "containerPort": 3100
+                  }
+                ],
+                "securityContext": {
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "resources": {{ obs.resources['loki'] | to_json }},
+                "args": [
+                  "-config.file=/etc/loki/loki.yaml"
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "config",
+                    "mountPath": "/etc/loki",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "data",
+                    "mountPath": "/var/loki",
+                    "readOnly": false
+                  },
+                  {
+                    "name": "tmp",
+                    "mountPath": "/tmp",
+                    "readOnly": false
+                  }
+                ],
+                "readinessProbe": {
+                  "httpGet": {
+                    "path": "/ready",
+                    "port": 3100
+                  },
+                  "periodSeconds": 5,
+                  "timeoutSeconds": 2
+                },
+                "startupProbe": {
+                  "httpGet": {
+                    "path": "/ready",
+                    "port": 3100
+                  },
+                  "periodSeconds": 3,
+                  "failureThreshold": 60
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "config",
+                "configMap": {
+                  "name": "loki"
+                }
+              },
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "loki"
+                }
+              },
+              {
+                "name": "tmp",
+                "emptyDir": {}
+              }
+            ],
+            "terminationGracePeriodSeconds": 45
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "grafana",
+        "namespace": "observability"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "grafana"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "grafana"
+            },
+            "annotations": {
+              "checksum/config": "{{ (lookup('template', project_root ~ '/infra/observability/templates/grafana.yaml.j2') ~ lookup('template', project_root ~ '/infra/observability/templates/datasources.yaml.j2') ~ lookup('template', project_root ~ '/infra/observability/templates/dashboards.yaml.j2')) | hash('sha256') }}"
+            }
+          },
+          "spec": {
+            "automountServiceAccountToken": false,
+            "securityContext": {
+              "runAsNonRoot": true,
+              "runAsUser": 10001,
+              "runAsGroup": 10001,
+              "fsGroup": 10001,
+              "seccompProfile": {
+                "type": "RuntimeDefault"
+              }
+            },
+            "containers": [
+              {
+                "name": "grafana",
+                "image": "{{ obs.images.grafana }}",
+                "ports": [
+                  {
+                    "containerPort": 3000
+                  }
+                ],
+                "securityContext": {
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "resources": {{ obs.resources['grafana'] | to_json }},
+                "env": [
+                  {
+                    "name": "GF_PATHS_CONFIG",
+                    "value": "/etc/grafana/grafana.ini"
+                  },
+                  {
+                    "name": "GF_PLUGINS_PREINSTALL_DISABLED",
+                    "value": "true"
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "config",
+                    "mountPath": "/etc/grafana/grafana.ini",
+                    "readOnly": true,
+                    "subPath": "grafana.ini"
+                  },
+                  {
+                    "name": "config",
+                    "mountPath": "/etc/grafana/provisioning/datasources/datasources.yaml",
+                    "readOnly": true,
+                    "subPath": "datasources.yaml"
+                  },
+                  {
+                    "name": "config",
+                    "mountPath": "/etc/grafana/provisioning/dashboards/dashboards.yaml",
+                    "readOnly": true,
+                    "subPath": "dashboards.yaml"
+                  },
+                  {
+                    "name": "dashboard",
+                    "mountPath": "/var/lib/grafana/dashboards",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "data",
+                    "mountPath": "/var/lib/grafana",
+                    "readOnly": false
+                  },
+                  {
+                    "name": "tmp",
+                    "mountPath": "/tmp",
+                    "readOnly": false
+                  },
+                  {
+                    "name": "secrets",
+                    "mountPath": "/run/soloapp-secrets",
+                    "readOnly": true
+                  }
+                ],
+                "readinessProbe": {
+                  "httpGet": {
+                    "path": "/api/health",
+                    "port": 3000
+                  },
+                  "periodSeconds": 5,
+                  "timeoutSeconds": 2
+                },
+                "startupProbe": {
+                  "httpGet": {
+                    "path": "/api/health",
+                    "port": 3000
+                  },
+                  "periodSeconds": 3,
+                  "failureThreshold": 60
+                }
+              },
+              {
+                "name": "refresh-secrets",
+                "image": "{{ secrets_image }}",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "python3",
+                  "/usr/local/bin/secret-fetch.py"
+                ],
+                "env": [
+                  {
+                    "name": "TOKEN_FILE",
+                    "value": "/run/identity/token"
+                  },
+                  {
+                    "name": "SERVICE_ACCOUNT_ID",
+                    "value": "{{ cloud.identities['grafana-admin' ~ ('-home' if inventory_hostname == 'home' else '')] }}"
+                  },
+                  {
+                    "name": "SECRET_IDS",
+                    "value": "{{ cloud.secrets['grafana-admin' ~ ('-home' if inventory_hostname == 'home' else '')] }}"
+                  },
+                  {
+                    "name": "SECRET_DIR",
+                    "value": "/run/soloapp-secrets/data"
+                  },
+                  {
+                    "name": "LOOP",
+                    "value": "1"
+                  }
+                ],
+                "securityContext": {
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "resources": {{ obs.resources['secrets'] | to_json }},
+                "volumeMounts": [
+                  {
+                    "name": "identity",
+                    "mountPath": "/run/identity",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "secrets",
+                    "mountPath": "/run/soloapp-secrets"
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "config",
+                "configMap": {
+                  "name": "grafana"
+                }
+              },
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "grafana"
+                }
+              },
+              {
+                "name": "dashboard",
+                "configMap": {
+                  "name": "grafana-dashboards"
+                }
+              },
+              {
+                "name": "tmp",
+                "emptyDir": {}
+              },
+              {
+                "name": "secrets",
+                "emptyDir": {
+                  "medium": "Memory",
+                  "sizeLimit": "4Mi"
+                }
+              },
+              {
+                "name": "identity",
+                "projected": {
+                  "sources": [
+                    {
+                      "serviceAccountToken": {
+                        "path": "token",
+                        "expirationSeconds": 600,
+                        "audience": "soloapp-lockbox"
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "terminationGracePeriodSeconds": 45,
+            "serviceAccountName": "grafana",
+            "initContainers": [
+              {
+                "name": "fetch-secrets",
+                "image": "{{ secrets_image }}",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "python3",
+                  "/usr/local/bin/secret-fetch.py"
+                ],
+                "env": [
+                  {
+                    "name": "TOKEN_FILE",
+                    "value": "/run/identity/token"
+                  },
+                  {
+                    "name": "SERVICE_ACCOUNT_ID",
+                    "value": "{{ cloud.identities['grafana-admin' ~ ('-home' if inventory_hostname == 'home' else '')] }}"
+                  },
+                  {
+                    "name": "SECRET_IDS",
+                    "value": "{{ cloud.secrets['grafana-admin' ~ ('-home' if inventory_hostname == 'home' else '')] }}"
+                  },
+                  {
+                    "name": "SECRET_DIR",
+                    "value": "/run/soloapp-secrets/data"
+                  }
+                ],
+                "securityContext": {
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "resources": {{ obs.resources['secrets'] | to_json }},
+                "volumeMounts": [
+                  {
+                    "name": "identity",
+                    "mountPath": "/run/identity",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "secrets",
+                    "mountPath": "/run/soloapp-secrets"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "gateway",
+        "namespace": "observability"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "gateway"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "gateway"
+            },
+            "annotations": {
+              "checksum/config": "{{ lookup('template', project_root ~ '/infra/observability/templates/gateway.yaml.j2') | hash('sha256') }}"
+            }
+          },
+          "spec": {
+            "automountServiceAccountToken": false,
+            "securityContext": {
+              "runAsNonRoot": true,
+              "runAsUser": 10001,
+              "runAsGroup": 10001,
+              "fsGroup": 10001,
+              "seccompProfile": {
+                "type": "RuntimeDefault"
+              }
+            },
+            "containers": [
+              {
+                "name": "gateway",
+                "image": "nginx:1.28-alpine",
+                "ports": [
+                  {
+                    "containerPort": 19091
+                  }
+                ],
+                "securityContext": {
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "resources": {{ obs.resources['gateway'] | to_json }},
+                "command": [
+                  "nginx",
+                  "-g",
+                  "daemon off;"
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "config",
+                    "mountPath": "/etc/nginx/nginx.conf",
+                    "readOnly": true,
+                    "subPath": "nginx.conf"
+                  },
+                  {
+                    "name": "tmp",
+                    "mountPath": "/tmp",
+                    "readOnly": false
+                  },
+                  {
+                    "name": "secrets",
+                    "mountPath": "/run/soloapp-secrets",
+                    "readOnly": true
+                  }
+                ],
+                "readinessProbe": {
+                  "httpGet": {
+                    "path": "/healthz",
+                    "port": 19092
+                  },
+                  "periodSeconds": 5,
+                  "timeoutSeconds": 2
+                },
+                "startupProbe": {
+                  "httpGet": {
+                    "path": "/healthz",
+                    "port": 19092
+                  },
+                  "periodSeconds": 3,
+                  "failureThreshold": 60
+                }
+              },
+              {
+                "name": "refresh-secrets",
+                "image": "{{ secrets_image }}",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "python3",
+                  "/usr/local/bin/secret-fetch.py"
+                ],
+                "env": [
+                  {
+                    "name": "TOKEN_FILE",
+                    "value": "/run/identity/token"
+                  },
+                  {
+                    "name": "SERVICE_ACCOUNT_ID",
+                    "value": "{{ cloud.identities['observability-gateway' ~ ('-home' if inventory_hostname == 'home' else '')] }}"
+                  },
+                  {
+                    "name": "SECRET_IDS",
+                    "value": "{{ cloud.secrets['observability-gateway' ~ ('-home' if inventory_hostname == 'home' else '')] }}"
+                  },
+                  {
+                    "name": "SECRET_DIR",
+                    "value": "/run/soloapp-secrets/data"
+                  },
+                  {
+                    "name": "LOOP",
+                    "value": "1"
+                  },
+                  {
+                    "name": "RELOAD_NGINX",
+                    "value": "1"
+                  }
+                ],
+                "securityContext": {
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "resources": {{ obs.resources['secrets'] | to_json }},
+                "volumeMounts": [
+                  {
+                    "name": "identity",
+                    "mountPath": "/run/identity",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "secrets",
+                    "mountPath": "/run/soloapp-secrets"
+                  },
+                  {
+                    "name": "tmp",
+                    "mountPath": "/tmp",
+                    "readOnly": false
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "config",
+                "configMap": {
+                  "name": "gateway"
+                }
+              },
+              {
+                "name": "tmp",
+                "emptyDir": {}
+              },
+              {
+                "name": "secrets",
+                "emptyDir": {
+                  "medium": "Memory",
+                  "sizeLimit": "4Mi"
+                }
+              },
+              {
+                "name": "identity",
+                "projected": {
+                  "sources": [
+                    {
+                      "serviceAccountToken": {
+                        "path": "token",
+                        "expirationSeconds": 600,
+                        "audience": "soloapp-lockbox"
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "terminationGracePeriodSeconds": 45,
+            "serviceAccountName": "gateway",
+            "initContainers": [
+              {
+                "name": "fetch-secrets",
+                "image": "{{ secrets_image }}",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "python3",
+                  "/usr/local/bin/secret-fetch.py"
+                ],
+                "env": [
+                  {
+                    "name": "TOKEN_FILE",
+                    "value": "/run/identity/token"
+                  },
+                  {
+                    "name": "SERVICE_ACCOUNT_ID",
+                    "value": "{{ cloud.identities['observability-gateway' ~ ('-home' if inventory_hostname == 'home' else '')] }}"
+                  },
+                  {
+                    "name": "SECRET_IDS",
+                    "value": "{{ cloud.secrets['observability-gateway' ~ ('-home' if inventory_hostname == 'home' else '')] }}"
+                  },
+                  {
+                    "name": "SECRET_DIR",
+                    "value": "/run/soloapp-secrets/data"
+                  }
+                ],
+                "securityContext": {
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "resources": {{ obs.resources['secrets'] | to_json }},
+                "volumeMounts": [
+                  {
+                    "name": "identity",
+                    "mountPath": "/run/identity",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "secrets",
+                    "mountPath": "/run/soloapp-secrets"
+                  }
+                ]
+              }
+            ],
+            "shareProcessNamespace": true
+          }
+        }
+      }
+    }
+  ]
+}

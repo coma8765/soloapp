@@ -1,0 +1,16 @@
+- name: Validate rendered component against Kubernetes API
+  ansible.builtin.command:
+    argv: [k3s, kubectl, apply, --dry-run=server, -f, '-']
+    stdin: "{{ lookup('template', manifest_source) }}"
+  changed_when: false
+  check_mode: false
+- name: Render component manifest
+  ansible.builtin.template:
+    src: "{{ manifest_source }}"
+    dest: "{{ remote_root }}/{{ manifest_name }}.yaml"
+    mode: '0600'
+- name: Apply component manifest
+  ansible.builtin.command:
+    argv: [k3s, kubectl, apply, -f, "{{ remote_root }}/{{ manifest_name }}.yaml"]
+  register: manifest_apply
+  changed_when: "'configured' in manifest_apply.stdout or 'created' in manifest_apply.stdout"

@@ -1,0 +1,54 @@
+- name: Maintain shared host functionality
+  hosts: all
+  serial: 1
+  any_errors_fatal: true
+  gather_facts: false
+  tasks:
+  - name: Maintain network policy
+    ansible.builtin.import_tasks: ../network/tasks/main.yaml
+    tags:
+    - network
+  - name: Maintain scoped secret delivery
+    ansible.builtin.import_tasks: ../secrets/tasks/main.yaml
+    tags:
+    - secrets
+  - name: Maintain PostgreSQL access policy
+    ansible.builtin.import_tasks: ../postgres/tasks/main.yaml
+    tags:
+    - postgres
+  become: true
+- name: Maintain independent Kubernetes clusters
+  hosts: app_sites
+  serial: 1
+  gather_facts: false
+  tasks:
+  - name: Maintain k3s
+    ansible.builtin.import_tasks: ../kubernetes/tasks/main.yaml
+    tags:
+    - kubernetes
+  - name: Maintain internal certificate rotation
+    ansible.builtin.import_tasks: ../certificates/tasks/main.yaml
+    tags:
+    - certificates
+  become: true
+- ansible.builtin.import_playbook: apps.yaml
+- name: Maintain ingress
+  hosts: ingress
+  serial: 1
+  gather_facts: false
+  tasks:
+  - name: Maintain ingress
+    ansible.builtin.import_tasks: ../ingress/tasks/main.yaml
+    tags:
+    - ingress
+  become: true
+- name: Maintain HTTPS renewal
+  hosts: edge
+  gather_facts: false
+  tasks:
+  - name: Maintain ACME
+    ansible.builtin.import_tasks: ../certificates/tasks/acme.yaml
+    tags:
+    - certificates
+    - https
+  become: true

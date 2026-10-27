@@ -1,0 +1,182 @@
+apiVersion: v1
+kind: List
+items:
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: auth-secrets
+    namespace: soloapp
+  automountServiceAccountToken: false
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: auth
+    namespace: soloapp
+  spec:
+    replicas: {{ auth_config.replicas }}
+    minReadySeconds: {{ auth_config.min_ready_seconds }}
+    progressDeadlineSeconds: 300
+    strategy:
+      type: RollingUpdate
+      rollingUpdate: {{ auth_config.rolling_update | to_json }}
+    selector:
+      matchLabels:
+        app: auth
+    template:
+      metadata:
+        labels:
+          app: auth
+          soloapp.io/backend: auth
+      spec:
+        dnsPolicy: ClusterFirst
+        automountServiceAccountToken: false
+        terminationGracePeriodSeconds: {{ auth_config.termination_grace_seconds }}
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10001
+          runAsGroup: 10001
+          fsGroup: 10001
+        containers:
+        - name: auth
+          image: "{{ auth_config.image }}"
+          imagePullPolicy: {{ auth_config.image_pull_policy }}
+          env:
+          - name: HEALTH_ERROR_THRESHOLD
+            value: '{{ auth_config.health.error_threshold }}'
+          - name: HEALTH_WINDOW_SECONDS
+            value: '{{ auth_config.health.window_seconds }}'
+          - name: HEALTH_COOLDOWN_SECONDS
+            value: '{{ auth_config.health.cooldown_seconds }}'
+          - name: DB_POOL_MAX_CONNECTIONS
+            value: '{{ auth_config.db_pool.max_connections }}'
+          - name: DB_POOL_MAX_LIFETIME_SECONDS
+            value: '{{ auth_config.db_pool.max_lifetime_seconds }}'
+          - name: DB_TCP_USER_TIMEOUT_MS
+            value: '{{ auth_config.db_pool.tcp_user_timeout_ms }}'
+          - name: DATABASE_URL_FILE
+            value: /run/soloapp-secrets/data/database-url
+          - name: HMAC_KEY_FILE
+            value: /run/soloapp-secrets/data/userid-hmac
+          - name: PORT
+            value: '{{ auth_config.port }}'
+          - name: LISTEN_ADDRESS
+            value: 0.0.0.0
+          volumeMounts:
+          - name: secrets
+            mountPath: /run/soloapp-secrets
+            readOnly: true
+          ports: [{name: http, containerPort: {{ auth_config.port }}}]
+          resources: {{ auth_config.resources | to_json }}
+          lifecycle:
+            preStop:
+              exec: {command: [/bin/sleep, '20']}
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: {{ auth_config.probes.startup.period_seconds }}
+            timeoutSeconds: {{ auth_config.probes.startup.timeout_seconds }}
+            failureThreshold: {{ auth_config.probes.startup.failure_threshold }}
+          readinessProbe:
+            httpGet: {path: /health/ready, port: http}
+            periodSeconds: {{ auth_config.probes.readiness.period_seconds }}
+            timeoutSeconds: {{ auth_config.probes.readiness.timeout_seconds }}
+            failureThreshold: {{ auth_config.probes.readiness.failure_threshold }}
+            successThreshold: {{ auth_config.probes.readiness.success_threshold }}
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: {{ auth_config.probes.liveness.period_seconds }}
+            timeoutSeconds: {{ auth_config.probes.liveness.timeout_seconds }}
+            failureThreshold: {{ auth_config.probes.liveness.failure_threshold }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+              - ALL
+        - name: refresh-secrets
+          image: "{{ secrets_image }}"
+          imagePullPolicy: Never
+          command:
+          - python3
+          - /usr/local/bin/secret-fetch.py
+          env:
+          - name: TOKEN_FILE
+            value: /run/identity/token
+          - name: SERVICE_ACCOUNT_ID
+            value: "{{ cloud.identities['auth-' ~ inventory_hostname] }}"
+          - name: SECRET_IDS
+            value: "{{ cloud.secrets['auth-' ~ inventory_hostname] }}"
+          - name: SECRET_DIR
+            value: /run/soloapp-secrets/data
+          - name: DB_USER
+            value: "auth_{{ inventory_hostname }}"
+          - name: LOOP
+            value: '1'
+          volumeMounts:
+          - name: identity
+            mountPath: /run/identity
+            readOnly: true
+          - name: secrets
+            mountPath: /run/soloapp-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 24Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+        volumes:
+        - name: secrets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 4Mi
+        - name: identity
+          projected:
+            sources:
+            - serviceAccountToken:
+                path: token
+                expirationSeconds: 600
+                audience: soloapp-lockbox
+        serviceAccountName: auth-secrets
+        initContainers:
+        - name: fetch-secrets
+          image: "{{ secrets_image }}"
+          imagePullPolicy: Never
+          command:
+          - python3
+          - /usr/local/bin/secret-fetch.py
+          env:
+          - name: TOKEN_FILE
+            value: /run/identity/token
+          - name: SERVICE_ACCOUNT_ID
+            value: "{{ cloud.identities['auth-' ~ inventory_hostname] }}"
+          - name: SECRET_IDS
+            value: "{{ cloud.secrets['auth-' ~ inventory_hostname] }}"
+          - name: SECRET_DIR
+            value: /run/soloapp-secrets/data
+          - name: DB_USER
+            value: "auth_{{ inventory_hostname }}"
+          volumeMounts:
+          - name: identity
+            mountPath: /run/identity
+            readOnly: true
+          - name: secrets
+            mountPath: /run/soloapp-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+              - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 24Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi

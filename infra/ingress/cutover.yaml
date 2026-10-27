@@ -1,0 +1,8 @@
+- name: Switch ingress to ready Kubernetes Services
+  hosts: ingress
+  serial: 1
+  any_errors_fatal: true
+  become: true
+  gather_facts: false
+  tasks:
+  - ansible.builtin.import_tasks: tasks/main.yaml

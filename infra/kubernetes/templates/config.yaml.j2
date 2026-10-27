@@ -1,0 +1,14 @@
+node-name: solo-{{ inventory_hostname }}
+node-ip: {{ private_ip }}
+advertise-address: {{ private_ip }}
+flannel-iface: wg-solo
+cluster-cidr: 10.{{ cluster_octet }}.0.0/16
+service-cidr: 10.{{ cluster_octet | int + 1 }}.0.0/16
+cluster-dns: 10.{{ cluster_octet | int + 1 }}.0.10
+write-kubeconfig-mode: "0600"
+egress-selector-mode: disabled
+secrets-encryption: true
+disable: [traefik, servicelb, metrics-server]
+kubelet-arg:
+  - "address={{ private_ip }}"
+  - "fail-swap-on=false"

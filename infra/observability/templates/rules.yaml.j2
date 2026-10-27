@@ -1,0 +1,25 @@
+groups:
+- name: soloapp
+  rules:
+  - alert: ServiceReplicasUnavailable
+    expr: kube_deployment_status_replicas_available{namespace="soloapp"} < kube_deployment_spec_replicas{namespace="soloapp"}
+    for: 2m
+    labels: {severity: warning}
+    annotations: {summary: 'Service has fewer available replicas than configured'}
+  - alert: HighHttpErrorRate
+    expr: sum by (dc, route) (rate(soloapp_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum by (dc, route) (rate(soloapp_http_requests_total[5m])), 0.01) > 0.05
+    for: 2m
+    labels: {severity: warning}
+    annotations: {summary: 'HTTP 5xx rate above 5%'}
+  - alert: HighHttpLatency
+    expr: histogram_quantile(0.95, sum by (le, dc, route) (rate(soloapp_http_request_duration_seconds_bucket[5m]))) > 1
+    for: 5m
+    labels: {severity: warning}
+    annotations: {summary: 'HTTP p95 exceeds one second'}
+{% for site in groups['app_sites'] %}
+  - alert: MonitoringAgentMissing
+    expr: absent_over_time(up{job="alloy",dc="{{ site }}"}[1m])
+    for: 30s
+    labels: {severity: warning, dc: '{{ site }}'}
+    annotations: {summary: 'No agent samples from data center for over one minute'}
+{% endfor %}

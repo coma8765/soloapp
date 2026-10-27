@@ -1,0 +1,13 @@
+[Unit]
+After=wg-quick@wg-solo.service
+Requires=wg-quick@wg-solo.service
+[Service]
+User=10003
+Group=10003
+ExecStart=/usr/bin/python3 -m http.server 19090 --bind 10.77.26.13 --directory /var/lib/solo-acme
+Restart=always
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+[Install]
+WantedBy=multi-user.target

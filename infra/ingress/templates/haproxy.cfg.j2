@@ -1,0 +1,72 @@
+global
+  log stdout format raw local0
+  maxconn 1024
+  ssl-default-bind-options ssl-min-ver TLSv1.2
+  ssl-default-server-options ssl-min-ver TLSv1.2
+defaults
+  log global
+  mode http
+  option httplog
+  timeout connect 2s
+  timeout client 20s
+  timeout server 20s
+  timeout check {{ ingress_ready_timeout_seconds | default(4) }}s
+  retries 0
+frontend http
+  bind :8080
+  acl acme path_beg /.well-known/acme-challenge/
+  acl ready path /healthz
+{% if ingress_metrics_drain | default(false) %}
+  http-request return status 503 content-type text/plain string maintenance if ready
+{% endif %}
+  http-request return status 200 content-type text/plain string ready if ready { nbsrv(auth_sites) gt 0 }
+  # Keep the public entry point during DB promotion, but exclude a WG-isolated ingress.
+  http-request return status 200 content-type text/plain string ready if ready { nbsrv(grafana_sites) gt 0 } { nbsrv(witness_reachability) gt 0 }
+  http-request return status 503 content-type text/plain string unavailable if ready
+  http-request redirect scheme https code 308 unless acme
+  use_backend acme_webroot if acme
+frontend https
+  bind :8443 ssl crt /run/soloapp-ingress/https.pem
+  http-request set-header X-Forwarded-Proto https
+  http-request set-header X-Forwarded-For %[src]
+  http-response set-header Strict-Transport-Security "max-age=31536000"
+  use_backend grafana_sites if { path_beg /grafana }
+  default_backend auth_sites
+backend auth_sites
+  balance roundrobin
+  option httpchk
+  http-check send meth GET uri /ready ver HTTP/1.1 hdr Host {{ public_domain }}
+  http-check expect status 200
+  default-server inter {{ (ha | default(lookup('file', project_root ~ '/infra/ha/profile.json') | from_json)).haproxy.interval_seconds }}s fall 2 rise 1
+{% for site in groups['app_sites'] %}
+  server {{ site }} {{ hostvars[site].private_ip }}:{{ hostvars[site].nginx_config.node_port }} ssl verify required ca-file /run/soloapp-ingress/ca.crt crt /run/soloapp-ingress/client.pem verifyhost nginx-{{ site }} check
+{% endfor %}
+backend acme_webroot
+  server edge 10.77.26.13:19090
+
+# Dedicated readiness: Grafana routing does not depend on PostgreSQL readiness.
+backend grafana_sites
+  balance source
+  option httpchk
+  http-check send meth GET uri /grafana/api/health ver HTTP/1.1 hdr Host {{ public_domain }}
+  http-check expect status 200
+  default-server inter 1s fall 2 rise 1
+{% for site in groups['app_sites'] %}
+  server {{ site }} {{ hostvars[site].private_ip }}:{{ hostvars[site].nginx_config.node_port }} ssl verify required ca-file /run/soloapp-ingress/ca.crt crt /run/soloapp-ingress/client.pem verifyhost nginx-{{ site }} check{{ ' backup' if not loop.first else '' }}
+{% endfor %}
+
+# Network reachability via the existing private ACME listener on the third site.
+# This does not grant permission to promote PostgreSQL or bypass its fencing.
+backend witness_reachability
+  mode tcp
+  option tcp-check
+  timeout check 1s
+  server witness {{ hostvars['edge'].private_ip }}:{{ ingress_witness_port | default(19090) }} check inter 1s fall 2 rise 1
+
+# Read-only native exporter. Private WG publication plus authenticated agent identities.
+frontend metrics
+  bind :{{ obs.routing_metrics_port }} ssl crt /run/soloapp-ingress/client.pem ca-file /run/soloapp-ingress/ca.crt verify required
+  no log
+  http-request deny deny_status 403 unless { ssl_c_s_dn(CN) -m str observability-yc observability-home }
+  http-request use-service prometheus-exporter if { path /metrics }
+  http-request deny deny_status 404

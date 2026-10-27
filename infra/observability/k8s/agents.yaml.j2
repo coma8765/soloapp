@@ -1,0 +1,424 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "alloy",
+        "namespace": "observability"
+      },
+      "data": {
+        "postgres-queries.yaml": {{ lookup('file', project_root ~ '/infra/observability/files/postgres-queries.yaml') | to_json }},
+        "nlb-exporter.py": {{ lookup('file', project_root ~ '/infra/observability/files/nlb-exporter.py') | to_json }},
+        "config.alloy": {{ lookup('template', project_root ~ '/infra/observability/templates/alloy.alloy.j2') | to_json }}
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "alloy",
+        "namespace": "observability"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "storageClassName": "local-path",
+        "resources": {
+          "requests": {
+            "storage": "{{ obs.agent_storage }}"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "alloy",
+        "namespace": "observability"
+      },
+      "spec": {
+        "selector": {
+          "app": "alloy"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 12345,
+            "targetPort": 12345
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "kube-state-metrics",
+        "namespace": "observability"
+      },
+      "spec": {
+        "selector": {
+          "app": "kube-state-metrics"
+        },
+        "ports": [
+          {
+            "name": "http",
+            "port": 8080,
+            "targetPort": 8080
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "kube-state-metrics",
+        "namespace": "observability"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "kube-state-metrics"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "kube-state-metrics"
+            }
+          },
+          "spec": {
+            "automountServiceAccountToken": true,
+            "securityContext": {
+              "runAsNonRoot": true,
+              "runAsUser": 10001,
+              "runAsGroup": 10001,
+              "fsGroup": 10001,
+              "seccompProfile": {
+                "type": "RuntimeDefault"
+              }
+            },
+            "containers": [
+              {
+                "name": "kube-state-metrics",
+                "image": "{{ obs.images.kube_state_metrics }}",
+                "ports": [
+                  {
+                    "containerPort": 8080
+                  }
+                ],
+                "securityContext": {
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "resources": {{ obs.resources['kube-state-metrics'] | to_json }},
+                "args": [
+                  "--resources=pods,nodes,deployments,replicasets,endpointslices",
+                  "--namespaces=soloapp",
+                  "--metric-labels-allowlist=pods=[app],endpointslices=[kubernetes.io/service-name]"
+                ],
+                "readinessProbe": {
+                  "httpGet": {
+                    "path": "/healthz",
+                    "port": 8080
+                  },
+                  "periodSeconds": 5,
+                  "timeoutSeconds": 2
+                },
+                "startupProbe": {
+                  "httpGet": {
+                    "path": "/healthz",
+                    "port": 8080
+                  },
+                  "periodSeconds": 3,
+                  "failureThreshold": 60
+                }
+              }
+            ],
+            "volumes": [],
+            "terminationGracePeriodSeconds": 45,
+            "serviceAccountName": "kube-state-metrics"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "alloy",
+        "namespace": "observability"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "alloy"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "alloy"
+            },
+            "annotations": {
+              "checksum/postgres-queries": "{{ lookup('file', project_root ~ '/infra/observability/files/postgres-queries.yaml') | hash('sha256') }}",
+              "checksum/nlb-exporter": "{{ lookup('file', project_root ~ '/infra/observability/files/nlb-exporter.py') | hash('sha256') }}",
+              "checksum/config": "{{ lookup('template', project_root ~ '/infra/observability/templates/alloy.alloy.j2') | hash('sha256') }}"
+            }
+          },
+          "spec": {
+            "automountServiceAccountToken": true,
+            "securityContext": {
+              "runAsNonRoot": true,
+              "runAsUser": 10001,
+              "runAsGroup": 10001,
+              "fsGroup": 10001,
+              "seccompProfile": {
+                "type": "RuntimeDefault"
+              }
+            },
+            "containers": [
+              {
+                "name": "alloy",
+                "image": "{{ obs.images.alloy }}",
+                "ports": [
+                  {
+                    "containerPort": 12345
+                  }
+                ],
+                "securityContext": {
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "resources": {{ obs.resources['alloy'] | to_json }},
+                "args": [
+                  "run",
+                  "--server.http.listen-addr=0.0.0.0:12345",
+                  "--storage.path=/var/lib/alloy",
+                  "/etc/alloy/config.alloy"
+                ],
+                "readinessProbe": {
+                  "httpGet": {
+                    "path": "/-/ready",
+                    "port": 12345
+                  },
+                  "periodSeconds": 5,
+                  "timeoutSeconds": 2
+                },
+                "startupProbe": {
+                  "httpGet": {
+                    "path": "/-/ready",
+                    "port": 12345
+                  },
+                  "periodSeconds": 3,
+                  "failureThreshold": 60
+                },
+                "volumeMounts": [
+                  {
+                    "name": "config",
+                    "mountPath": "/etc/alloy",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "data",
+                    "mountPath": "/var/lib/alloy",
+                    "readOnly": false
+                  },
+                  {
+                    "name": "secrets",
+                    "mountPath": "/run/soloapp-secrets",
+                    "readOnly": true
+                  }
+                ]
+              },
+              {
+                "name": "nlb-exporter",
+                "image": "{{ secrets_image }}",
+                "imagePullPolicy": "Never",
+                "command": ["python3", "/etc/alloy/nlb-exporter.py"],
+                "env": [
+                  {"name":"TOKEN_FILE","value":"/run/identity/token"},
+                  {"name":"SERVICE_ACCOUNT_ID","value":"{{ cloud.identities['observability-' ~ inventory_hostname] }}"},
+                  {"name":"NLB_ID","value":"{{ cloud.nlb }}"},
+                  {"name":"TARGET_GROUP_ID","value":"{{ cloud.target_group }}"},
+                  {"name":"NLB_TARGETS","value": {{ obs.nlb_targets | to_json | to_json }}},
+                  {"name":"POLL_INTERVAL","value":"{{ obs.nlb_poll_interval }}"},
+                  {"name":"API_TIMEOUT","value":"{{ obs.nlb_api_timeout }}"}
+                ],
+                "securityContext": {"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"]}},
+                "resources": {"requests":{"cpu":"10m","memory":"24Mi"},"limits":{"cpu":"100m","memory":"64Mi"}},
+                "volumeMounts": [
+                  {"name":"config","mountPath":"/etc/alloy","readOnly":true},
+                  {"name":"identity","mountPath":"/run/identity","readOnly":true}
+                ]
+              },
+              {
+                "name": "refresh-secrets",
+                "image": "{{ secrets_image }}",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "python3",
+                  "/usr/local/bin/secret-fetch.py"
+                ],
+                "env": [
+                  {
+                    "name": "TOKEN_FILE",
+                    "value": "/run/identity/token"
+                  },
+                  {
+                    "name": "SERVICE_ACCOUNT_ID",
+                    "value": "{{ cloud.identities['observability-' ~ inventory_hostname] }}"
+                  },
+                  {
+                    "name": "SECRET_IDS",
+                    "value": "{{ cloud.secrets['observability-' ~ inventory_hostname] }}"
+                  },
+                  {
+                    "name": "SECRET_DIR",
+                    "value": "/run/soloapp-secrets/data"
+                  },
+                  {
+                    "name": "LOOP",
+                    "value": "1"
+                  }
+                ],
+                "securityContext": {
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "resources": {{ obs.resources['secrets'] | to_json }},
+                "volumeMounts": [
+                  {
+                    "name": "identity",
+                    "mountPath": "/run/identity",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "secrets",
+                    "mountPath": "/run/soloapp-secrets"
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "config",
+                "configMap": {
+                  "name": "alloy"
+                }
+              },
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "alloy"
+                }
+              },
+              {
+                "name": "secrets",
+                "emptyDir": {
+                  "medium": "Memory",
+                  "sizeLimit": "4Mi"
+                }
+              },
+              {
+                "name": "identity",
+                "projected": {
+                  "sources": [
+                    {
+                      "serviceAccountToken": {
+                        "path": "token",
+                        "expirationSeconds": 600,
+                        "audience": "soloapp-lockbox"
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "terminationGracePeriodSeconds": 45,
+            "serviceAccountName": "alloy",
+            "initContainers": [
+              {
+                "name": "fetch-secrets",
+                "image": "{{ secrets_image }}",
+                "imagePullPolicy": "Never",
+                "command": [
+                  "python3",
+                  "/usr/local/bin/secret-fetch.py"
+                ],
+                "env": [
+                  {
+                    "name": "TOKEN_FILE",
+                    "value": "/run/identity/token"
+                  },
+                  {
+                    "name": "SERVICE_ACCOUNT_ID",
+                    "value": "{{ cloud.identities['observability-' ~ inventory_hostname] }}"
+                  },
+                  {
+                    "name": "SECRET_IDS",
+                    "value": "{{ cloud.secrets['observability-' ~ inventory_hostname] }}"
+                  },
+                  {
+                    "name": "SECRET_DIR",
+                    "value": "/run/soloapp-secrets/data"
+                  }
+                ],
+                "securityContext": {
+                  "allowPrivilegeEscalation": false,
+                  "readOnlyRootFilesystem": true,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  }
+                },
+                "resources": {{ obs.resources['secrets'] | to_json }},
+                "volumeMounts": [
+                  {
+                    "name": "identity",
+                    "mountPath": "/run/identity",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "secrets",
+                    "mountPath": "/run/soloapp-secrets"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

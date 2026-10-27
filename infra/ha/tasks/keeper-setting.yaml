@@ -1,0 +1,20 @@
+- name: Read keeper timeout
+  ansible.builtin.command:
+    argv: [docker, exec, solo-postgres, pg_autoctl, config, get, --pgdata, /var/lib/postgresql/data, 'timeout.{{ item.key }}']
+  changed_when: false
+  check_mode: false
+  register: keeper_before
+- name: Set keeper timeout
+  ansible.builtin.command:
+    argv: [docker, exec, solo-postgres, pg_autoctl, config, set, --pgdata, /var/lib/postgresql/data, 'timeout.{{ item.key }}', '{{ item.value | string }}']
+  when: keeper_before.stdout | int != item.value | int
+  changed_when: true
+- name: Verify effective keeper timeout
+  ansible.builtin.command:
+    argv: [docker, exec, solo-postgres, pg_autoctl, config, get, --pgdata, /var/lib/postgresql/data, 'timeout.{{ item.key }}']
+  register: keeper_after
+  until: keeper_after.stdout | int == item.value | int
+  retries: 10
+  delay: 1
+  changed_when: false
+  when: not ansible_check_mode

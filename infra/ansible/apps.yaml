@@ -1,0 +1,45 @@
+- name: Roll services one site at a time
+  hosts: app_sites
+  serial: 1
+  any_errors_fatal: true
+  gather_facts: false
+  pre_tasks:
+  - name: Validate API gateway contracts before any service changes
+    ansible.builtin.command:
+      argv:
+      - '{{ ansible_playbook_python }}'
+      - '{{ project_root }}/libs/api_codegen/generate_nginx.py'
+      - --check
+    delegate_to: localhost
+    become: false
+    changed_when: false
+    check_mode: false
+    tags: [always]
+  - name: Validate health circuit timing before rollout
+    ansible.builtin.assert:
+      that:
+      - item.health.error_threshold | int >= 1
+      - item.health.error_threshold | int <= 3600
+      - item.health.window_seconds | int >= 1
+      - item.health.window_seconds | int <= 3600
+      - item.health.cooldown_seconds | int <= 3600
+      - item.health.cooldown_seconds | int >= (item.probes.readiness.period_seconds | int) * (item.probes.readiness.failure_threshold | int) + (item.probes.readiness.timeout_seconds | int)
+      fail_msg: Health cooldown must cover readiness detection; health settings must be in 1..3600.
+      quiet: true
+    loop: ['{{ auth_config }}', '{{ whoami_config }}']
+    loop_control:
+      label: '{{ item.image }}'
+    tags: [always]
+  tasks:
+  - name: Deploy whoami
+    ansible.builtin.import_tasks: ../../services/whoami/deploy/ansible/tasks.yaml
+    tags:
+    - whoami
+  - name: Deploy auth
+    ansible.builtin.import_tasks: ../../services/auth/deploy/ansible/tasks.yaml
+    tags:
+    - auth
+  - name: Deploy nginx
+    ansible.builtin.import_tasks: ../../services/nginx/deploy/ansible/tasks.yaml
+    tags: [nginx]
+  become: true

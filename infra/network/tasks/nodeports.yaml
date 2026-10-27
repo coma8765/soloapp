@@ -1,0 +1,10 @@
+- name: Install private NodePort guard before publishing services
+  ansible.builtin.template:
+    src: '{{ project_root }}/infra/network/templates/nodeports.sh.j2'
+    dest: '{{ remote_root }}/nodeports.sh'
+    mode: '0700'
+  register: nodeport_guard
+- name: Apply private NodePort guard
+  ansible.builtin.command: '{{ remote_root }}/nodeports.sh'
+  changed_when: nodeport_guard.changed
+  when: not ansible_check_mode

@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-{{ (lookup('template', project_root ~ '/services/nginx/deploy/nginx.conf.j2') | hash('sha256'))[:16] }}
+  namespace: soloapp
+immutable: true
+data:
+  nginx.conf: |
+{{ lookup('template', project_root ~ '/services/nginx/deploy/nginx.conf.j2') | indent(4, true) }}

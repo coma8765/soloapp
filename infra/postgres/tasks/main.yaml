@@ -1,0 +1,30 @@
+- name: Identify database container
+  ansible.builtin.set_fact:
+    pg_container: "{{ 'solo-monitor' if inventory_hostname == 'edge' else 'solo-postgres' }}"
+- name: Require initialized data directory
+  ansible.builtin.stat:
+    path: "{{ remote_root }}/{{ pg_container }}-persistent/data/PG_VERSION"
+  register: pg_initialized
+- name: Refuse accidental empty database initialization
+  ansible.builtin.assert:
+    that: pg_initialized.stat.exists
+    fail_msg: Restore from a surviving primary or backup before running this playbook.
+- name: Configure certificate-only database access
+  ansible.builtin.template:
+    src: "{{ project_root }}/infra/postgres/templates/{{ item }}.j2"
+    dest: "{{ remote_root }}/{{ pg_container }}-persistent/data/{{ item }}"
+    owner: '999'
+    group: '999'
+    mode: '0600'
+  loop: [pg_hba.conf, pg_ident.conf]
+  register: pg_access
+- name: Reload database access policy
+  ansible.builtin.command:
+    argv: [docker, exec, "{{ pg_container }}", /usr/lib/postgresql/17/bin/pg_ctl, -D, /var/lib/postgresql/data, reload]
+  when: pg_access.changed
+  changed_when: true
+- name: Maintain startup dependencies
+  ansible.builtin.include_tasks: "{{ project_root }}/infra/containers/tasks/startup.yaml"
+  vars:
+    startup_container: '{{ pg_container }}'
+    startup_secret: node

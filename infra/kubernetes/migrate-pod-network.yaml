@@ -1,0 +1,10 @@
+# Stage new workloads while the old auth-gateway and Docker whoami still serve.
+- name: Prepare pod networking and database policy
+  hosts: app_sites
+  serial: 1
+  become: true
+  gather_facts: false
+  tasks:
+  - ansible.builtin.import_tasks: ../network/tasks/main.yaml
+  - ansible.builtin.import_tasks: ../postgres/tasks/main.yaml
+- ansible.builtin.import_playbook: ../ansible/apps.yaml

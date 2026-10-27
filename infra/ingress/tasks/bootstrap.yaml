@@ -1,0 +1,49 @@
+- name: Create ingress configuration directory
+  ansible.builtin.file:
+    path: "{{ remote_root }}/ingress"
+    state: directory
+    mode: '0755'
+- name: Render ingress configuration
+  ansible.builtin.template:
+    src: "{{ project_root }}/infra/ingress/templates/haproxy.cfg.j2"
+    dest: "{{ remote_root }}/ingress/haproxy.cfg"
+    mode: '0644'
+    validate: 'docker run --rm --user 10002:10002 --network host -v %s:/usr/local/etc/haproxy/haproxy.cfg:ro -v /run/soloapp-ingress:/run/soloapp-ingress:ro haproxy:3.0-alpine haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg'
+  register: ingress_config
+- name: Maintain ingress container
+  community.docker.docker_container:
+    name: solo-ingress
+    image: haproxy:3.0-alpine
+    pull: missing
+    state: started
+    user: '10002:10002'
+    restart_policy: unless-stopped
+    memory: 128M
+    cpus: 0.5
+    read_only: true
+    cap_drop: [ALL]
+    security_opts: [no-new-privileges]
+    log_driver: json-file
+    log_options: {max-size: 10m, max-file: '3'}
+    published_ports: ['80:8080', '443:8443', '{{ private_ip }}:{{ obs.routing_metrics_port }}:{{ obs.routing_metrics_port }}']
+    volumes:
+      - '{{ remote_root }}/ingress:/usr/local/etc/haproxy:ro'
+      - /run/soloapp-ingress:/run/soloapp-ingress:ro
+    command: [haproxy, '-W', '-db', '-f', /usr/local/etc/haproxy/haproxy.cfg]
+  register: ingress_container
+- name: Reload ingress after configuration change
+  ansible.builtin.command: docker kill --signal=USR2 solo-ingress
+  when: ingress_config.changed and not ingress_container.changed
+  changed_when: true
+- name: Verify ingress health
+  ansible.builtin.uri: {url: 'http://127.0.0.1/healthz', status_code: 200}
+  register: ingress_health
+  until: ingress_health.status == 200
+  retries: 15
+  delay: 2
+  when: not ansible_check_mode
+- name: Maintain startup dependencies
+  ansible.builtin.include_tasks: "{{ project_root }}/infra/containers/tasks/startup.yaml"
+  vars:
+    startup_container: 'solo-ingress'
+    startup_secret: ingress

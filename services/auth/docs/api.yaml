@@ -1,0 +1,351 @@
+openapi: 3.0.3
+info:
+  title: Soloapp auth
+  version: 5.0.0
+x-cpp-namespace: solo::auth::generated
+paths:
+  /healthz:
+    get:
+      operationId: healthz
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        '503':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security: []
+      x-route:
+        exposure: internal
+        auth: none
+        max_body_bytes: 8192
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 15
+        rate_limit: null
+  /ready:
+    get:
+      operationId: ready
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        '503':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security: []
+      x-route:
+        exposure: public
+        auth: none
+        max_body_bytes: 8192
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 8
+        rate_limit: null
+  /auth/register:
+    post:
+      operationId: auth_register
+      responses:
+        '201':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserId'
+        '503':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credentials'
+      security: []
+      x-route:
+        exposure: public
+        auth: none
+        max_body_bytes: 8192
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 15
+        rate_limit:
+          group: auth
+          requests_per_second: 5
+          burst: 10
+  /auth/login:
+    post:
+      operationId: auth_login
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '503':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credentials'
+      security: []
+      x-route:
+        exposure: public
+        auth: none
+        max_body_bytes: 8192
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 15
+        rate_limit:
+          group: auth
+          requests_per_second: 5
+          burst: 10
+  /auth/logout:
+    post:
+      operationId: auth_logout
+      responses:
+        '204':
+          description: Response
+        '503':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - bearerAuth: []
+      x-route:
+        exposure: public
+        auth: bearer
+        max_body_bytes: 8192
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 15
+        rate_limit:
+          group: auth
+          requests_per_second: 5
+          burst: 10
+  /auth/me:
+    get:
+      operationId: auth_me
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserId'
+        '503':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - bearerAuth: []
+      x-route:
+        exposure: public
+        auth: bearer
+        max_body_bytes: 8192
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 15
+        rate_limit:
+          group: auth
+          requests_per_second: 5
+          burst: 10
+  /internal/verify:
+    get:
+      operationId: internal_verify
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserId'
+          headers:
+            X-Verified-User-Id:
+              schema:
+                type: string
+              description: Verified signed identity
+            X-User-Timestamp:
+              schema:
+                type: string
+              description: Verified signed identity
+            X-User-Signature:
+              schema:
+                type: string
+              description: Verified signed identity
+        '503':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - bearerAuth: []
+      description: Internal nginx auth_request endpoint; not exposed by the public gateway.
+      x-route:
+        exposure: internal
+        auth: bearer
+        max_body_bytes: 8192
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 15
+        rate_limit: null
+  /health/ready:
+    get:
+      operationId: health_ready
+      description: Internal process health probe; excluded from 5xx accounting.
+      responses:
+        '200':
+          description: Process health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        '503':
+          description: Process health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+      security: []
+      x-route:
+        exposure: internal
+        auth: none
+        max_body_bytes: 8192
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 15
+        rate_limit: null
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    Error:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: string
+    UserId:
+      type: object
+      required:
+      - user_id
+      properties:
+        user_id:
+          type: string
+          pattern: ^[0-9a-f]{32}$
+    Status:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          type: string
+    Credentials:
+      type: object
+      required:
+      - username
+      - password
+      properties:
+        username:
+          type: string
+          pattern: ^[A-Za-z0-9_.@-]{3,128}$
+        password:
+          type: string
+          format: password
+          writeOnly: true
+          x-min-bytes: 12
+          x-max-bytes: 256
+          x-no-nul: true
+    Session:
+      type: object
+      required:
+      - user_id
+      - access_token
+      - token_type
+      - expires_in
+      properties:
+        user_id:
+          type: string
+          pattern: ^[0-9a-f]{32}$
+        access_token:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        token_type:
+          type: string
+          enum:
+          - Bearer
+        expires_in:
+          type: integer
+          minimum: 1

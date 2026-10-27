@@ -1,0 +1,11 @@
+title = "Soloapp public source checks"
+[extend]
+useDefault = true
+[[rules]]
+id = "cloud-resource-id"
+description = "Cloud resource identifiers belong in local configuration"
+regex = '''\b(?:b1g|e6q|aje|enp|bg0)[a-z0-9]{17}\b'''
+[[rules]]
+id = "personal-workstation-path"
+description = "Avoid personal absolute paths in public source"
+regex = '''/Users/[A-Za-z0-9_.-]+/'''

@@ -1,0 +1,109 @@
+- name: Build immutable service images on YC
+  hosts: yc
+  gather_facts: false
+  vars:
+    build_context: '{{ remote_root }}/build-{{ release }}'
+    images:
+    - name: auth
+      dockerfile: services/auth/deploy/Dockerfile
+    - name: whoami
+      dockerfile: services/whoami/deploy/Dockerfile
+    - name: secrets
+      dockerfile: infra/secrets/Dockerfile
+    - name: issuer
+      dockerfile: infra/certificates/Dockerfile
+  tasks:
+  - name: Create local work directory
+    ansible.builtin.file:
+      path: '{{ project_root }}/work'
+      state: directory
+      mode: '0700'
+    delegate_to: localhost
+    become: false
+  - name: Package only build inputs
+    ansible.builtin.command:
+      argv:
+      - tar
+      - -czf
+      - '{{ project_root }}/work/source.tar.gz'
+      - CMakeLists.txt
+      - Makefile
+      - pytest.ini
+      - libs
+      - services
+      - infra/secrets/files
+      - infra/certificates/files
+      chdir: '{{ project_root }}'
+    delegate_to: localhost
+    become: false
+    changed_when: true
+  - name: Create build directory
+    ansible.builtin.file:
+      path: '{{ build_context }}'
+      state: directory
+      mode: '0700'
+  - name: Upload source
+    ansible.builtin.unarchive:
+      src: '{{ project_root }}/work/source.tar.gz'
+      dest: '{{ build_context }}'
+  - name: Upload utility Dockerfiles
+    ansible.builtin.copy:
+      src: '{{ project_root }}/infra/{{ item }}/Dockerfile'
+      dest: '{{ build_context }}/infra/{{ item }}/Dockerfile'
+      mode: '0644'
+    loop:
+    - secrets
+    - certificates
+  - name: Build images
+    ansible.builtin.command:
+      argv:
+      - docker
+      - build
+      - -f
+      - '{{ item.dockerfile }}'
+      - -t
+      - soloapp/{{ item.name }}:{{ release }}
+      - .
+      chdir: '{{ build_context }}'
+    loop: "{{ images | selectattr('name', 'in', build_components | default(['auth', 'whoami', 'secrets', 'issuer'])) | list }}"
+    changed_when: true
+  - name: Export release
+    ansible.builtin.command:
+      argv:
+      - docker
+      - save
+      - -o
+      - '{{ remote_root }}/release-{{ release }}.tar'
+      - '{{ auth_image }}'
+      - '{{ whoami_image }}'
+      - '{{ secrets_image }}'
+      - '{{ issuer_image }}'
+    changed_when: true
+  - name: Fetch release archive
+    ansible.builtin.fetch:
+      src: '{{ remote_root }}/release-{{ release }}.tar'
+      dest: '{{ project_root }}/work/release-{{ release }}.tar'
+      flat: true
+  become: true
+- name: Import images into both sites
+  hosts: app_sites
+  gather_facts: false
+  tasks:
+  - name: Transfer release
+    ansible.builtin.copy:
+      src: '{{ project_root }}/work/release-{{ release }}.tar'
+      dest: '{{ remote_root }}/release-{{ release }}.tar'
+      mode: '0600'
+  - name: Load Docker images
+    community.docker.docker_image_load:
+      path: '{{ remote_root }}/release-{{ release }}.tar'
+  - name: Import images into k3s
+    ansible.builtin.command:
+      argv:
+      - k3s
+      - ctr
+      - images
+      - import
+      - '{{ remote_root }}/release-{{ release }}.tar'
+    changed_when: true
+  become: true

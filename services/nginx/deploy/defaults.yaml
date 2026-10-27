@@ -1,0 +1,8 @@
+image: nginx:1.28-alpine
+image_pull_policy: IfNotPresent
+port: 19080
+health_port: 19083
+node_port: 31980
+resources:
+  requests: {cpu: 50m, memory: 32Mi}
+  limits: {cpu: 500m, memory: 96Mi}

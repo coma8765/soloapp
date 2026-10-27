@@ -1,0 +1,13 @@
+solo_local postgres autoctl_node
+{% for host in groups['app_sites'] %}
+{% for user in ['postgres','autoctl_node','pgautofailover_replicator'] %}
+solo_nodes node-{{ host }} {{ user }}
+{% endfor %}
+{% endfor %}
+solo_nodes node-edge postgres
+solo_nodes node-edge pgautofailover_monitor
+{% if inventory_hostname != 'edge' %}
+{% for host in groups['app_sites'] %}
+solo_observers observability-{{ host }} monitor_{{ host }}
+{% endfor %}
+{% endif %}

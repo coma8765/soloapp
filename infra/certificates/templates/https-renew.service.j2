@@ -1,0 +1,7 @@
+[Unit]
+After=network-online.target docker.service solo-acme-web.service
+Wants=solo-acme-web.service
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/hack-vk-26/renew-https.py
+UMask=0077

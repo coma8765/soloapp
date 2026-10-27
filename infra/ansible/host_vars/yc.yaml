@@ -1,0 +1,8 @@
+# Replica counts are independent in each data center.
+service_overrides:
+  nginx:
+    replicas: 2
+  whoami:
+    replicas: 2
+  auth:
+    replicas: 2

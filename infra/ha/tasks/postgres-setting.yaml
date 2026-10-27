@@ -1,0 +1,26 @@
+- name: Read PostgreSQL setting
+  ansible.builtin.command:
+    argv: [docker, exec, '{{ setting_container }}', psql, '-p', '{{ setting_port | string }}', '-U', postgres, '-d', '{{ setting_database }}', '-Atc', "SELECT setting FROM pg_settings WHERE name='{{ setting_name }}'"]
+  changed_when: false
+  check_mode: false
+  register: setting_before
+- name: Set PostgreSQL setting
+  ansible.builtin.command:
+    argv: [docker, exec, '{{ setting_container }}', psql, '-p', '{{ setting_port | string }}', '-U', postgres, '-d', '{{ setting_database }}', '-v', ON_ERROR_STOP=1, '-c', "ALTER SYSTEM SET {{ setting_name }} = '{{ setting_value }}'"]
+  when: setting_before.stdout | int != setting_value | int
+  changed_when: true
+  register: setting_change
+- name: Reload PostgreSQL
+  ansible.builtin.command:
+    argv: [docker, exec, '{{ setting_container }}', psql, '-p', '{{ setting_port | string }}', '-U', postgres, '-d', '{{ setting_database }}', '-c', SELECT pg_reload_conf()]
+  when: setting_change.changed
+  changed_when: true
+- name: Verify effective setting
+  ansible.builtin.command:
+    argv: [docker, exec, '{{ setting_container }}', psql, '-p', '{{ setting_port | string }}', '-U', postgres, '-d', '{{ setting_database }}', '-Atc', "SELECT setting FROM pg_settings WHERE name='{{ setting_name }}'"]
+  register: setting_after
+  until: setting_after.stdout | int == setting_value | int
+  retries: 10
+  delay: 1
+  changed_when: false
+  when: not ansible_check_mode

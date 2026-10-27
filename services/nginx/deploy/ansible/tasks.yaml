@@ -1,0 +1,55 @@
+- name: Verify generated routes match service API contracts before rollout
+  ansible.builtin.command:
+    argv:
+    - '{{ ansible_playbook_python }}'
+    - '{{ project_root }}/libs/api_codegen/generate_nginx.py'
+    - --check
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  check_mode: false
+- name: Check whether nginx is already installed
+  ansible.builtin.command: k3s kubectl -n soloapp get deployment nginx
+  register: nginx_existing
+  changed_when: false
+  failed_when: false
+  check_mode: false
+- name: Validate proposed nginx configuration in existing pod before changes
+  ansible.builtin.command:
+    argv:
+    - k3s
+    - kubectl
+    - -n
+    - soloapp
+    - exec
+    - -i
+    - deployment/nginx
+    - -c
+    - nginx
+    - --
+    - sh
+    - -c
+    - 'f=$(mktemp /tmp/nginx-check.XXXXXX); trap ''rm -f "$f"'' EXIT; cat > "$f"; nginx -t -c "$f"'
+    stdin: "{{ lookup('template', project_root ~ '/services/nginx/deploy/nginx.conf.j2') }}"
+  changed_when: false
+  check_mode: false
+  when: nginx_existing.rc == 0
+- name: Deploy nginx service
+  ansible.builtin.include_tasks: "{{ project_root }}/infra/kubernetes/tasks/apply.yaml"
+  vars:
+    manifest_source: "{{ project_root }}/services/nginx/deploy/k8s/service.yaml.j2"
+    manifest_name: nginx-service
+- name: Deploy nginx configmap
+  ansible.builtin.include_tasks: "{{ project_root }}/infra/kubernetes/tasks/apply.yaml"
+  vars:
+    manifest_source: "{{ project_root }}/services/nginx/deploy/k8s/configmap.yaml.j2"
+    manifest_name: nginx-configmap
+- name: Deploy nginx deployment
+  ansible.builtin.include_tasks: "{{ project_root }}/infra/kubernetes/tasks/apply.yaml"
+  vars:
+    manifest_source: "{{ project_root }}/services/nginx/deploy/k8s/deployment.yaml.j2"
+    manifest_name: nginx-deployment
+- name: Wait for nginx rolling update
+  ansible.builtin.command: k3s kubectl -n soloapp rollout status deployment/nginx --timeout=300s
+  changed_when: false
+  when: not ansible_check_mode

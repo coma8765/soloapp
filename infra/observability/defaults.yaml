@@ -1,0 +1,58 @@
+images:
+  prometheus: prom/prometheus:v3.15.1
+  grafana: grafana/grafana:13.2.4
+  loki: grafana/loki:3.7.8
+  alloy: grafana/alloy:v1.21.2
+  kube_state_metrics: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0
+scrape_interval: 15s
+metrics_retention: 3d
+metrics_retention_size: 1GB
+logs_retention: 72h
+gateway_node_port: 31981
+prometheus_storage: 2Gi
+loki_storage: 2Gi
+grafana_storage: 256Mi
+agent_storage: 256Mi
+public_grafana: true
+gateway_names:
+  yc: observability-gateway
+  home: observability-gateway-home
+resources:
+  prometheus:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {cpu: 500m, memory: 512Mi}
+  loki:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {cpu: 500m, memory: 512Mi}
+  grafana:
+    requests: {cpu: 20m, memory: 256Mi}
+    limits: {cpu: 500m, memory: 1Gi}
+  gateway:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {cpu: 500m, memory: 64Mi}
+  alloy:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {cpu: 500m, memory: 256Mi}
+  kube-state-metrics:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {cpu: 500m, memory: 64Mi}
+  secrets:
+    requests: {cpu: 10m, memory: 24Mi}
+    limits: {cpu: 200m, memory: 64Mi}
+
+health_probe_interval: 5s
+health_probe_timeout: 2s
+dashboard_files: [soloapp, auth, whoami, nginx, infrastructure, routing, postgres]
+
+routing_scrape_interval: 5s
+routing_scrape_timeout: 2s
+routing_metrics_port: 19091
+nlb_poll_interval: 5
+nlb_api_timeout: 2
+nlb_targets:
+  10.130.0.31: yc
+  10.131.0.27: edge
+state_scrape_interval: 5s
+
+postgres_scrape_interval: 5s
+postgres_scrape_timeout: 4s

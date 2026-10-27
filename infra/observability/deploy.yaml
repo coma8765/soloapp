@@ -1,0 +1,51 @@
+- name: Bootstrap monitoring namespace and scoped RBAC
+  tags: [bootstrap]
+  hosts: app_sites
+  become: true
+  gather_facts: false
+  vars:
+    obs: "{{ lookup('file', project_root ~ '/infra/observability/defaults.yaml') | from_yaml | combine(observability_overrides | default({}), recursive=true) }}"
+  tasks:
+  - ansible.builtin.include_tasks: "{{ project_root }}/infra/network/tasks/nodeports.yaml"
+  - name: Apply base monitoring objects
+    ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
+    loop: [namespace, rbac, networkpolicy]
+    vars:
+      manifest_source: '{{ project_root }}/infra/observability/k8s/{{ item }}.yaml.j2'
+      manifest_name: 'observability-{{ item }}'
+- name: Deploy independent monitoring stores in each data center
+  tags: [stores]
+  hosts: app_sites
+  serial: 1
+  become: true
+  gather_facts: false
+  vars:
+    obs: "{{ lookup('file', project_root ~ '/infra/observability/defaults.yaml') | from_yaml | combine(observability_overrides | default({}), recursive=true) }}"
+  tasks:
+  - ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
+    vars:
+      manifest_source: '{{ project_root }}/infra/observability/k8s/central.yaml.j2'
+      manifest_name: observability-central
+  - name: Wait for storage and UI
+    ansible.builtin.command: 'k3s kubectl -n observability rollout status deployment/{{ item }} --timeout=300s'
+    loop: [prometheus, loki, grafana, gateway]
+    changed_when: false
+    when: not ansible_check_mode
+- name: Deploy agents in each data center
+  tags: [agents]
+  hosts: app_sites
+  serial: 1
+  become: true
+  gather_facts: false
+  vars:
+    obs: "{{ lookup('file', project_root ~ '/infra/observability/defaults.yaml') | from_yaml | combine(observability_overrides | default({}), recursive=true) }}"
+  tasks:
+  - ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
+    vars:
+      manifest_source: '{{ project_root }}/infra/observability/k8s/agents.yaml.j2'
+      manifest_name: observability-agents
+  - name: Wait for agents
+    ansible.builtin.command: 'k3s kubectl -n observability rollout status deployment/{{ item }} --timeout=300s'
+    loop: [kube-state-metrics, alloy]
+    changed_when: false
+    when: not ansible_check_mode

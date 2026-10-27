@@ -1,0 +1,31 @@
+# Local credentials and production resource configuration
+/.secrets/
+/.env
+/.env.*
+!/.env.example
+/infra/cloud/resources.json
+/infra/ansible/inventory.yaml
+/infra/ha/deployment-history.md
+**/migrations/
+*.pem
+*.key
+*.p12
+*.pfx
+*kubeconfig*
+!**/*kubeconfig*.example
+
+# Local work, reports and caches
+/work/
+/outputs/
+/.venv*/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+.ast-index/
+
+# Build artifacts
+*.tar
+*.tar.gz
+/build/
+/services/*/build/

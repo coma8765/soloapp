@@ -1,0 +1,43 @@
+# One-time Docker port addition; callers use serial: 1 and any_errors_fatal.
+- name: Require both NLB targets healthy before replacing an ingress container
+  ansible.builtin.command:
+    argv: [yc, load-balancer, network-load-balancer, target-states, '{{ cloud.nlb }}', --target-group-id, '{{ cloud.target_group }}', --format, json]
+  delegate_to: localhost
+  become: false
+  register: nlb_before
+  changed_when: false
+  failed_when: (nlb_before.stdout | from_json | selectattr('status', 'equalto', 'HEALTHY') | list | length) != 2
+- name: Drain and republish one ingress
+  block:
+  - ansible.builtin.include_tasks: reload.yaml
+    vars:
+      ingress_metrics_drain: true
+  - name: Wait for NLB to exclude this ingress
+    ansible.builtin.command:
+      argv: [yc, load-balancer, network-load-balancer, target-states, '{{ cloud.nlb }}', --target-group-id, '{{ cloud.target_group }}', --format, json]
+    delegate_to: localhost
+    become: false
+    register: nlb_drained
+    changed_when: false
+    until: (nlb_drained.stdout | from_json | selectattr('address', 'equalto', obs.nlb_targets | dict2items | selectattr('value', 'equalto', inventory_hostname) | map(attribute='key') | first) | map(attribute='status') | first) == 'UNHEALTHY'
+    retries: 20
+    delay: 2
+  - name: Let existing requests finish before replacing Docker port mappings
+    ansible.builtin.pause:
+      seconds: 25
+  - ansible.builtin.include_tasks: bootstrap.yaml
+  always:
+  - name: Restore normal NLB health response even if migration fails
+    ansible.builtin.include_tasks: reload.yaml
+    vars:
+      ingress_metrics_drain: false
+- name: Wait for both ingress targets to be eligible again
+  ansible.builtin.command:
+    argv: [yc, load-balancer, network-load-balancer, target-states, '{{ cloud.nlb }}', --target-group-id, '{{ cloud.target_group }}', --format, json]
+  delegate_to: localhost
+  become: false
+  register: nlb_after
+  changed_when: false
+  until: (nlb_after.stdout | from_json | selectattr('status', 'equalto', 'HEALTHY') | list | length) == 2
+  retries: 20
+  delay: 2

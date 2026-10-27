@@ -1,0 +1,11 @@
+- name: Install ordered startup unit
+  ansible.builtin.template:
+    src: '{{ project_root }}/infra/containers/templates/startup.service.j2'
+    dest: '/etc/systemd/system/{{ startup_container }}-startup.service'
+    mode: '0644'
+  register: startup_unit
+- name: Enable ordered startup
+  ansible.builtin.systemd_service:
+    name: '{{ startup_container }}-startup.service'
+    enabled: true
+    daemon_reload: '{{ startup_unit.changed }}'

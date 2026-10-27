@@ -1,0 +1,23 @@
+local pg_auto_failover autoctl_node peer map=solo_local
+local all postgres peer
+local all all reject
+hostssl all postgres 127.0.0.1/32 cert map=solo_nodes
+{% if inventory_hostname == 'edge' %}
+{% for host in groups['app_sites'] %}
+hostssl pg_auto_failover autoctl_node {{ hostvars[host].private_ip }}/32 cert map=solo_nodes
+{% endfor %}
+{% else %}
+{% for host in groups['app_sites'] %}
+hostssl authdb monitor_{{ host }} {{ hostvars[host].private_ip }}/32 cert map=solo_observers
+hostssl authdb monitor_{{ host }} 10.{{ hostvars[host].cluster_octet }}.0.0/16 cert map=solo_observers
+hostssl authdb auth_{{ host }} {{ hostvars[host].private_ip }}/32 cert
+hostssl authdb auth_{{ host }} 10.{{ hostvars[host].cluster_octet }}.0.0/16 cert
+hostssl replication pgautofailover_replicator {{ hostvars[host].private_ip }}/32 cert map=solo_nodes
+hostssl all pgautofailover_replicator {{ hostvars[host].private_ip }}/32 cert map=solo_nodes
+{% endfor %}
+hostssl all pgautofailover_monitor 10.77.26.13/32 cert map=solo_nodes
+{% endif %}
+host all all 0.0.0.0/0 reject
+host all all ::/0 reject
+host replication all 0.0.0.0/0 reject
+host replication all ::/0 reject

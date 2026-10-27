@@ -1,0 +1,21 @@
+# Generated from services/*/docs/api.yaml; DO NOT EDIT.
+map $uri $observed_route {
+  default /other;
+  /healthz /healthz;
+  ~^/grafana/ /grafana/;
+  /auth/login /auth/login;
+  /auth/logout /auth/logout;
+  /auth/me /auth/me;
+  /auth/register /auth/register;
+  /ready /ready;
+  /user-id /user-id;
+}
+map $uri $observed_service {
+  default nginx;
+  /auth/login auth;
+  /auth/logout auth;
+  /auth/me auth;
+  /auth/register auth;
+  /user-id whoami;
+}
+limit_req_zone $binary_remote_addr zone=api_auth:10m rate=5r/s;

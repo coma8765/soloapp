@@ -1,0 +1,21 @@
+- name: Require existing independently initialized k3s
+  ansible.builtin.command: k3s kubectl get nodes
+  changed_when: false
+  check_mode: false
+- name: Configure k3s
+  ansible.builtin.template:
+    src: "{{ project_root }}/infra/kubernetes/templates/config.yaml.j2"
+    dest: /etc/rancher/k3s/config.yaml
+    mode: '0600'
+  register: k3s_config
+- name: Restart k3s only after configuration change
+  ansible.builtin.systemd_service:
+    name: k3s
+    state: "{{ 'restarted' if k3s_config.changed else 'started' }}"
+    enabled: true
+- name: Ensure project namespace
+  ansible.builtin.command:
+    argv: [k3s, kubectl, apply, -f, '-']
+    stdin: "{{ lookup('file', project_root ~ '/infra/kubernetes/k8s/namespace.yaml') }}"
+  register: namespace_apply
+  changed_when: "'unchanged' not in namespace_apply.stdout"

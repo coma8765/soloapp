@@ -1,0 +1,8 @@
+# Shared lifecycle defaults, service defaults, then per-site overrides.
+workload_defaults: "{{ lookup('file', project_root ~ '/infra/kubernetes/defaults.yaml') | from_yaml }}"
+auth_config: "{{ workload_defaults | combine(lookup('template', project_root ~ '/services/auth/deploy/defaults.yaml') | from_yaml, recursive=true) | combine((service_overrides | default({})).auth | default({}), recursive=true) }}"
+nginx_config: "{{ workload_defaults | combine(lookup('template', project_root ~ '/services/nginx/deploy/defaults.yaml') | from_yaml, recursive=true) | combine((service_overrides | default({})).nginx | default({}), recursive=true) }}"
+whoami_config: "{{ workload_defaults | combine(lookup('template', project_root ~ '/services/whoami/deploy/defaults.yaml') | from_yaml, recursive=true) | combine((service_overrides | default({})).whoami | default({}), recursive=true) }}"
+
+# Monitoring overrides may be set globally or separately in host_vars.
+obs: "{{ lookup('file', project_root ~ '/infra/observability/defaults.yaml') | from_yaml | combine(observability_overrides | default({}), recursive=true) }}"

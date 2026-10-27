@@ -1,0 +1,32 @@
+# Run only after ingress cutover and end-to-end verification.
+- name: Retire previous stateless workload layout
+  hosts: app_sites
+  serial: 1
+  any_errors_fatal: true
+  gather_facts: false
+  become: true
+  tasks:
+  - name: Require each replacement Deployment to be available
+    ansible.builtin.command: 'k3s kubectl -n soloapp rollout status deployment/{{ item }} --timeout=60s'
+    loop: [auth, nginx, whoami]
+    changed_when: false
+  - name: Remove previous hostNetwork Deployment
+    ansible.builtin.command: k3s kubectl -n soloapp delete deployment auth-gateway --ignore-not-found --wait=true
+    register: old_deployment
+    changed_when: "'deleted' in old_deployment.stdout"
+  - name: Disable old whoami startup and host secret refresh
+    ansible.builtin.systemd_service:
+      name: '{{ item }}'
+      enabled: false
+      state: stopped
+    loop: [solo-whoami-startup.service, solo-whoami-secrets.timer]
+  - name: Remove superseded stateless Docker container
+    community.docker.docker_container:
+      name: solo-whoami
+      state: absent
+  - name: Remove old host HMAC copy from RAM
+    ansible.builtin.file:
+      path: /run/soloapp-whoami
+      state: absent
+  - name: Maintain certificate rotation including gateway certificates
+    ansible.builtin.import_tasks: ../certificates/tasks/main.yaml

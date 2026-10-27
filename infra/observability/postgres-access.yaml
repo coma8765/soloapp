@@ -1,0 +1,43 @@
+- name: Configure certificate-authenticated read-only PostgreSQL monitoring
+  hosts: app_sites
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Identify current primary without changing its state
+    ansible.builtin.command:
+      argv: [docker, exec, -u, postgres, solo-postgres, psql, -p, '55432', -d, postgres, -Atc, 'SELECT NOT pg_is_in_recovery()']
+    register: pg_primary
+    changed_when: false
+    check_mode: false
+  - name: Create restricted monitoring roles on primary (replicated to standby)
+    ansible.builtin.command:
+      argv: [docker, exec, -i, -u, postgres, solo-postgres, psql, -v, ON_ERROR_STOP=1, -p, '55432', -d, authdb]
+      stdin: |
+        DO $roles$ BEGIN
+          IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='monitor_yc') THEN CREATE ROLE monitor_yc LOGIN; END IF;
+          IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='monitor_home') THEN CREATE ROLE monitor_home LOGIN; END IF;
+        END $roles$;
+        ALTER ROLE monitor_yc NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 8;
+        ALTER ROLE monitor_home NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 8;
+        GRANT pg_monitor TO monitor_yc, monitor_home;
+        GRANT CONNECT ON DATABASE authdb TO monitor_yc, monitor_home;
+        ALTER ROLE monitor_yc SET default_transaction_read_only = on;
+        ALTER ROLE monitor_home SET default_transaction_read_only = on;
+        ALTER ROLE monitor_yc SET statement_timeout = '2000ms';
+        ALTER ROLE monitor_home SET statement_timeout = '2000ms';
+    when: pg_primary.stdout | trim == 't'
+    changed_when: true
+  - name: Render narrow certificate and source-network rules
+    ansible.builtin.template:
+      src: '{{ project_root }}/infra/postgres/templates/{{ item }}.j2'
+      dest: '{{ remote_root }}/solo-postgres-persistent/data/{{ item }}'
+      owner: '999'
+      group: '999'
+      mode: '0600'
+    loop: [pg_hba.conf, pg_ident.conf]
+    register: pg_monitoring_access
+  - name: Reload access rules without restarting PostgreSQL
+    ansible.builtin.command:
+      argv: [docker, exec, solo-postgres, /usr/lib/postgresql/17/bin/pg_ctl, -D, /var/lib/postgresql/data, reload]
+    when: pg_monitoring_access.changed
+    changed_when: true

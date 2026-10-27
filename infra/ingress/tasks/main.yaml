@@ -1,0 +1,16 @@
+- name: Inspect existing ingress without recreating it
+  community.docker.docker_container_info:
+    name: solo-ingress
+  register: ingress_existing
+- name: Bootstrap absent ingress
+  ansible.builtin.include_tasks: bootstrap.yaml
+  when: not ingress_existing.exists
+- name: Gracefully update existing ingress
+  ansible.builtin.include_tasks: reload.yaml
+  when: ingress_existing.exists
+
+- name: Publish private metrics port for existing installations
+  ansible.builtin.include_tasks: metrics-migrate.yaml
+  when:
+    - ingress_existing.exists
+    - (obs.routing_metrics_port | string ~ '/tcp') not in ingress_existing.container.HostConfig.PortBindings

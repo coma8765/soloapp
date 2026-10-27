@@ -1,0 +1,11 @@
+- name: Render coordinated timeout profile
+  ansible.builtin.command:
+    argv: [python3, '{{ project_root }}/infra/ha/profile.py', --target-seconds, '{{ failover_target_seconds | string }}']
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  check_mode: false
+  register: ha_profile_render
+- name: Use rendered profile
+  ansible.builtin.set_fact:
+    ha: '{{ ha_profile_render.stdout | from_json }}'

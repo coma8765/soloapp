@@ -1,0 +1,34 @@
+- name: Maintain ACME dedicated group
+  ansible.builtin.group: {name: solo-acme, gid: 10003, system: true}
+- name: Maintain ACME dedicated user
+  ansible.builtin.user:
+    name: solo-acme
+    uid: 10003
+    group: solo-acme
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+- name: Install HTTPS renewal utility
+  ansible.builtin.copy:
+    src: '{{ project_root }}/infra/certificates/files/renew-https.py'
+    dest: '{{ remote_root }}/renew-https.py'
+    mode: '0700'
+- name: Configure Lockbox resource IDs for ACME
+  ansible.builtin.copy:
+    content: "{{ {'state': cloud.secrets['acme-state'], 'https': cloud.secrets.https, 'domain': public_domain} | to_nice_json }}"
+    dest: '{{ remote_root }}/acme-cloud.json'
+    mode: '0600'
+- name: Install ACME units
+  ansible.builtin.template:
+    src: '{{ project_root }}/infra/certificates/templates/{{ item }}.j2'
+    dest: '/etc/systemd/system/solo-{{ item }}'
+    mode: '0644'
+  loop: [acme-web.service, https-renew.service, https-renew.timer]
+  register: acme_units
+- name: Enable ACME challenge endpoint and renewal timer
+  ansible.builtin.systemd_service:
+    name: '{{ item }}'
+    enabled: true
+    daemon_reload: true
+    state: "{{ 'restarted' if acme_units.changed else 'started' }}"
+  loop: [solo-acme-web.service, solo-https-renew.timer]

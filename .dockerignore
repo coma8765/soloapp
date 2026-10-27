@@ -1,0 +1,22 @@
+# Build contexts contain source, never local deployment state.
+.git
+.github
+.secrets
+.env
+.env.*
+work
+outputs
+.venv*
+**/__pycache__
+**/.pytest_cache
+**/build
+*.tar
+*.tar.gz
+infra/cloud/resources.json
+infra/ansible/inventory.yaml
+infra/ha/deployment-history.md
+**/migrations
+
+**/.fvm
+**/.dart_tool
+**/.gradle

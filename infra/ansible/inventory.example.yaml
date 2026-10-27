@@ -1,0 +1,44 @@
+# Copy to inventory.yaml and configure your own deployment.
+all:
+  vars:
+    ansible_ssh_common_args: -o ForwardAgent=no -o BatchMode=yes
+    project_root: '{{ inventory_dir | dirname | dirname }}'
+    remote_root: /opt/hack-vk-26
+    cloud: '{{ lookup(''file'', project_root ~ ''/infra/cloud/resources.json'') |
+      from_json }}'
+    release: v4
+    auth_image: soloapp/auth:v7-routes
+    whoami_image: soloapp/whoami:v7-routes
+    secrets_image: soloapp/secrets:{{ release }}
+    issuer_image: soloapp/issuer:{{ release }}
+    failover_target_seconds: 15
+    k3s_version: v1.36.5+k3s1
+    public_domain: auth.example.invalid
+  children:
+    app_sites:
+      hosts:
+        yc:
+          ansible_host: 192.0.2.10
+          ansible_user: deploy
+          private_ip: 10.77.26.11
+          cluster_octet: 78
+          issuer_account: cert-issuer
+          issuer_schedule: 17 3 * * *
+        home:
+          ansible_host: 198.51.100.20
+          ansible_user: deploy
+          ansible_port: 8022
+          private_ip: 10.77.26.12
+          cluster_octet: 80
+          issuer_account: cert-issuer-home
+          issuer_schedule: 47 3 * * *
+    monitor:
+      hosts:
+        edge:
+          ansible_host: 203.0.113.30
+          ansible_user: deploy
+          private_ip: 10.77.26.13
+    ingress:
+      hosts:
+        yc: {}
+        edge: {}

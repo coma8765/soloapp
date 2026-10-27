@@ -1,0 +1,225 @@
+{
+  "solo_pg_node": {
+    "query": "SELECT (NOT pg_is_in_recovery())::int AS primary,\nextract(epoch FROM now()-pg_postmaster_start_time()) AS uptime_seconds,\ncurrent_setting('max_connections')::int AS max_connections,\n(current_setting('synchronous_standby_names') <> '')::int AS sync_required,\n(SELECT count(*) FROM pg_stat_replication WHERE state='streaming') AS streaming_standbys,\n(SELECT count(*) FROM pg_stat_replication WHERE state='streaming' AND sync_state IN ('sync','quorum')) AS synchronous_standbys,\nCASE WHEN pg_is_in_recovery() THEN COALESCE(pg_wal_lsn_diff(pg_last_wal_receive_lsn(),pg_last_wal_replay_lsn()),0) ELSE 0 END AS receive_replay_gap_bytes,\nextract(epoch FROM clock_timestamp()) AS snapshot_timestamp_seconds",
+    "metrics": [
+      {
+        "primary": {
+          "usage": "GAUGE",
+          "description": "1 primary, 0 standby; observation does not prove fencing or writable availability"
+        }
+      },
+      {
+        "uptime_seconds": {
+          "usage": "GAUGE",
+          "description": "Postmaster uptime"
+        }
+      },
+      {
+        "max_connections": {
+          "usage": "GAUGE",
+          "description": "Configured connection limit"
+        }
+      },
+      {
+        "sync_required": {
+          "usage": "GAUGE",
+          "description": "Nonempty synchronous_standby_names"
+        }
+      },
+      {
+        "streaming_standbys": {
+          "usage": "GAUGE",
+          "description": "Streaming replicas visible to this server"
+        }
+      },
+      {
+        "synchronous_standbys": {
+          "usage": "GAUGE",
+          "description": "Streaming synchronous/quorum replicas"
+        }
+      },
+      {
+        "receive_replay_gap_bytes": {
+          "usage": "GAUGE",
+          "description": "Standby received minus replayed WAL, not network lag"
+        }
+      },
+      {
+        "snapshot_timestamp_seconds": {
+          "usage": "GAUGE",
+          "description": "Database observation timestamp"
+        }
+      }
+    ]
+  },
+  "solo_pg_replication": {
+    "query": "SELECT application_name, state, sync_state,\npg_wal_lsn_diff(pg_current_wal_lsn(),replay_lsn) AS replay_gap_bytes\nFROM pg_stat_replication WHERE NOT pg_is_in_recovery() AND replay_lsn IS NOT NULL",
+    "metrics": [
+      {
+        "application_name": {
+          "usage": "LABEL",
+          "description": "Replica application"
+        }
+      },
+      {
+        "state": {
+          "usage": "LABEL",
+          "description": "Replication state"
+        }
+      },
+      {
+        "sync_state": {
+          "usage": "LABEL",
+          "description": "Sync mode"
+        }
+      },
+      {
+        "replay_gap_bytes": {
+          "usage": "GAUGE",
+          "description": "Primary WAL minus standby replayed WAL bytes"
+        }
+      }
+    ]
+  },
+  "solo_pg_database": {
+    "query": "SELECT datname, numbackends, xact_commit, xact_rollback,\nblks_read, blks_hit, tup_returned, tup_fetched, tup_inserted, tup_updated, tup_deleted,\ntemp_bytes, deadlocks, pg_database_size(datname) AS size_bytes\nFROM pg_stat_database WHERE datname='authdb' ",
+    "metrics": [
+      {
+        "datname": {
+          "usage": "LABEL",
+          "description": "Database"
+        }
+      },
+      {
+        "numbackends": {
+          "usage": "GAUGE",
+          "description": "numbackends"
+        }
+      },
+      {
+        "xact_commit": {
+          "usage": "COUNTER",
+          "description": "xact_commit"
+        }
+      },
+      {
+        "xact_rollback": {
+          "usage": "COUNTER",
+          "description": "xact_rollback"
+        }
+      },
+      {
+        "blks_read": {
+          "usage": "COUNTER",
+          "description": "blks_read"
+        }
+      },
+      {
+        "blks_hit": {
+          "usage": "COUNTER",
+          "description": "blks_hit"
+        }
+      },
+      {
+        "tup_returned": {
+          "usage": "COUNTER",
+          "description": "tup_returned"
+        }
+      },
+      {
+        "tup_fetched": {
+          "usage": "COUNTER",
+          "description": "tup_fetched"
+        }
+      },
+      {
+        "tup_inserted": {
+          "usage": "COUNTER",
+          "description": "tup_inserted"
+        }
+      },
+      {
+        "tup_updated": {
+          "usage": "COUNTER",
+          "description": "tup_updated"
+        }
+      },
+      {
+        "tup_deleted": {
+          "usage": "COUNTER",
+          "description": "tup_deleted"
+        }
+      },
+      {
+        "temp_bytes": {
+          "usage": "COUNTER",
+          "description": "temp_bytes"
+        }
+      },
+      {
+        "deadlocks": {
+          "usage": "COUNTER",
+          "description": "deadlocks"
+        }
+      },
+      {
+        "size_bytes": {
+          "usage": "GAUGE",
+          "description": "size_bytes"
+        }
+      }
+    ]
+  },
+  "solo_pg_connections": {
+    "query": "SELECT COALESCE(state,'unknown') AS state,\nCASE WHEN application_name='soloapp-auth' THEN 'auth' WHEN application_name='soloapp-monitor' THEN 'monitor' ELSE 'other' END AS application,\nCOALESCE(wait_event_type,'none') AS wait_type, count(*) AS count\nFROM pg_stat_activity WHERE backend_type='client backend' GROUP BY 1,2,3",
+    "metrics": [
+      {
+        "state": {
+          "usage": "LABEL",
+          "description": "Session state"
+        }
+      },
+      {
+        "application": {
+          "usage": "LABEL",
+          "description": "Bounded application category"
+        }
+      },
+      {
+        "wait_type": {
+          "usage": "LABEL",
+          "description": "Wait category"
+        }
+      },
+      {
+        "count": {
+          "usage": "GAUGE",
+          "description": "Client connections"
+        }
+      }
+    ]
+  },
+  "solo_pg_contention": {
+    "query": "SELECT\n(SELECT count(*) FROM pg_locks WHERE NOT granted) AS waiting_locks,\n(SELECT count(*) FROM pg_stat_activity WHERE cardinality(pg_blocking_pids(pid))>0) AS blocked_sessions,\nCOALESCE((SELECT max(extract(epoch FROM now()-xact_start)) FROM pg_stat_activity WHERE pid<>pg_backend_pid() AND backend_type='client backend'),0) AS oldest_transaction_seconds",
+    "metrics": [
+      {
+        "waiting_locks": {
+          "usage": "GAUGE",
+          "description": "waiting_locks"
+        }
+      },
+      {
+        "blocked_sessions": {
+          "usage": "GAUGE",
+          "description": "blocked_sessions"
+        }
+      },
+      {
+        "oldest_transaction_seconds": {
+          "usage": "GAUGE",
+          "description": "oldest_transaction_seconds"
+        }
+      }
+    ]
+  }
+}

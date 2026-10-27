@@ -1,0 +1,102 @@
+- name: Lengthen monitor demotion guard before changing fencing
+  hosts: edge
+  gather_facts: false
+  tasks:
+  - ansible.builtin.import_tasks: tasks/profile.yaml
+  - name: Read current demotion guard
+    ansible.builtin.command:
+      argv:
+      - docker
+      - exec
+      - solo-monitor
+      - psql
+      - -p
+      - '55433'
+      - -U
+      - postgres
+      - -d
+      - pg_auto_failover
+      - -Atc
+      - SELECT setting FROM pg_settings WHERE name='pgautofailover.primary_demote_timeout'
+    register: old_guard
+    changed_when: false
+    check_mode: false
+  - ansible.builtin.include_tasks: tasks/postgres-setting.yaml
+    vars:
+      setting_container: solo-monitor
+      setting_port: 55433
+      setting_database: pg_auto_failover
+      setting_name: pgautofailover.primary_demote_timeout
+      setting_value: '{{ [old_guard.stdout | int, ha.monitor.primary_demote_timeout | int] | max }}'
+  become: true
+  any_errors_fatal: true
+- name: Configure and verify both keepers before shortening the guard
+  hosts: app_sites
+  any_errors_fatal: true
+  gather_facts: false
+  tasks:
+  - ansible.builtin.import_tasks: tasks/profile.yaml
+  - ansible.builtin.include_tasks: tasks/postgres-setting.yaml
+    loop: '{{ ha.postgres | dict2items }}'
+    vars:
+      setting_container: solo-postgres
+      setting_port: 55432
+      setting_database: postgres
+      setting_name: '{{ item.key }}'
+      setting_value: '{{ item.value }}'
+  - ansible.builtin.include_tasks: tasks/keeper-setting.yaml
+    loop: '{{ ha.keeper | dict2items }}'
+  become: true
+- name: Configure monitor after fencing settings succeed
+  hosts: edge
+  gather_facts: false
+  tasks:
+  - ansible.builtin.import_tasks: tasks/profile.yaml
+  - ansible.builtin.include_tasks: tasks/postgres-setting.yaml
+    loop: '{{ ha.monitor | dict2items }}'
+    vars:
+      setting_container: solo-monitor
+      setting_port: 55433
+      setting_database: pg_auto_failover
+      setting_name: pgautofailover.{{ item.key }}
+      setting_value: '{{ item.value }}'
+  become: true
+  any_errors_fatal: true
+- name: Configure ingress health checks
+  hosts: ingress
+  serial: 1
+  gather_facts: false
+  tasks:
+  - ansible.builtin.import_tasks: tasks/profile.yaml
+  - ansible.builtin.import_tasks: ../ingress/tasks/main.yaml
+  become: true
+  any_errors_fatal: true
+- name: Configure YC NLB health checks
+  hosts: edge
+  gather_facts: false
+  tasks:
+  - ansible.builtin.import_tasks: tasks/profile.yaml
+  - name: Apply NLB target group health parameters
+    ansible.builtin.command:
+      argv:
+      - yc
+      - load-balancer
+      - network-load-balancer
+      - update
+      - '{{ cloud.nlb }}'
+      - --target-group
+      - target-group-id={{ cloud.target_group }},healthcheck-name=soloapp,healthcheck-interval={{ ha.nlb.interval_seconds }}s,healthcheck-timeout={{
+        ha.nlb.timeout_seconds }}s,healthcheck-unhealthythreshold={{ ha.nlb.unhealthy_threshold }},healthcheck-healthythreshold={{ ha.nlb.healthy_threshold
+        }},healthcheck-http-port=80,healthcheck-http-path=/healthz
+    delegate_to: localhost
+    become: false
+    changed_when: true
+  - name: Record selected profile
+    ansible.builtin.copy:
+      content: '{{ ha | to_nice_json }}'
+      dest: '{{ project_root }}/infra/ha/profile.json'
+      mode: '0644'
+    delegate_to: localhost
+    become: false
+  become: true
+  any_errors_fatal: true

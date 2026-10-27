@@ -1,0 +1,25 @@
+replicas: 2
+image_pull_policy: Never
+min_ready_seconds: 5
+termination_grace_seconds: 60
+rolling_update:
+  maxUnavailable: 0
+  maxSurge: 1
+health:
+  error_threshold: 3
+  window_seconds: 10
+  cooldown_seconds: 15
+probes:
+  startup:
+    period_seconds: 2
+    timeout_seconds: 2
+    failure_threshold: 60
+  readiness:
+    period_seconds: 2
+    timeout_seconds: 1
+    failure_threshold: 2
+    success_threshold: 2
+  liveness:
+    period_seconds: 5
+    timeout_seconds: 2
+    failure_threshold: 6

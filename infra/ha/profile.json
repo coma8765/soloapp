@@ -1,0 +1,31 @@
+{
+  "target_seconds": 15,
+  "monitor": {
+    "health_check_period": 1000,
+    "health_check_timeout": 1000,
+    "health_check_max_retries": 1,
+    "health_check_retry_delay": 500,
+    "node_considered_unhealthy_timeout": 3000,
+    "primary_demote_timeout": 6000
+  },
+  "keeper": {
+    "network_partition_timeout": 2,
+    "prepare_promotion_walreceiver": 1
+  },
+  "postgres": {
+    "wal_sender_timeout": 2000,
+    "wal_receiver_timeout": 2000
+  },
+  "haproxy": {
+    "interval_seconds": 1,
+    "check_timeout_seconds": 1,
+    "fall": 2,
+    "rise": 1
+  },
+  "nlb": {
+    "interval_seconds": 2,
+    "timeout_seconds": 1,
+    "unhealthy_threshold": 2,
+    "healthy_threshold": 2
+  }
+}

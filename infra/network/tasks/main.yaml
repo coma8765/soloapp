@@ -1,0 +1,25 @@
+- name: Configure application NodePort isolation
+  ansible.builtin.include_tasks: nodeports.yaml
+  when: inventory_hostname in groups['app_sites']
+- name: Install project network policy
+  ansible.builtin.copy:
+    src: "{{ project_root }}/infra/network/files/private-ports.sh"
+    dest: "{{ remote_root }}/private-ports.sh"
+    mode: '0700'
+  register: firewall_script
+- name: Install network policy unit
+  ansible.builtin.template:
+    src: "{{ project_root }}/infra/network/templates/private-ports.service.j2"
+    dest: /etc/systemd/system/solo-private-ports.service
+    mode: '0644'
+  register: firewall_unit
+- name: Apply project policy
+  ansible.builtin.systemd_service:
+    name: solo-private-ports
+    enabled: true
+    daemon_reload: "{{ firewall_unit.changed }}"
+    state: "{{ 'restarted' if firewall_script.changed or firewall_unit.changed else 'started' }}"
+- name: Require existing encrypted WireGuard bootstrap
+  ansible.builtin.command: systemctl is-active wg-quick@wg-solo
+  changed_when: false
+  check_mode: false

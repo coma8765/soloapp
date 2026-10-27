@@ -1,0 +1,10 @@
+[Unit]
+Description=Soloapp private ports and metadata isolation
+After=network-online.target
+Before=docker.service k3s.service
+[Service]
+Type=oneshot
+ExecStart=/opt/hack-vk-26/private-ports.sh
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target

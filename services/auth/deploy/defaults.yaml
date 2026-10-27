@@ -1,0 +1,9 @@
+image: "{{ auth_image }}"
+port: 19082
+resources:
+  requests: {cpu: 100m, memory: 96Mi}
+  limits: {cpu: 1500m, memory: 512Mi}
+db_pool:
+  max_connections: 4
+  max_lifetime_seconds: 300
+  tcp_user_timeout_ms: 2000

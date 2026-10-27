@@ -1,0 +1,24 @@
+- name: Validate auth connection pool limits
+  ansible.builtin.assert:
+    that:
+    - auth_config.db_pool.max_connections | int >= 1
+    - auth_config.db_pool.max_connections | int <= 16
+    - auth_config.db_pool.max_lifetime_seconds | int >= 1
+    - auth_config.db_pool.max_lifetime_seconds | int <= 3600
+    - auth_config.db_pool.tcp_user_timeout_ms | int >= 1
+    - auth_config.db_pool.tcp_user_timeout_ms | int <= 10000
+    quiet: true
+- name: Deploy auth service
+  ansible.builtin.include_tasks: "{{ project_root }}/infra/kubernetes/tasks/apply.yaml"
+  vars:
+    manifest_source: "{{ project_root }}/services/auth/deploy/k8s/service.yaml.j2"
+    manifest_name: auth-service
+- name: Deploy auth deployment
+  ansible.builtin.include_tasks: "{{ project_root }}/infra/kubernetes/tasks/apply.yaml"
+  vars:
+    manifest_source: "{{ project_root }}/services/auth/deploy/k8s/deployment.yaml.j2"
+    manifest_name: auth-deployment
+- name: Wait for auth rolling update
+  ansible.builtin.command: k3s kubectl -n soloapp rollout status deployment/auth --timeout=300s
+  changed_when: false
+  when: not ansible_check_mode

@@ -1,0 +1,5 @@
+- name: Deploy certificate rotation CronJob
+  ansible.builtin.include_tasks: "{{ project_root }}/infra/kubernetes/tasks/apply.yaml"
+  vars:
+    manifest_source: "{{ project_root }}/infra/certificates/k8s/issuer.yaml.j2"
+    manifest_name: cert-issuer

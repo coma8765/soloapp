@@ -1,0 +1,16 @@
+[Unit]
+Description=Start {{ startup_container }} after scoped Lockbox delivery
+After=network-online.target docker.service wg-quick@wg-solo.service solo-{{ startup_secret }}-secrets.service{% if inventory_hostname == 'home' %} k3s.service{% endif %}
+
+Wants=network-online.target docker.service wg-quick@wg-solo.service solo-{{ startup_secret }}-secrets.service{% if inventory_hostname == 'home' %} k3s.service{% endif %}
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=10
+ExecStartPre=/bin/systemctl start solo-{{ startup_secret }}-secrets.service
+ExecStart=/usr/bin/docker start {{ startup_container }}
+TimeoutStartSec=120
+[Install]
+WantedBy=multi-user.target
