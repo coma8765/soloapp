@@ -88,6 +88,18 @@ int main(int argc, char **argv) {
         out["new_attempt_completed"] = repository.Finish(*next, true, 1000);
         out["monotonic_attempt"] = next->attempt > first->attempt;
         out["completed_not_claimed"] = !repository.Claim(task.task_id, 30000).has_value();
+        auto retry = repository.Submit("repository-retry-unit", "test", "data");
+        auto retry_attempt = repository.Claim(retry.task_id, 30000);
+        repository.Finish(*retry_attempt, false, 100);
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        auto pending = repository.Get(retry.task_id);
+        out["retry_retains_recovery_lease"] = pending->lease_ms == retry_attempt->lease_ms;
+        out["retry_does_not_publish_duplicate"] =
+            !pending->needs_publish && repository.Pending().empty();
+        auto retried = repository.Claim(retry.task_id, 30000);
+        out["original_queue_retry_claimable"] = retried.has_value();
+        if (retried)
+            repository.Finish(*retried, true, 100);
     }
     std::cout << out << std::endl;
 }

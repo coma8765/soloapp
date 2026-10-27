@@ -145,3 +145,43 @@ async def test_concurrent_duplicate_submission(service_client, mockserver):
     await completed(service_client, data["task_id"])
     await asyncio.sleep(1)
     assert len(calls) == 1
+
+
+async def test_failed_recipient_does_not_starve_new_tasks(service_client, mockserver):
+    blocked = task()
+    healthy = task()
+    allow_blocked = False
+    failures = 0
+
+    @mockserver.handler("/internal/delivery")
+    def delivery(request):
+        nonlocal failures
+        data = request.json
+        if data["task_id"] == blocked["task_id"] and not allow_blocked:
+            failures += 1
+            return mockserver.make_response("offline", 503)
+        return mockserver.make_response(
+            json={"task_id": data["task_id"], "attempt": data["attempt"], "status": "delivered"}
+        )
+
+    @mockserver.json_handler("/internal/delivery/cancel")
+    def cancel(request):
+        return {"cancelled": True}
+
+    assert (await service_client.post(BASE + "tasks", json=blocked, headers=HEADERS)).status == 202
+    end = time.monotonic() + 10
+    while failures < 2 and time.monotonic() < end:
+        await asyncio.sleep(0.1)
+    assert failures >= 2
+    try:
+        assert (
+            await service_client.post(BASE + "tasks", json=healthy, headers=HEADERS)
+        ).status == 202
+        await completed(service_client, healthy["task_id"], 6)
+        response = await service_client.post(
+            BASE + "status", json={"task_id": blocked["task_id"]}, headers=HEADERS
+        )
+        assert response.json()["state"] != "done"
+    finally:
+        allow_blocked = True
+        await completed(service_client, blocked["task_id"], 15)

@@ -108,9 +108,11 @@ bool Repository::Finish(const Task &attempt, bool success, long long retry_ms) {
             return false;
         }
         row.state = success ? "done" : "pending";
-        row.needs_publish = !success;
+        // The original queue entry is NACKed for retry. Keep its recovery lease
+        // instead of publishing an extra copy on every unsuccessful attempt.
+        row.needs_publish = false;
         row.due_ms = NowMs() + retry_ms;
-        row.lease_ms = 0;
+        row.lease_ms = success ? 0 : attempt.lease_ms;
         db_.update(row);
         tx->commit();
         return true;

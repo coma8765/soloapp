@@ -1,0 +1,44 @@
+- name: Apply fair delayed retries without restarting brokers
+  hosts: app_sites
+  serial: 1
+  become: true
+  gather_facts: false
+  any_errors_fatal: true
+  vars:
+    rabbit: "{{ lookup('file', project_root ~ '/infra/rabbitmq/defaults.yaml') | from_yaml | combine(rabbitmq_overrides | default({}), recursive=true) }}"
+  tasks:
+  - name: Validate bounded retry delay
+    ansible.builtin.assert:
+      that:
+      - rabbit.retry_delay_ms | int >= 100
+      - rabbit.retry_delay_ms | int <= 10000
+  - name: Preserve the policy on subsequent broker starts
+    ansible.builtin.copy:
+      src: '{{ project_root }}/infra/rabbitmq/files/manage.py'
+      dest: '{{ remote_root }}/rabbitmq/manage.py'
+      mode: '0700'
+  - name: Persist nonsecret retry settings
+    ansible.builtin.copy:
+      content: "{{ rabbit | combine({'ip': private_ip, 'site': inventory_hostname}) | to_nice_json }}"
+      dest: '{{ remote_root }}/rabbitmq/config.json'
+      mode: '0600'
+  - name: Apply native RabbitMQ 4.4 quorum delayed retry policy
+    ansible.builtin.command:
+      argv:
+      - docker
+      - exec
+      - --user
+      - 999:999
+      - solo-rabbitmq-1
+      - rabbitmqctl
+      - -p
+      - /soloapp
+      - set_policy
+      - --apply-to
+      - quorum_queues
+      - --priority
+      - '10'
+      - delivery-deadline
+      - '^client-notify$'
+      - "{{ {'consumer-timeout': 60000, 'delayed-retry-type': 'all', 'delayed-retry-min': rabbit.retry_delay_ms | int, 'delayed-retry-max': rabbit.retry_delay_ms | int} | to_json }}"
+    changed_when: true
