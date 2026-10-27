@@ -4,3 +4,11 @@ metadata: {name: client-notify, namespace: soloapp}
 spec:
   selector: {app: client-notify}
   ports: [{name: http, port: {{ notify_config.port }}, targetPort: http}]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: client-notify, namespace: soloapp}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: {app: client-notify}

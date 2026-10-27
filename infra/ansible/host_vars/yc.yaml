@@ -8,3 +8,7 @@ service_overrides:
     replicas: 2
   web:
     replicas: 2
+  client_notify:
+    replicas: 2
+  client_gateway:
+    replicas: 2

@@ -31,6 +31,12 @@
       label: '{{ item.image }}'
     tags: [always]
   tasks:
+  - name: Deploy client gateway
+    ansible.builtin.import_tasks: ../../services/client-gateway/deploy/ansible/tasks.yaml
+    tags: [client-gateway]
+  - name: Deploy delivery worker
+    ansible.builtin.import_tasks: ../../services/client-notify/deploy/ansible/tasks.yaml
+    tags: [client-notify]
   - name: Deploy whoami
     ansible.builtin.import_tasks: ../../services/whoami/deploy/ansible/tasks.yaml
     tags:

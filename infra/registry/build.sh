@@ -10,8 +10,10 @@ case "$scope" in
   auth) services=(auth) ;;
   app-api) services=(whoami) ;;
   web) services=(web) ;;
-  all) services=(auth whoami web) ;;
-  *) echo 'Expected auth, app-api, web or all' >&2; exit 2 ;;
+  client-notify) services=(client-notify) ;;
+  client-gateway) services=(client-gateway) ;;
+  all) services=(auth whoami web client-notify client-gateway) ;;
+  *) echo 'Expected auth, app-api, web, client-notify, client-gateway or all' >&2; exit 2 ;;
 esac
 for service in "${services[@]}"; do
   dockerfile="services/$service/deploy/Dockerfile"

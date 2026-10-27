@@ -7,7 +7,7 @@ on:
         required: true
         type: choice
         default: app-api
-        options: [app-api, auth, web, nginx, all]
+        options: [app-api, client-notify, client-gateway, auth, web, nginx, all]
       rollback_revision:
         description: Previously deployed v0.1.P or full commit SHA; empty for a new release
         required: false
@@ -45,7 +45,9 @@ jobs:
             app-api) images=whoami ;;
             web) images=web ;;
             nginx) images='' ;;
-            all) images='auth whoami web' ;;
+            client-notify) images=client-notify ;;
+            client-gateway) images=client-gateway ;;
+            all) images='auth whoami web client-notify client-gateway' ;;
             *) exit 2 ;;
           esac
           echo "service=$SERVICE" >> "$GITHUB_OUTPUT"

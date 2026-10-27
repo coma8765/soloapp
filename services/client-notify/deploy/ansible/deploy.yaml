@@ -4,32 +4,5 @@
   any_errors_fatal: true
   become: true
   gather_facts: false
-  vars:
-    notify_config: "{{ workload_defaults | combine(lookup('template', project_root ~ '/services/client-notify/deploy/defaults.yaml') | from_yaml, recursive=true) | combine((service_overrides | default({})).client_notify | default({}), recursive=true) }}"
   tasks:
-  - name: Require isolated workload credentials and an immutable runtime image
-    ansible.builtin.assert:
-      that:
-      - "'client-notify-' ~ inventory_hostname in cloud.identities"
-      - "'client-notify-' ~ inventory_hostname in cloud.secrets"
-      - "'@sha256:' in notify_config.image"
-      quiet: true
-  - name: Apply Service
-    ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
-    vars:
-      manifest_source: '{{ project_root }}/services/client-notify/deploy/k8s/service.yaml.j2'
-      manifest_name: client-notify-service
-  - name: Apply explicit egress and ingress policy
-    ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
-    vars:
-      manifest_source: '{{ project_root }}/services/client-notify/deploy/k8s/networkpolicy.yaml.j2'
-      manifest_name: client-notify-network
-  - name: Apply Deployment
-    ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
-    vars:
-      manifest_source: '{{ project_root }}/services/client-notify/deploy/k8s/deployment.yaml.j2'
-      manifest_name: client-notify-deployment
-  - name: Wait for rollout
-    ansible.builtin.command: k3s kubectl -n soloapp rollout status deployment/client-notify --timeout=300s
-    changed_when: false
-    when: not ansible_check_mode
+  - ansible.builtin.import_tasks: tasks.yaml

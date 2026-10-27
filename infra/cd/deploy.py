@@ -20,15 +20,24 @@ from pathlib import Path
 
 CONFIG = Path("/etc/soloapp-cd/config.json")
 STATE = Path("/var/lib/soloapp-cd")
-SCOPES = ("auth", "app-api", "nginx", "web", "all")
+SCOPES = ("auth", "app-api", "nginx", "web", "client-notify", "client-gateway", "all")
 IMAGE_SERVICES = {
     "auth": ("auth",),
     "app-api": ("whoami",),
     "nginx": (),
     "web": ("web",),
-    "all": ("auth", "whoami", "web"),
+    "client-notify": ("client-notify",),
+    "client-gateway": ("client-gateway",),
+    "all": ("auth", "whoami", "web", "client-notify", "client-gateway"),
 }
-WORKLOADS = {"auth": "auth", "app-api": "whoami", "nginx": "nginx", "web": "web"}
+WORKLOADS = {
+    "auth": "auth",
+    "app-api": "whoami",
+    "nginx": "nginx",
+    "web": "web",
+    "client-notify": "client-notify",
+    "client-gateway": "client-gateway",
+}
 
 
 def deployment_operation(mode):
@@ -38,7 +47,14 @@ def deployment_operation(mode):
         prefix = action + "-"
         if mode.startswith(prefix) and mode[len(prefix) :] in SCOPES:
             return action, mode[len(prefix) :]
-    if mode in ("publish", "push-auth", "push-whoami", "push-web"):
+    if mode in (
+        "publish",
+        "push-auth",
+        "push-whoami",
+        "push-web",
+        "push-client-notify",
+        "push-client-gateway",
+    ):
         return mode, None
     raise ValueError("Invalid CD operation")
 
@@ -62,6 +78,7 @@ def service_state(previous):
     return {
         name: {"revision": revision, **({"image": images[workload]} if workload in images else {})}
         for name, workload in WORKLOADS.items()
+        if workload in images or workload == "nginx"
     }
 
 
@@ -327,7 +344,12 @@ def main():
                 "ansible_become": False,
                 "cloud": json.loads(Path("/etc/soloapp-cd/resources.json").read_text()),
             }
-            extra.update({service + "_image": image for service, image in zip(services, images)})
+            extra.update(
+                {
+                    service.replace("-", "_") + "_image": image
+                    for service, image in zip(services, images)
+                }
+            )
             if scope in ("web", "all"):
                 extra["web_release"] = sha
             for name, value in [("kubeconfig.json", kube), ("extra.json", extra)]:

@@ -135,7 +135,10 @@ class IsolatedDeploymentTests(unittest.TestCase):
         self.assertEqual(new["services"]["web"], {"revision": "a" * 40, "image": "web-old"})
         self.assertEqual(new["services"]["nginx"], {"revision": "a" * 40})
         full = gate.update_service_state(
-            new, "c" * 40, "all", ["auth-new", "identity-next", "web-new"]
+            new,
+            "c" * 40,
+            "all",
+            ["auth-new", "identity-next", "web-new", "notify-new", "gateway-new"],
         )
         self.assertEqual(full["revision"], "c" * 40)
 
@@ -226,7 +229,7 @@ class IsolatedDeploymentTests(unittest.TestCase):
                 for extra in extras:
                     self.assertEqual(
                         {k for k in extra if k.endswith("_image")},
-                        set() if scope == "nginx" else {workload + "_image"},
+                        set() if scope == "nginx" else {workload.replace("-", "_") + "_image"},
                     )
                     self.assertEqual("web_release" in extra, scope == "web")
                 storage = [cmd for cmd in commands if "/src/infra/object-storage/publish.py" in cmd]
@@ -239,6 +242,9 @@ class IsolatedDeploymentTests(unittest.TestCase):
                     )
                 current = json.loads((state / "deployed.json").read_text())
                 for other in gate.WORKLOADS:
+                    if other in ("client-notify", "client-gateway") and other != scope:
+                        self.assertNotIn(other, current["services"])
+                        continue
                     self.assertEqual(
                         current["services"][other]["revision"],
                         revision if other == scope else "b" * 40,

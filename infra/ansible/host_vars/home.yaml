@@ -9,3 +9,7 @@ service_overrides:
   web:
     replicas: 2
 network_direct_https_mark: '0x2024'
+  client_notify:
+    replicas: 2
+  client_gateway:
+    replicas: 2
