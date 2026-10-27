@@ -69,7 +69,7 @@ items:
           env:
           - {name: TOKEN_FILE, value: /run/identity/token}
           - {name: SERVICE_ACCOUNT_ID, value: '{{ cloud.identities["client-notify-" ~ inventory_hostname] }}'}
-          - {name: SECRET_IDS, value: '{{ cloud.secrets["client-notify-" ~ inventory_hostname] }}'}
+          - {name: SECRET_IDS, value: '{{ cloud.secrets["client-notify-" ~ inventory_hostname] }},{{ cloud.secrets["client-notify-tls-" ~ inventory_hostname] }}'}
           - {name: SECRET_DIR, value: /run/soloapp-secrets/data}
           - {name: LOOP, value: '1'}
           resources:
@@ -87,7 +87,7 @@ items:
           env:
           - {name: TOKEN_FILE, value: /run/identity/token}
           - {name: SERVICE_ACCOUNT_ID, value: '{{ cloud.identities["client-notify-" ~ inventory_hostname] }}'}
-          - {name: SECRET_IDS, value: '{{ cloud.secrets["client-notify-" ~ inventory_hostname] }}'}
+          - {name: SECRET_IDS, value: '{{ cloud.secrets["client-notify-" ~ inventory_hostname] }},{{ cloud.secrets["client-notify-tls-" ~ inventory_hostname] }}'}
           - {name: SECRET_DIR, value: /run/soloapp-secrets/data}
           resources:
             requests: {cpu: 10m, memory: 24Mi}

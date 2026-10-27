@@ -51,7 +51,7 @@ for item in cfg["certificates"]:
             False,
         )
     )
-    names = [x509.DNSName(cn)]
+    names = [x509.DNSName(cn)] + [x509.DNSName(name) for name in item.get("dns", [])]
     if item.get("ip"):
         names += [
             x509.IPAddress(ipaddress.ip_address(item["ip"])),

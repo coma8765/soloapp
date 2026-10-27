@@ -110,6 +110,16 @@ class _ChatPanelState extends State<ChatPanel> {
                 ]);
               }
             });
+            final delivery = event['delivery'];
+            if (delivery is Map<String, dynamic>) {
+              socket.sink.add(
+                jsonEncode({
+                  'type': 'ack',
+                  'task_id': delivery['task_id'],
+                  'attempt': delivery['attempt'],
+                }),
+              );
+            }
             deadline();
           } catch (_) {
             _retry(generation);

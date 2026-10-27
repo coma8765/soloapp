@@ -1,0 +1,8 @@
+image: rabbitmq:4.4.0@sha256:d9e71c639c9476bbfc78ac7b2948d9b93af2c63ee9b3226ccadd5af2d7113b78
+nodes: 2
+memory: 768m
+cpus: '0.75'
+watermark: 256MiB
+ports: [5671, 5673]
+metrics_ports: [15691, 15693]
+distribution_ports: [25671, 25673]

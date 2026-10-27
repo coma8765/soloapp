@@ -10,6 +10,10 @@ hostssl pg_auto_failover autoctl_node {{ hostvars[host].private_ip }}/32 cert ma
 {% for host in groups['app_sites'] %}
 hostssl authdb monitor_{{ host }} {{ hostvars[host].private_ip }}/32 cert map=solo_observers
 hostssl authdb monitor_{{ host }} 10.{{ hostvars[host].cluster_octet }}.0.0/16 cert map=solo_observers
+{% for role in ['chat_api', 'gateway', 'notify'] %}
+hostssl chatdb {{ role }}_{{ host }} {{ hostvars[host].private_ip }}/32 cert
+hostssl chatdb {{ role }}_{{ host }} 10.{{ hostvars[host].cluster_octet }}.0.0/16 cert
+{% endfor %}
 hostssl authdb auth_{{ host }} {{ hostvars[host].private_ip }}/32 cert
 hostssl authdb auth_{{ host }} 10.{{ hostvars[host].cluster_octet }}.0.0/16 cert
 hostssl replication pgautofailover_replicator {{ hostvars[host].private_ip }}/32 cert map=solo_nodes

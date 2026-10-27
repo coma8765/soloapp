@@ -35,7 +35,7 @@ def main():
             f"{root}/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro",
             "-v",
             f"{root}/rabbitmq-definitions.json:/etc/rabbitmq/test-definitions.json:ro",
-            "rabbitmq:4.1.4",
+            "rabbitmq:4.4.0@sha256:d9e71c639c9476bbfc78ac7b2948d9b93af2c63ee9b3226ccadd5af2d7113b78",
         )
         for _ in range(60):
             result = subprocess.run(

@@ -76,7 +76,14 @@ int main(int argc, char **argv) {
             db.update(*row);
             tx.commit();
         }
+        auto expired = repository.Get(task.task_id);
+        repository.Published(*expired, 30000);
         auto next = repository.Claim(task.task_id, 30000);
+        out["republished_expired_task_claimable"] = next.has_value();
+        if (!next) {
+            std::cout << out << std::endl;
+            return 3;
+        }
         out["stale_completion_rejected"] = !repository.Finish(*first, true, 1000);
         out["new_attempt_completed"] = repository.Finish(*next, true, 1000);
         out["monotonic_attempt"] = next->attempt > first->attempt;

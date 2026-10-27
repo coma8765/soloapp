@@ -69,8 +69,8 @@ jobs:
           python3 infra/ci/check.py cpp-analysis
       - name: Worker JavaScript style and analysis
         run: |
-          services/app-api/node_modules/.bin/prettier --check infra/telegram-relay/src infra/telegram-relay/tests
-          services/app-api/node_modules/.bin/oxlint infra/telegram-relay/src infra/telegram-relay/tests
+          services/app-api/node_modules/.bin/prettier --check infra/telegram-relay/src infra/telegram-relay/tests libs/chat_runtime/src services/client-gateway/src/logic services/client-gateway/src/views services/client-gateway/src/main.mjs services/client-gateway/tests
+          services/app-api/node_modules/.bin/oxlint infra/telegram-relay/src infra/telegram-relay/tests libs/chat_runtime/src services/client-gateway/src/logic services/client-gateway/src/views services/client-gateway/src/main.mjs services/client-gateway/tests
       - name: Validate GitHub Actions and embedded shell
         run: actionlint .github/workflows/ci.yaml .github/workflows/deploy.yaml
   services:
@@ -88,7 +88,15 @@ jobs:
         run: make test-${{ matrix.service }}
       - name: Build client-notify runtime image
         if: matrix.service == 'client-notify'
-        run: make build-client-notify
+        run: |
+          docker buildx create --use
+          docker buildx build --platform linux/amd64 --provenance=false --sbom=false --target runtime -f services/client-notify/deploy/Dockerfile --label org.opencontainers.image.revision="$GITHUB_SHA" --label org.opencontainers.image.version="$GITHUB_SHA" --output type=oci,dest="$RUNNER_TEMP/client-notify.oci.tar" .
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: matrix.service == 'client-notify'
+        with:
+          name: client-notify-image
+          path: ${{ runner.temp }}/client-notify.oci.tar
+          retention-days: 1
   app-api:
     name: app-api (NestJS)
     runs-on: ubuntu-24.04
@@ -100,7 +108,41 @@ jobs:
       - name: Build NestJS and run format, lint, unit and e2e tests
         run: make test-app-api
       - name: Build production NestJS image
-        run: make build-app-api
+        run: |
+          docker buildx create --use
+          docker buildx build --platform linux/amd64 --provenance=false --sbom=false --target runtime -f services/app-api/deploy/Dockerfile --label org.opencontainers.image.revision="$GITHUB_SHA" --label org.opencontainers.image.version="$GITHUB_SHA" --output type=oci,dest="$RUNNER_TEMP/whoami.oci.tar" .
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: app-api-image
+          path: ${{ runner.temp }}/whoami.oci.tar
+          retention-days: 1
+  gateway:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env: {POSTGRES_PASSWORD: synthetic-ci-only}
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with: {node-version: '24'}
+      - run: npm --prefix services/client-gateway ci
+      - name: Test browser ACK across gateway pods with real PostgreSQL
+        run: npm --prefix services/client-gateway test
+        env: {TEST_PG_PORT: '5432'}
+      - name: Build immutable gateway image
+        run: |
+          docker buildx create --use
+          docker buildx build --platform linux/amd64 --provenance=false --sbom=false --target runtime -f services/client-gateway/deploy/Dockerfile --label org.opencontainers.image.revision="$GITHUB_SHA" --label org.opencontainers.image.version="$GITHUB_SHA" --output type=oci,dest="$RUNNER_TEMP/client-gateway.oci.tar" .
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: client-gateway-image
+          path: ${{ runner.temp }}/client-gateway.oci.tar
+          retention-days: 1
   web:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -127,10 +169,16 @@ jobs:
           flutter build web --release --no-web-resources-cdn --base-href "/web/releases/$SHA/" --dart-define="APP_VERSION=$SHA"
           python3 deploy/package.py "$SHA" "$RUNNER_TEMP/web.tar.gz"
 
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: web-bundle
+          path: ${{ runner.temp }}/web.tar.gz
+          retention-days: 1
+
   required:
     name: Required checks
     if: always()
-    needs: [source, quality, services, app-api, web]
+    needs: [source, quality, services, app-api, web, gateway]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

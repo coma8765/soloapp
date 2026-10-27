@@ -1,6 +1,6 @@
 replicas: 2
 port: 8080
-image: soloapp/client-notify:dev
+image: '{{ client_notify_image | default("soloapp/client-notify:dev") }}'
 image_pull_policy: IfNotPresent
 ack_timeout_ms: 30000
 delivery_timeout_ms: 10000

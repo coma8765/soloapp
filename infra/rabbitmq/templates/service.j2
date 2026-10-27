@@ -1,0 +1,12 @@
+[Unit]
+Description=Soloapp RabbitMQ node {{ item }} in {{ inventory_hostname }}
+Requires=docker.service solo-node-secrets.service solo-rabbitmq-secrets.service
+After=docker.service network-online.target solo-node-secrets.service solo-rabbitmq-secrets.service
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 {{ remote_root }}/rabbitmq/manage.py {{ item }}
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+[Install]
+WantedBy=multi-user.target

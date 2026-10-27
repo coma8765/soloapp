@@ -66,7 +66,10 @@ void Repository::Published(const Task &snapshot, long long redelivery_ms) {
         auto &row = *stored;
         if (row.version == snapshot.version && row.state != "done") {
             row.needs_publish = false;
-            row.lease_ms = NowMs() + redelivery_ms;
+            // Republishing an expired in-flight task must not renew its dead
+            // worker lease: a consumer on the surviving site must claim it.
+            if (row.state == "pending")
+                row.lease_ms = NowMs() + redelivery_ms;
             db_.update(row);
         }
         tx->commit();

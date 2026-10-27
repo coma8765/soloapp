@@ -25,6 +25,7 @@ Queue::Queue(const Config &c, bool consumer) : connection_(amqp_new_connection()
             sock = amqp_tcp_socket_new(connection_);
         timeval timeout{3, 0};
         amqp_set_rpc_timeout(connection_, &timeout);
+        amqp_set_handshake_timeout(connection_, &timeout);
         if (amqp_socket_open_noblock(sock, c.rabbit_host.c_str(), c.rabbit_port, &timeout) !=
             AMQP_STATUS_OK)
             throw std::runtime_error("RabbitMQ unavailable");

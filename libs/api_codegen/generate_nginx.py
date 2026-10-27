@@ -17,6 +17,7 @@ def render(root=ROOT):
     for service in SERVICES:
         backend = "whoami" if service == "app-api" else service
         for path, method, op in operations(load(root / "services" / service)):
+            backend = op.get("x-upstream", "whoami" if service == "app-api" else service)
             policy = dict(op["x-route"])
             policy["websocket"] = op.get("x-websocket", False)
             if service == "auth" and op["operationId"] == "internal_verify":

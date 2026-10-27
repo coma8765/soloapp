@@ -17,7 +17,7 @@ spec:
     - podSelector: {matchLabels: {app: client-gateway}}
     ports: [{protocol: TCP, port: 8443}]
   - to:
-    - podSelector: {matchLabels: {app: rabbitmq}}
+    - ipBlock: {cidr: {{ private_ip }}/32}
     ports: [{protocol: TCP, port: 5671}]
   - to:
 {% for site in groups.app_sites %}
