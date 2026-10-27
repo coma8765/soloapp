@@ -64,3 +64,8 @@ release-images:
 build-controller:
 	docker buildx build --platform linux/amd64 --load -t soloapp/deploy-controller:1 infra/cd
 	docker save -o work/deploy-controller.tar soloapp/deploy-controller:1
+
+.PHONY: app-api build-app-api test-app-api test-image-app-api
+app-api: build-app-api
+build-app-api test-app-api test-image-app-api:
+	$(MAKE) -C "$(PROJECT_ROOT)/services/app-api" $(patsubst %-app-api,%,$@)

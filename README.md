@@ -104,3 +104,12 @@ make public-check
 ## Private release images
 
 Runtime images are built locally or on GitHub-hosted CI, then retained in the private S3-backed registry on both sites. Production servers only publish, pull and roll ready images. Deployments use digests; `Deploy production` → `rollback_revision` restores a recorded release without rebuilding or supplying image archives. See [registry operations](infra/registry/README.md) and [CI/CD](infra/cd/README.md).
+
+## App API (NestJS)
+
+`services/app-api` проверяет подписанную nginx личность тем же HMAC-контрактом, что и whoami.
+`GET /api/v1/app-api/v1/user-id` принимает Bearer-сессию через gateway и возвращает `{"user_id":"…"}`.
+Сборка: `make build-app-api`; изолированные тесты: `make test-app-api`.
+NestJS заменяет реализацию whoami: один Deployment `whoami`, по два пода на ДЦ.
+Совместимый URL `/api/v1/whoami/v1/user-id` сохранён; дополнительный URL app-api ведёт в те же поды.
+Настройка ключа, запуск и подготовка площадок: [app-api](services/app-api/README.md).

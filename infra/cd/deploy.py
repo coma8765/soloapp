@@ -45,7 +45,7 @@ def run(argv, *, cwd=None, capture=False, env=None):
                           stdout=subprocess.PIPE if capture else None, env=env).stdout
 
 
-def registry_images(sha, require_both=True):
+def registry_images(sha, require_both=True, services=('auth', 'whoami', 'web')):
     directory = Path('/run/soloapp-registry')
     ctx = ssl.create_default_context(cafile=str(directory / 'ca.crt'))
     ctx.load_cert_chain(str(directory / 'pull.crt'), str(directory / 'pull.key'))
@@ -53,7 +53,7 @@ def registry_images(sha, require_both=True):
     for host in ('10.77.26.11', '10.77.26.12'):
         images = []
         try:
-            for service in ('auth', 'whoami', 'web'):
+            for service in services:
                 url = 'https://' + host + ':5043/v2/soloapp/' + service + '/manifests/git-' + sha
                 req = urllib.request.Request(url, headers={'Accept': 'application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'})
                 with urllib.request.urlopen(req, context=ctx, timeout=15) as response:
@@ -125,7 +125,9 @@ def main():
         if mode != 'rollback':
             # Publication and activation wait for both verified copies.
             run(storage + ['--check'])
-        images = registry_images(sha, require_both=mode != 'rollback')
+        # Old releases still have three images and remain eligible for rollback.
+        services = ('auth', 'whoami', 'web')
+        images = registry_images(sha, require_both=mode != 'rollback', services=services)
         if mode == 'rollback' and images != json.loads(history.read_text())['images']:
             raise SystemExit('Rollback image digests differ from the recorded successful deployment')
         # Pull exact digests before mutating pods, including old manifests with Never policy.

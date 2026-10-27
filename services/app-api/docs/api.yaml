@@ -1,0 +1,135 @@
+openapi: 3.0.3
+info:
+  title: Soloapp app-api
+  version: 1.0.0
+paths:
+  /api/v1/app-api/v1/user-id:
+    get:
+      operationId: user_id
+      x-backend-aliases: [/user-id]
+      description: 'Internal endpoint: nginx supplies HMAC-signed identity. Public clients use Bearer
+        at the gateway.'
+      parameters:
+      - name: X-Verified-User-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-9a-f]{32}$
+      - name: X-User-Timestamp
+        in: header
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-9]{10}$
+      - name: X-User-Signature
+        in: header
+        required: true
+        schema:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserId'
+        '401':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - bearerAuth: []
+      x-route:
+        exposure: public
+        auth: signed-user
+        max_body_bytes: 8192
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 15
+        rate_limit: null
+  /health/ready:
+    get:
+      operationId: health_ready
+      description: Internal process health probe; excluded from 5xx accounting.
+      responses:
+        '200':
+          description: Process health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        '503':
+          description: Process health
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - $ref: '#/components/schemas/Status'
+                - $ref: '#/components/schemas/Error'
+      security: []
+      x-route:
+        exposure: internal
+        auth: none
+        max_body_bytes: 8192
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 15
+        rate_limit: null
+  /healthz:
+    get:
+      operationId: healthz
+      description: Internal process health probe; excluded from 5xx accounting.
+      responses:
+        '200':
+          description: Process health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        '503':
+          description: Process health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+      security: []
+      x-route:
+        exposure: internal
+        auth: none
+        max_body_bytes: 8192
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 15
+        rate_limit: null
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    UserId:
+      type: object
+      required:
+      - user_id
+      properties:
+        user_id:
+          type: string
+          pattern: ^[0-9a-f]{32}$
+    Error:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: string
+    Status:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          type: string
