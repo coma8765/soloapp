@@ -83,6 +83,19 @@ def hash_stream(stream):
         h.update(data)
 
 
+def version_alias(ctx, base, config, manifest, media):
+    version=config.get('config',{}).get('Labels',{}).get('org.opencontainers.image.version','')
+    if not re.fullmatch(r'v0\.1\.(0|[1-9][0-9]*)',version):return
+    path=base+'/manifests/'+version
+    status,_,body=request(ctx,'127.0.0.1',5044,'GET',path,headers={'Accept':ACCEPT})
+    if status==200:
+        if digest(body)!=digest(manifest):raise ValueError('Version alias already has another digest')
+        return
+    if status!=404:raise RuntimeError('Version lookup failed: '+str(status))
+    status,_,_=request(ctx,'127.0.0.1',5044,'PUT',path,data=manifest,headers={'Content-Type':media})
+    if status!=201:raise RuntimeError('Version alias publication failed: '+str(status))
+
+
 def publish(path,service,revision,directory):
     tar,members,image,manifest,config=load_archive(path)
     if config.get('config',{}).get('Labels',{}).get('org.opencontainers.image.revision')!=revision:
@@ -94,6 +107,7 @@ def publish(path,service,revision,directory):
     status,headers,body=request(ctx,'127.0.0.1',5044,'GET',base+'/manifests/'+tag,headers={'Accept':ACCEPT})
     if status==200:
         if digest(body)!=expected:raise ValueError('Immutable release tag already has another digest')
+        version_alias(ctx,base,config,manifest,image.get('mediaType','application/vnd.oci.image.manifest.v1+json'))
         tar.close()
         return expected
     if status!=404: raise RuntimeError('Registry unavailable: '+str(status))
@@ -114,6 +128,7 @@ def publish(path,service,revision,directory):
     if status!=201:raise RuntimeError('Manifest upload failed: '+str(status))
     status,_,body=request(ctx,'127.0.0.1',5044,'GET',base+'/manifests/'+tag,headers={'Accept':ACCEPT})
     if status!=200 or digest(body)!=expected: raise RuntimeError('Registry read-back mismatch')
+    version_alias(ctx,base,config,manifest,image.get('mediaType','application/vnd.oci.image.manifest.v1+json'))
     tar.close()
     return expected
 

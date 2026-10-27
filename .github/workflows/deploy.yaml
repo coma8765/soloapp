@@ -100,7 +100,7 @@ jobs:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           flutter pub get --enforce-lockfile
-          flutter build web --release --no-web-resources-cdn --base-href "/web/releases/$SHA/" --dart-define="APP_VERSION=$VERSION"
+          flutter build web --release --no-web-resources-cdn --base-href "/web/releases/$SHA/" --dart-define="APP_VERSION=$VERSION" --build-name="${VERSION#v}" --build-number="${VERSION##*.}"
           python3 deploy/package.py "$SHA" "$RUNNER_TEMP/web.tar.gz"
       - name: Publish and verify both S3 replicas before activation
         if: inputs.rollback_revision == ''
