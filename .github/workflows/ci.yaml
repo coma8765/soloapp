@@ -69,8 +69,8 @@ jobs:
           python3 infra/ci/check.py cpp-analysis
       - name: Worker JavaScript style and analysis
         run: |
-          services/app-api/node_modules/.bin/prettier --check infra/telegram-relay/src infra/telegram-relay/tests libs/chat_runtime/src services/client-gateway/src/logic services/client-gateway/src/views services/client-gateway/src/main.mjs services/client-gateway/tests
-          services/app-api/node_modules/.bin/oxlint infra/telegram-relay/src infra/telegram-relay/tests libs/chat_runtime/src services/client-gateway/src/logic services/client-gateway/src/views services/client-gateway/src/main.mjs services/client-gateway/tests
+          services/app-api/node_modules/.bin/prettier --check infra/telegram-relay/src infra/telegram-relay/tests libs/chat_runtime/src libs/chat_runtime/tests services/client-gateway/src/logic services/client-gateway/src/views services/client-gateway/src/main.mjs services/client-gateway/tests
+          services/app-api/node_modules/.bin/oxlint infra/telegram-relay/src infra/telegram-relay/tests libs/chat_runtime/src libs/chat_runtime/tests services/client-gateway/src/logic services/client-gateway/src/views services/client-gateway/src/main.mjs services/client-gateway/tests
       - name: Validate GitHub Actions and embedded shell
         run: actionlint .github/workflows/ci.yaml .github/workflows/deploy.yaml
   services:
@@ -131,6 +131,8 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with: {node-version: '24'}
       - run: npm --prefix services/client-gateway ci
+      - name: Test shared outbox recovery
+        run: npm --prefix libs/chat_runtime test
       - name: Test browser ACK across gateway pods with real PostgreSQL
         run: npm --prefix services/client-gateway test
         env: {TEST_PG_PORT: '5432'}
