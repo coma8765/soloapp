@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { databaseIdentity } from './database-tls.mjs';
 import { readFile } from 'node:fs/promises';
 
 // Never replay an ambiguous transaction. New operations discover the current primary.
@@ -47,7 +48,11 @@ export class Database {
         database: c.name,
         user: c.user,
         password: c.password,
-        ssl,
+        // pg omits SNI for IP literals; Node otherwise checks the wrapped
+        // socket against localhost. Verify the configured host explicitly.
+        ssl: ssl
+          ? { ...ssl, checkServerIdentity: databaseIdentity(host) }
+          : false,
         max: c.pool_max ?? 4,
         connectionTimeoutMillis: 2000,
         idleTimeoutMillis: 30000,

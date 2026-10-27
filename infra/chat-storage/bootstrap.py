@@ -150,7 +150,7 @@ def main():
 
     directory = "/run/soloapp-secrets/data/"
     hosts = ["10.77.26.11", "10.77.26.12"]
-    for site, ip in zip(("yc", "home"), hosts, strict=True):
+    for site in ("yc", "home"):
         broker = "rabbitmq-" + site
         ensure_secret(
             broker,
@@ -195,7 +195,7 @@ def main():
                 )
                 config = {
                     "rabbitmq": {
-                        "host": ip,
+                        "host": "node-" + site,
                         "port": 5671,
                         "tls": True,
                         "user": "notify",
