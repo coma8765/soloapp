@@ -55,9 +55,7 @@ std::vector<Task> Repository::Pending() {
     auto rows = db_.query<Task>((Q::state != "done" && Q::due_ms <= now &&
                                  (Q::needs_publish == true || Q::lease_ms <= now)) +
                                 " ORDER BY due_ms LIMIT 32");
-    std::vector<Task> result;
-    for (const auto &row : rows)
-        result.push_back(row);
+    std::vector<Task> result(rows.begin(), rows.end());
     tx->commit();
     return result;
 }

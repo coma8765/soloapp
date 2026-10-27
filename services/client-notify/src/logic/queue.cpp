@@ -8,8 +8,7 @@ void Queue::Check(amqp_rpc_reply_t reply) {
     if (reply.reply_type != AMQP_RESPONSE_NORMAL)
         throw std::runtime_error("RabbitMQ operation failed");
 }
-Queue::Queue(const Config &c, bool consumer) : queue_(c.queue) {
-    connection_ = amqp_new_connection();
+Queue::Queue(const Config &c, bool consumer) : connection_(amqp_new_connection()), queue_(c.queue) {
     if (!connection_)
         throw std::runtime_error("RabbitMQ allocation failed");
     try {

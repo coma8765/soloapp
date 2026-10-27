@@ -17,6 +17,7 @@ RUN groupadd -g 10001 tester && useradd -m -u 10001 -g 10001 tester
 FROM test-deps AS tests
 WORKDIR /src
 COPY --from=build /src /src
+ENV UNIT_PROBE=/src/build/services/client-notify/client-notify-unit-probe
 ENV PYTHONPATH=/src
 ENV SERVICE_BINARY=/src/build/services/client-notify/client-notify-service
 ENV PATH=/opt/testenv/bin:/usr/lib/postgresql/16/bin:$PATH

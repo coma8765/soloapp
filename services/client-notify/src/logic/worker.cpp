@@ -1,6 +1,6 @@
 #include "worker.hpp"
 #include "queue.hpp"
-#include <condition_variable>
+#include "runtime/deadline.hpp"
 #include <regex>
 namespace solo::notify {
 Worker::Worker(Repository &repository, const Config &config)
@@ -40,18 +40,8 @@ void Worker::ConsumeLoop() {
                 auto delivery = queue.Next();
                 if (!delivery)
                     continue;
-                std::mutex mutex;
-                std::condition_variable done;
-                bool finished = false;
-                std::atomic<bool> expired{false};
-                std::thread watchdog([&] {
-                    std::unique_lock<std::mutex> lock(mutex);
-                    if (!done.wait_for(lock, std::chrono::milliseconds(config_.ack_ms),
-                                       [&] { return finished; })) {
-                        expired = true;
-                        queue.Interrupt();
-                    }
-                });
+                solo::Deadline deadline(config_.ack_ms, [&] { queue.Interrupt(); });
+                auto &expired = deadline.expired;
                 try {
                     if (!std::regex_match(delivery->key, std::regex("^[a-zA-Z0-9_-]{16,128}$")))
                         throw std::runtime_error("Invalid task key");
@@ -93,12 +83,6 @@ void Worker::ConsumeLoop() {
                 } catch (...) {
                     queue.Interrupt();
                 }
-                {
-                    std::lock_guard<std::mutex> lock(mutex);
-                    finished = true;
-                }
-                done.notify_one();
-                watchdog.join();
             }
         } catch (...) {
             Pause(1000);
