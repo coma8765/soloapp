@@ -6,9 +6,16 @@ route:
   - alertname
   - dc
   - service
-  group_wait: 15s
-  group_interval: 1m
-  repeat_interval: 4h
+  group_wait: '{{ obs.alertmanager.group_wait }}'
+  group_interval: '{{ obs.alertmanager.group_interval }}'
+  repeat_interval: '{{ obs.alertmanager.repeat_interval }}'
+  routes:
+  - matchers: ['severity="critical"']
+    group_wait: '{{ obs.alertmanager.critical_group_wait }}'
+  - matchers: ['severity="warning"']
+    group_wait: '{{ obs.alertmanager.warning_group_wait }}'
+    group_interval: '{{ obs.alertmanager.warning_group_interval }}'
+    repeat_interval: '{{ obs.alertmanager.warning_repeat_interval }}'
 receivers:
 - name: telegram
   webhook_configs:
@@ -22,11 +29,11 @@ receivers:
         type: Bearer
         credentials_file: /run/soloapp-secrets/data/relay-token
 inhibit_rules:
-- source_matchers:
-  - alertname="PodStartupTooLong"
-  target_matchers:
-  - alertname="PodUnavailable"
-  equal:
-  - dc
-  - namespace
-  - pod
+# Keep the most actionable per-pod incident; exact pod identity remains visible.
+- source_matchers: ['alertname="PodUnavailable"', 'project="soloapp"']
+  target_matchers: ['alertname=~"PodStartupTooLong|PodHealthProbeFailed"', 'project="soloapp"']
+  equal: [project, dc, pod]
+# Loss of monitoring is the root signal; stale resource/probe symptoms add no information.
+- source_matchers: ['alertname="MonitoringAgentMissing"', 'project="soloapp"']
+  target_matchers: ['alertname=~"PodHealthProbeFailed|ContainerCpuRequestHigh|ContainerMemoryRequestHigh"', 'project="soloapp"']
+  equal: [project, dc]

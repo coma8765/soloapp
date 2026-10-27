@@ -8,6 +8,7 @@ import re
 import secrets
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -23,10 +24,23 @@ def main():
     )
     parser.add_argument("--hostname", help="Optional custom HTTPS hostname for this Worker")
     parser.add_argument("--zone-name", help="Cloudflare zone containing --hostname")
+    parser.add_argument("--grafana-url", help="Public HTTPS Grafana base URL ending in /grafana/")
     args = parser.parse_args()
     cloud = json.loads(STATE.read_text())
     account, token = os.environ["CF_ACCOUNT_ID"], os.environ["CF_API_TOKEN"]
     worker = "soloapp-alert-relay"
+    grafana_url = args.grafana_url or cloud.get("telegram_relay", {}).get("grafana_url")
+    parsed = urllib.parse.urlsplit(grafana_url or "")
+    if (
+        parsed.scheme != "https"
+        or not parsed.netloc
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+        or not parsed.path.endswith("/grafana/")
+    ):
+        raise ValueError("Pass --grafana-url https://your-host/grafana/")
 
     def cf(path, method="GET", payload=None, content_type="application/json", allow_missing=False):
         body = (
@@ -107,7 +121,8 @@ def main():
         "compatibility_date": "2026-10-27",
         "bindings": [
             {"name": name, "type": "secret_text", "text": value} for name, value in bindings.items()
-        ],
+        ]
+        + [{"name": "GRAFANA_URL", "type": "plain_text", "text": grafana_url}],
         "observability": {"enabled": False},
     }
     boundary = "soloapp-" + secrets.token_hex(16)
@@ -159,7 +174,13 @@ def main():
         "POST",
         {"enabled": not bool(hostname), "previews_enabled": False},
     )
-    cloud["telegram_relay"] = {"worker": worker, "url": url, "hostname": hostname, "zone": zone}
+    cloud["telegram_relay"] = {
+        "worker": worker,
+        "url": url,
+        "hostname": hostname,
+        "zone": zone,
+        "grafana_url": grafana_url,
+    }
     save()
     for site in ("yc", "home"):
         yc(

@@ -10,9 +10,8 @@ tests:
   - series: soloapp_http_requests_total{dc="yc",service="auth",route="/login",status="500"}
     values: 0+5x40
   promql_expr_test:
-  - expr: count(ALERTS{alertname="Http5xxRateHigh",service="auth",alertstate="firing"})
-      or vector(0)
-    eval_time: 2m
+  - expr: count(ALERTS{alertname="Http5xxRateHigh",service="auth",alertstate="firing"}) or vector(0)
+    eval_time: 3m
     exp_samples:
     - labels: '{}'
       value: 0
@@ -24,37 +23,38 @@ tests:
   - series: soloapp_http_requests_total{dc="yc",service="auth",route="/login",status="500"}
     values: 0+6x40
   promql_expr_test:
-  - expr: count(ALERTS{alertname="Http5xxRateHigh",service="auth",alertstate="firing"})
-      or vector(0)
-    eval_time: 2m
+  - expr: count(ALERTS{alertname="Http5xxRateHigh",service="auth",alertstate="firing"}) or vector(0)
+    eval_time: 3m
     exp_samples:
     - labels: '{}'
       value: 1
-- name: 429 triggers on observed increment
+- name: Single 429 does not notify
   interval: 15s
   input_series:
   - series: soloapp_http_requests_total{dc="home",service="whoami",route="/user-id",status="429"}
     values: 0 0 1 1 1 1
   promql_expr_test:
-  - expr: count(ALERTS{alertname="HttpRateLimited",service="app-api",alertstate="firing"})
-      or vector(0)
+  - expr: count(ALERTS{alertname="HttpRateLimited",service="app-api",alertstate="firing"}) or vector(0)
     eval_time: 30s
-    exp_samples:
+    exp_samples: &id001
     - labels: '{}'
-      value: 1
+      value: 0
+  - expr: count(ALERTS{alertname="HttpRateLimited",service="app-api",alertstate="firing"}) or vector(0)
+    eval_time: 2m30s
+    exp_samples: *id001
 - name: Pod alerts preserve exact identity and wait a minute
   interval: 15s
   input_series:
-  - &id001
-    series: kube_pod_labels{dc="home",namespace="soloapp",pod="whoami-broken",label_app="whoami"}
-    values: 1+0x20
   - &id002
+    series: kube_pod_labels{dc="home",namespace="soloapp",pod="whoami-broken",label_app="whoami"}
+    values: 1+0x80
+  - &id003
     series: kube_pod_status_ready{dc="home",namespace="soloapp",pod="whoami-broken",condition="true"}
     values: 0+0x20
-  - &id003
+  - &id004
     series: kube_pod_status_phase{dc="home",namespace="soloapp",pod="whoami-broken",phase="Pending"}
     values: 1+0x20
-  - &id004
+  - &id005
     series: kube_pod_created{dc="home",namespace="soloapp",pod="whoami-broken"}
     values: 0+0x20
   promql_expr_test:
@@ -76,15 +76,14 @@ tests:
 - name: Terminating rolling-update pod does not page
   interval: 15s
   input_series:
-  - *id001
   - *id002
   - *id003
   - *id004
+  - *id005
   - series: kube_pod_deletion_timestamp{dc="home",namespace="soloapp",pod="whoami-broken"}
     values: 1+0x20
   promql_expr_test:
-  - expr: count(ALERTS{alertname=~"PodUnavailable|PodStartupTooLong",alertstate="firing"})
-      or vector(0)
+  - expr: count(ALERTS{alertname=~"PodUnavailable|PodStartupTooLong",alertstate="firing"}) or vector(0)
     eval_time: 2m
     exp_samples:
     - labels: '{}'
@@ -92,30 +91,28 @@ tests:
 - name: Memory request threshold 80%
   interval: 15s
   input_series:
-  - *id001
+  - *id002
   - series: container_memory_working_set_bytes{dc="home",namespace="soloapp",pod="whoami-broken",container="whoami"}
-    values: 80+0x20
+    values: 80+0x80
   - series: kube_pod_container_resource_requests{dc="home",namespace="soloapp",pod="whoami-broken",container="whoami",resource="memory"}
-    values: 100+0x20
+    values: 100+0x80
   promql_expr_test:
-  - expr: count(ALERTS{alertname="ContainerMemoryRequestHigh",alertstate="firing"})
-      or vector(0)
-    eval_time: 2m
+  - expr: count(ALERTS{alertname="ContainerMemoryRequestHigh",alertstate="firing"}) or vector(0)
+    eval_time: 6m
     exp_samples:
     - labels: '{}'
       value: 0
 - name: Memory request threshold 81%
   interval: 15s
   input_series:
-  - *id001
+  - *id002
   - series: container_memory_working_set_bytes{dc="home",namespace="soloapp",pod="whoami-broken",container="whoami"}
-    values: 81+0x20
+    values: 81+0x80
   - series: kube_pod_container_resource_requests{dc="home",namespace="soloapp",pod="whoami-broken",container="whoami",resource="memory"}
-    values: 100+0x20
+    values: 100+0x80
   promql_expr_test:
-  - expr: count(ALERTS{alertname="ContainerMemoryRequestHigh",alertstate="firing"})
-      or vector(0)
-    eval_time: 2m
+  - expr: count(ALERTS{alertname="ContainerMemoryRequestHigh",alertstate="firing"}) or vector(0)
+    eval_time: 6m
     exp_samples:
     - labels: '{}'
       value: 1
@@ -144,13 +141,12 @@ tests:
     values: 31+0x40
   promql_expr_test:
   - expr: soloapp:postgres:connection_ratio
-    eval_time: 2m
+    eval_time: 4m
     exp_samples:
     - labels: soloapp:postgres:connection_ratio{dc="yc"}
       value: 0.71
-  - expr: count(ALERTS{alertname="PostgresConnectionsHigh",alertstate="firing"}) or
-      vector(0)
-    eval_time: 2m
+  - expr: count(ALERTS{alertname="PostgresConnectionsHigh",alertstate="firing"}) or vector(0)
+    eval_time: 4m
     exp_samples:
     - labels: '{}'
       value: 1
@@ -179,13 +175,12 @@ tests:
     values: 30+0x40
   promql_expr_test:
   - expr: soloapp:postgres:connection_ratio
-    eval_time: 2m
+    eval_time: 4m
     exp_samples:
     - labels: soloapp:postgres:connection_ratio{dc="yc"}
       value: 0.7
-  - expr: count(ALERTS{alertname="PostgresConnectionsHigh",alertstate="firing"}) or
-      vector(0)
-    eval_time: 2m
+  - expr: count(ALERTS{alertname="PostgresConnectionsHigh",alertstate="firing"}) or vector(0)
+    eval_time: 4m
     exp_samples:
     - labels: '{}'
       value: 0
@@ -220,15 +215,14 @@ tests:
   interval: 15s
   input_series:
   - series: kube_pod_labels{dc="yc",namespace="soloapp",pod="auth-cpu",label_app="auth"}
-    values: 1+0x40
+    values: 1+0x80
   - series: container_cpu_usage_seconds_total{dc="yc",namespace="soloapp",pod="auth-cpu",container="auth"}
-    values: 0+12.0x40
+    values: 0+12.0x80
   - series: kube_pod_container_resource_requests{dc="yc",namespace="soloapp",pod="auth-cpu",container="auth",resource="cpu"}
-    values: 1+0x40
+    values: 1+0x80
   promql_expr_test:
-  - expr: count(ALERTS{alertname="ContainerCpuRequestHigh",alertstate="firing"}) or
-      vector(0)
-    eval_time: 3m
+  - expr: count(ALERTS{alertname="ContainerCpuRequestHigh",alertstate="firing"}) or vector(0)
+    eval_time: 6m
     exp_samples:
     - labels: '{}'
       value: 0
@@ -236,15 +230,106 @@ tests:
   interval: 15s
   input_series:
   - series: kube_pod_labels{dc="yc",namespace="soloapp",pod="auth-cpu",label_app="auth"}
-    values: 1+0x40
+    values: 1+0x80
   - series: container_cpu_usage_seconds_total{dc="yc",namespace="soloapp",pod="auth-cpu",container="auth"}
-    values: 0+12.15x40
+    values: 0+12.15x80
   - series: kube_pod_container_resource_requests{dc="yc",namespace="soloapp",pod="auth-cpu",container="auth",resource="cpu"}
-    values: 1+0x40
+    values: 1+0x80
   promql_expr_test:
-  - expr: count(ALERTS{alertname="ContainerCpuRequestHigh",alertstate="firing"}) or
-      vector(0)
-    eval_time: 3m
+  - expr: count(ALERTS{alertname="ContainerCpuRequestHigh",alertstate="firing"}) or vector(0)
+    eval_time: 6m
     exp_samples:
     - labels: '{}'
       value: 1
+- name: Sustained 429 waits two minutes before firing
+  interval: 15s
+  input_series:
+  - series: soloapp_http_requests_total{dc="home",service="whoami",route="/user-id",status="429"}
+    values: 0+1x40
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="HttpRateLimited",service="app-api",alertstate="firing"}) or vector(0)
+    eval_time: 1m45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="HttpRateLimited",service="app-api",alertstate="firing"}) or vector(0)
+    eval_time: 2m30s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: Short resource spike never fires
+  interval: 15s
+  input_series:
+  - &id006
+    series: kube_pod_labels{dc="yc",namespace="soloapp",pod="auth-memory",label_app="auth"}
+    values: 1+0x100
+  - &id007
+    series: kube_pod_container_resource_requests{dc="yc",namespace="soloapp",pod="auth-memory",container="auth",resource="memory"}
+    values: 100+0x100
+  - series: container_memory_working_set_bytes{dc="yc",namespace="soloapp",pod="auth-memory",container="auth"}
+    values: 81+0x8 70+0x80
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ContainerMemoryRequestHigh",pod="auth-memory",alertstate="firing"}) or vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ContainerMemoryRequestHigh",pod="auth-memory",alertstate="firing"}) or vector(0)
+    eval_time: 6m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: Resource alert waits five minutes and holds recovery across brief bounce
+  interval: 15s
+  input_series:
+  - *id006
+  - *id007
+  - series: container_memory_working_set_bytes{dc="yc",namespace="soloapp",pod="auth-memory",container="auth"}
+    values: 81+0x24 70+0x3 81+0x8 70+0x60
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="ContainerMemoryRequestHigh",pod="auth-memory",alertstate="firing"}) or vector(0)
+    eval_time: 4m45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ContainerMemoryRequestHigh",pod="auth-memory",alertstate="firing"}) or vector(0)
+    eval_time: 5m15s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ContainerMemoryRequestHigh",pod="auth-memory",alertstate="firing"}) or vector(0)
+    eval_time: 7m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ContainerMemoryRequestHigh",pod="auth-memory",alertstate="firing"}) or vector(0)
+    eval_time: 8m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ContainerMemoryRequestHigh",pod="auth-memory",alertstate="firing"}) or vector(0)
+    eval_time: 12m15s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="ContainerMemoryRequestHigh",pod="auth-memory",alertstate="firing"}) or vector(0)
+    eval_time: 12m45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: One failed monitoring scrape does not page
+  interval: 15s
+  input_series:
+  - series: up{job="alloy",dc="yc"}
+    values: 1 0 1+0x40
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="MonitoringAgentMissing",dc="yc",alertstate="firing"}) or vector(0)
+    eval_time: 15s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="MonitoringAgentMissing",dc="yc",alertstate="firing"}) or vector(0)
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 0

@@ -11,7 +11,7 @@
       },
       "data": {
         "prometheus.yaml": {{ lookup('template', project_root ~ '/infra/observability/templates/prometheus.yaml.j2') | to_json }},
-        "rules.yaml": {{ lookup('template', project_root ~ '/infra/observability/templates/rules.yaml.j2') | to_json }}
+        "rules.yaml": {{ lookup('template', project_root ~ '/infra/observability/templates/rules.yaml.j2') | to_json(ensure_ascii=False) }}
       }
     },
     {
