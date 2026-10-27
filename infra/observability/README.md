@@ -263,10 +263,12 @@ References: [Alertmanager notification configuration](https://prometheus.io/docs
 ## Resource sizing
 
 Monitoring requests cover observed steady usage with headroom: Prometheus 50m CPU /
-256Mi memory, Alloy 75m / 320Mi, Loki 20m / 192Mi. Alloy has a 512Mi memory limit;
+256Mi memory, Alloy 75m / 512Mi, Loki 20m / 192Mi. Alloy has a 512Mi memory limit;
 Prometheus and Loki retain their 512Mi limits. On 2026-10-28 the preceding-hour
 working-set peaks were 152Mi, 213Mi and 122Mi respectively, with CPU peaks below
 28m, 38m and 13m. These are sizing observations, not future capacity guarantees.
+After lifting Alloy's 256Mi limit and replaying its WAL, its working set settled
+around 270–300Mi; its full 512Mi limit is reserved to cover runtime/cache growth.
 Per-site `observability_overrides.resources` remain supported. Requests reserve
 scheduler capacity; raising a request does not allocate additional VM RAM.
 
