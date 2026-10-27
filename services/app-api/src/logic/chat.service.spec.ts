@@ -5,10 +5,12 @@ const fake = vi.hoisted(() => ({
   eval: vi.fn(),
   disconnect: vi.fn(),
   on: vi.fn(),
+  options: vi.fn(),
 }));
 vi.mock('ioredis', () => ({
   Redis: class {
-    constructor() {
+    constructor(options: unknown) {
+      fake.options(options);
       return fake;
     }
   },
@@ -68,6 +70,19 @@ describe('Chat business rules', () => {
       'verified',
       'hello',
     ]);
+  });
+  it('verifies TLS for both discovery and data, and reconnects silent sockets', async () => {
+    fake.xrevrange.mockResolvedValue([]);
+    await service.history();
+    expect(fake.options).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tls: { ca: 'test-ca', rejectUnauthorized: true },
+        sentinelTLS: { ca: 'test-ca', rejectUnauthorized: true },
+        socketTimeout: 5000,
+        sentinelCommandTimeout: 2000,
+        autoResendUnfulfilledCommands: false,
+      }),
+    );
   });
   it('reports shared Redis rate limits as 429', async () => {
     fake.eval.mockResolvedValue('RATE_LIMIT');
