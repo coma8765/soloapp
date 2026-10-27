@@ -1,0 +1,19 @@
+# Store the corresponding JSON in Lockbox as notify-config.json, not a ConfigMap.
+# Password/token placeholders are NOT valid deployment credentials.
+ack_timeout_ms: 30000
+delivery_timeout_ms: 10000
+retry_delay_ms: 1000
+rabbitmq:
+  host: rabbitmq.soloapp.svc.cluster.local
+  port: 5671
+  tls: true
+  user: client-notify
+  password: REPLACE_IN_LOCKBOX
+  ca_file: /run/soloapp-secrets/data/ca.crt
+  queue: client-notify
+gateway:
+  url: https://client-gateway.soloapp.svc.cluster.local:8443
+  ca_file: /run/soloapp-secrets/data/ca.crt
+  cert_file: /run/soloapp-secrets/data/tls.crt
+  key_file: /run/soloapp-secrets/data/tls.key
+  token: REPLACE_IN_LOCKBOX

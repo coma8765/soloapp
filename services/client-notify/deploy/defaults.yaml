@@ -1,0 +1,10 @@
+replicas: 2
+port: 8080
+image: soloapp/client-notify:dev
+image_pull_policy: IfNotPresent
+ack_timeout_ms: 30000
+delivery_timeout_ms: 10000
+retry_delay_ms: 1000
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {cpu: '1', memory: 256Mi}
