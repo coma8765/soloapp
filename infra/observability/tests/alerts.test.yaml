@@ -338,3 +338,34 @@ tests:
     exp_samples:
     - labels: '{}'
       value: 0
+
+- name: Long upgraded WebSocket sessions do not trigger HTTP latency alerts
+  interval: 15s
+  input_series:
+  - series: soloapp_http_request_duration_seconds_bucket{dc="yc",service="whoami",route="/api/v1/app-api/v1/chat/ws",status="101",le="1"}
+    values: 0+0x40
+  - series: soloapp_http_request_duration_seconds_bucket{dc="yc",service="whoami",route="/api/v1/app-api/v1/chat/ws",status="101",le="20"}
+    values: 0+10x40
+  - series: soloapp_http_request_duration_seconds_bucket{dc="yc",service="whoami",route="/api/v1/app-api/v1/chat/ws",status="101",le="+Inf"}
+    values: 0+10x40
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="HttpLatencyHigh",alertstate="firing"}) or vector(0)
+    eval_time: 8m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: Slow ordinary HTTP responses still trigger nginx latency alert
+  interval: 15s
+  input_series:
+  - series: soloapp_http_request_duration_seconds_bucket{dc="yc",service="whoami",route="/api/v1/app-api/v1/chat/messages",status="200",le="1"}
+    values: 0+0x40
+  - series: soloapp_http_request_duration_seconds_bucket{dc="yc",service="whoami",route="/api/v1/app-api/v1/chat/messages",status="200",le="2"}
+    values: 0+10x40
+  - series: soloapp_http_request_duration_seconds_bucket{dc="yc",service="whoami",route="/api/v1/app-api/v1/chat/messages",status="200",le="+Inf"}
+    values: 0+10x40
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="HttpLatencyHigh",service="nginx",alertstate="firing"}) or vector(0)
+    eval_time: 8m
+    exp_samples:
+    - labels: '{}'
+      value: 1

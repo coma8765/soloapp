@@ -28,7 +28,7 @@ groups:
       action: Проверьте RPS и настройки rate limit маршрута, источник повторов и retry/backoff клиентов.
     keep_firing_for: 3m
   - alert: HttpLatencyHigh
-    expr: histogram_quantile(0.95, sum by(le,dc,route)(rate(soloapp_http_request_duration_seconds_bucket{}[5m]))) > 1
+    expr: histogram_quantile(0.95, sum by(le,dc,route)(rate(soloapp_http_request_duration_seconds_bucket{status!="101"}[5m]))) > 1
     for: 5m
     labels:
       severity: warning
