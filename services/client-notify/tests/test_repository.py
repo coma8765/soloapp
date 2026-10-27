@@ -10,6 +10,7 @@ async def test_deadline_30_seconds():
     stdout, _ = await asyncio.wait_for(process.communicate(), 40)
     assert process.returncode == 0
     result = json.loads(stdout)
+    assert result["unacked_task_requeued"]
     assert result["expired"]
     assert 29500 <= result["elapsed_ms"] <= 32000
     assert result["early_completion_cancelled_timer"]

@@ -18,7 +18,7 @@ target_link_libraries(client-notify-service PRIVATE solo-runtime notify-odb CURL
 install(TARGETS client-notify-service RUNTIME DESTINATION bin)
 
 if(SOLO_BUILD_TESTS)
- add_executable(client-notify-unit-probe tests/unit_probe.cpp src/logic/config.cpp)
+ add_executable(client-notify-unit-probe tests/unit_probe.cpp src/logic/config.cpp src/logic/queue.cpp)
  target_include_directories(client-notify-unit-probe PRIVATE /usr/include/postgresql)
- target_link_libraries(client-notify-unit-probe PRIVATE notify-odb solo-runtime)
+ target_link_libraries(client-notify-unit-probe PRIVATE notify-odb solo-runtime PkgConfig::RABBITMQ)
 endif()

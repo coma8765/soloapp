@@ -31,6 +31,17 @@
         "x-quorum-initial-group-size": 1,
         "x-delivery-limit": -1
       }
+    },
+    {
+      "name": "notify-watchdog-test",
+      "vhost": "/soloapp",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-quorum-initial-group-size": 1,
+        "x-delivery-limit": -1
+      }
     }
   ]
 }

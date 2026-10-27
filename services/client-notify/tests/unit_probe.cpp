@@ -1,5 +1,6 @@
 #include "generated/odb/task-odb.hxx"
 #include "logic/config.hpp"
+#include "logic/queue.hpp"
 #include "logic/repository.hpp"
 #include "runtime/deadline.hpp"
 #include <iostream>
@@ -9,10 +10,25 @@ int main(int argc, char **argv) {
     using namespace solo::notify;
     Json::Value out;
     if (argc > 1 && std::string(argv[1]) == "deadline") {
+        Config config;
+        const auto *host = std::getenv("RABBIT_HOST");
+        config.rabbit_host = host ? host : "127.0.0.1";
+        config.rabbit_port = 5672;
+        config.rabbit_tls = false;
+        config.rabbit_user = "notifytest";
+        config.rabbit_password = "synthetic-local-only";
+        config.queue = "notify-watchdog-test";
+        Queue publisher(config, false);
+        publisher.Publish("watchdog-redelivery-test");
+        Queue consumer(config, true);
+        const auto first = consumer.Next();
+        if (!first)
+            return 3;
         auto started = std::chrono::steady_clock::now();
         std::atomic<long long> fired{-1};
         {
             solo::Deadline deadline(30000, [&] {
+                consumer.Interrupt();
                 fired = std::chrono::duration_cast<std::chrono::milliseconds>(
                             std::chrono::steady_clock::now() - started)
                             .count();
@@ -21,6 +37,16 @@ int main(int argc, char **argv) {
             out["expired"] = deadline.expired.load();
             out["elapsed_ms"] = Json::Int64(fired.load());
         }
+        Queue replacement(config, true);
+        bool redelivered = false;
+        for (int i = 0; i < 5 && !redelivered; ++i) {
+            auto message = replacement.Next();
+            if (message && message->key == first->key) {
+                redelivered = true;
+                replacement.Ack(message->tag);
+            }
+        }
+        out["unacked_task_requeued"] = redelivered;
         std::atomic<bool> unexpected{false};
         {
             solo::Deadline completed(100, [&] { unexpected = true; });
