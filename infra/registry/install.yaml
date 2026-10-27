@@ -11,6 +11,7 @@
       src: '{{ project_root }}/infra/secrets/files/secret-fetch.py'
       dest: '{{ remote_root }}/secret-fetch.py'
       mode: '0700'
+    register: registry_helper
   - name: Update bucket initialization script
     ansible.builtin.copy:
       src: '{{ project_root }}/infra/object-storage/init-bucket.py'
@@ -26,7 +27,7 @@
       delivery_name: registry
       delivery_uid: 10006
       delivery_secret_ids: "{{ cloud.secrets['registry-' ~ inventory_hostname] }}"
-      delivery_helper: {changed: false}
+      delivery_helper: '{{ registry_helper }}'
   - name: Initialize registry bucket
     ansible.builtin.command:
       argv: [docker, run, --rm, --user, '10005:10005', --network, host, --entrypoint, python3, -v, '/run/soloapp-s3server:/secrets:ro', -v, '{{ remote_root }}/s3-init-bucket.py:/init.py:ro', 'soloapp/deploy-controller:1', /init.py, 'http://{{ private_ip }}:18333', soloapp-registry]
