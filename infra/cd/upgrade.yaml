@@ -4,15 +4,10 @@
   gather_facts: false
   become: true
   tasks:
-  - name: Install updated controller build files
-    ansible.builtin.copy:
-      src: '{{ item }}'
-      dest: '/etc/soloapp-cd/{{ item }}'
-      mode: '0644'
-    loop: [Dockerfile, k3s-controller.sh]
-  - name: Rebuild controller with S3 SDK
-    ansible.builtin.command: docker build -t soloapp/deploy-controller:1 /etc/soloapp-cd
-    changed_when: true
+  - name: Require prebuilt controller (built locally or in GitHub CI)
+    ansible.builtin.command: docker image inspect soloapp/deploy-controller:1
+    changed_when: false
+    no_log: true
   - name: Update gate and command parser
     ansible.builtin.copy:
       src: '{{ item.src }}'

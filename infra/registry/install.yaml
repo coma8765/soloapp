@@ -1,0 +1,68 @@
+- name: Install private S3-backed registry replicas
+  hosts: app_sites
+  serial: 1
+  gather_facts: false
+  become: true
+  vars:
+    registry_image: registry:3.0.0@sha256:6c5666b861f3505b116bb9aa9b25175e71210414bd010d92035ff64018f9457e
+  tasks:
+  - name: Install registry-aware secret refresh helper
+    ansible.builtin.copy:
+      src: '{{ project_root }}/infra/secrets/files/secret-fetch.py'
+      dest: '{{ remote_root }}/secret-fetch.py'
+      mode: '0700'
+  - name: Update bucket initialization script
+    ansible.builtin.copy:
+      src: '{{ project_root }}/infra/object-storage/init-bucket.py'
+      dest: '{{ remote_root }}/s3-init-bucket.py'
+      mode: '0644'
+  - name: Refresh S3 identities from Lockbox
+    ansible.builtin.systemd_service:
+      name: solo-s3server-secrets
+      state: started
+  - name: Deliver registry secrets into RAM
+    ansible.builtin.include_tasks: ../secrets/tasks/delivery.yaml
+    vars:
+      delivery_name: registry
+      delivery_uid: 10006
+      delivery_secret_ids: "{{ cloud.secrets['registry-' ~ inventory_hostname] }}"
+      delivery_helper: {changed: false}
+  - name: Initialize registry bucket
+    ansible.builtin.command:
+      argv: [docker, run, --rm, --user, '10005:10005', --network, host, --entrypoint, python3, -v, '/run/soloapp-s3server:/secrets:ro', -v, '{{ remote_root }}/s3-init-bucket.py:/init.py:ro', 'soloapp/deploy-controller:1', /init.py, 'http://{{ private_ip }}:18333', soloapp-registry]
+    changed_when: true
+  - name: Start read-only mTLS registry and loopback-only publisher
+    community.docker.docker_container:
+      name: 'solo-registry-{{ item.mode }}'
+      image: '{{ registry_image }}'
+      command: [serve, '/tls/{{ item.mode }}.json']
+      user: '10006:10006'
+      restart_policy: unless-stopped
+      read_only: true
+      cap_drop: [ALL]
+      security_opts: ['no-new-privileges:true']
+      memory: 256m
+      cpus: 1.0
+      tmpfs: ['/tmp:rw,nosuid,nodev,size=32m']
+      published_ports: ['{{ item.bind }}:{{ item.port }}:{{ item.port }}']
+      volumes:
+      - '/run/soloapp-registry-{{ item.mode }}:/tls:ro'
+    loop:
+    - {mode: read, bind: '{{ private_ip }}', port: 5043, ca: pull}
+    - {mode: write, bind: '127.0.0.1', port: 5044, ca: push}
+  - name: Create registry resolver directory
+    ansible.builtin.file:
+      path: '/var/lib/rancher/k3s/agent/etc/containerd/certs.d/registry.soloapp.internal:5043'
+      state: directory
+      mode: '0755'
+  - name: Install verified mTLS mirrors without restarting Kubernetes
+    ansible.builtin.copy:
+      dest: '/var/lib/rancher/k3s/agent/etc/containerd/certs.d/registry.soloapp.internal:5043/hosts.toml'
+      mode: '0600'
+      content: |
+        {% for ip in [private_ip, ('10.77.26.12' if inventory_hostname == 'yc' else '10.77.26.11')] %}
+        [host."https://{{ ip }}:5043"]
+          capabilities = ["pull", "resolve"]
+          ca = "/run/soloapp-registry/ca.crt"
+          client = [["/run/soloapp-registry/pull.crt", "/run/soloapp-registry/pull.key"]]
+        {% endfor %}

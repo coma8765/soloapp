@@ -46,6 +46,14 @@ def fetch():
  if changed and os.environ.get('RELOAD_NGINX') and pathlib.Path('/tmp/nginx.pid').exists():os.kill(int(pathlib.Path('/tmp/nginx.pid').read_text()),signal.SIGHUP)
  if changed and os.environ.get('RELOAD_S3'):
   subprocess.run(['docker','kill','--signal=HUP','solo-s3'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+ if os.environ.get('REGISTRY_BUNDLES'):
+  dest=pathlib.Path('/run/soloapp-registry-publisher');dest.mkdir(exist_ok=True);os.chown(dest,10006,10006);os.chmod(dest,0o700)
+  for name in ['ca.crt','push.crt','push.key']:atomic(dest/name,(out/name).read_text(),10006)
+  for mode,ca in [('read','pull'),('write','push')]:
+   dest=pathlib.Path('/run/soloapp-registry-'+mode);dest.mkdir(exist_ok=True);os.chown(dest,10006,10006);os.chmod(dest,0o700)
+   for name in [mode+'.json','server.crt','server.key',ca+'-ca.crt']:
+    atomic(dest/name,(out/name).read_text(),10006)
+   if changed:subprocess.run(['docker','restart','solo-registry-'+mode],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
  print('Secret delivery succeeded',flush=True)
 if __name__=='__main__':
  while True:

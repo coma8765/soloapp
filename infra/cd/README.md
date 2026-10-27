@@ -6,9 +6,9 @@
 
 Each site has a separate expiring Ed25519 key, stored in GitHub Environment Secrets. SSH uses pinned host keys, a root-owned forced command, and disables PTY/forwarding. The login has no general sudo; only the fixed gate accepts `probe` or a validated commit SHA. Possession of this key grants deployment of current green main, not a shell. People allowed to change main/workflows remain trusted deployers; changes there must be reviewed.
 
-The gate builds runtime images **on each site** from the exact commit, tags them `git-<full SHA>`, imports them into k3s, and runs the existing Ansible app playbook in an unprivileged, read-only container. Git and the pinned kubectl client also run in the controller image, without installing host packages. Its Kubernetes token expires after 20 minutes and has rights only in `soloapp`; it is kept in `/run` and removed after the command. Production Lockbox payloads and application keys are not copied into GitHub. There is no self-hosted GitHub runner on the production network and no public binary/image release.
+GitHub-hosted CI builds auth, whoami and web runtime images once, labels the approved commit, then publishes identical OCI content to both private S3-backed registries over the restricted SSH gate. Servers never build images. The gate checks matching image digests and both web release markers, then runs Ansible using a namespace-scoped 20-minute token. Kubernetes pulls pinned digests through mTLS registry mirrors. See `infra/registry/README.md` for storage and access details.
 
-Rollout order: YC → public API smoke test → home → public API smoke test. Every site's Ansible playbook waits for all three deployments to become ready. RollingUpdate preserves existing ready pods. A failure stops the pipeline, preserving the other site; it does not automatically revert configuration or database changes. Roll back with a reviewed revert commit on main and green CI. Only auth/whoami/nginx app deployments are automated; PostgreSQL, IAM, certificates, observability and the initial Flutter scaffold require separate explicit rollout work.
+Rollout order: YC → home → public API and web smoke tests. Each site waits for auth, whoami, web and nginx readiness. Failed rollouts stop the workflow. To roll back without rebuilding, run `Deploy production` on main with `rollback_revision` set to a full previously deployed SHA. The gate permits only recorded successful releases and checks their original image digests. Database migrations are not reverted. Infrastructure and installed gate changes remain operator-managed.
 
 ## Operator installation and rotation
 
@@ -20,6 +20,7 @@ Prerequisites: existing two-site deployment, Docker/k3s, private inventory/cloud
 ```sh
 ansible-playbook infra/cd/install.yaml \
   -e cd_repository=YOUR_OWNER/YOUR_REPO \
+  -e cd_controller_archive="$PWD/work/deploy-controller.tar" \
   -e cd_key_directory="$PWD/work/cd-keys" \
   -e cd_key_expiry=YYYYMMDDHHMMSSZ
 ```
@@ -28,10 +29,10 @@ ansible-playbook infra/cd/install.yaml \
 4. Test each identity using `ssh ... soloapp-cd@HOST probe`; arbitrary commands must be rejected. Delete temporary private keys after storing and checking them. Repeat before expiry; replacing authorized_keys revokes the previous key.
 5. Push main or manually run `Deploy production`. Inspect Actions and `/var/lib/soloapp-cd/deployed.json` on each node.
 
-Source checkouts and image build caches remain on the node for diagnosis/reuse; plan periodic disk cleanup while retaining active/previous images. No keys or kubeconfigs should be added to a GitHub artifact or the source repository.
+Source checkouts and deployment history remain on the node. Registry storage retains release images independently of the containerd cache. Build the controller locally with `make build-controller` before initial installation. No keys or kubeconfigs should be added to a GitHub artifact or the source repository.
 
 GitHub environment controls: https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments
 
 ## Versioned web publication
 
-The production workflow builds Flutter at the selected green main revision and streams a bounded archive via `publish <sha>` before either site rolls. The same fixed gate validates main/CI for publishing and deployment. The publisher container gets only the bucket-scoped key from Lockbox delivery, runs as UID 10004 without capabilities, and verifies both independent S3 replicas. `deploy <sha>` refuses activation without matching commit markers in both replicas. The web gateway image is built per site alongside auth/whoami; the static assets are built once and identified by SHA. Public API smoke checks run after both sites have the migrated API contract. Operator gate upgrades use `infra/cd/upgrade.yaml`; SSH/sudo/RBAC scopes are unchanged.
+The production workflow builds Flutter at the selected green main revision and streams a bounded archive via `publish <sha>` before either site rolls. The same fixed gate validates main/CI for publishing and deployment. The publisher container gets only the bucket-scoped key from Lockbox delivery, runs as UID 10004 without capabilities, and verifies both independent S3 replicas. `deploy <sha>` refuses activation without matching commit markers in both replicas. The web gateway image is built on the GitHub runner alongside auth/whoami; the static assets are built once and identified by SHA. Public API smoke checks run after both sites have the migrated API contract. Operator gate upgrades use `infra/cd/upgrade.yaml`; SSH/sudo/RBAC scopes are unchanged.

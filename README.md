@@ -100,3 +100,7 @@ make public-check
 ## Лицензия
 
 Собственный код — [Apache-2.0](LICENSE). Зависимости сохраняют свои лицензии; это не заявление, что весь собранный контейнер лицензирован под Apache-2.0. В частности, ODB runtime имеет отдельные GPL-2.0/commercial условия: перед распространением связанных binaries/images требуется разрешить совместимость лицензий. В репозитории нет публикации бинарных релизов. См. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Private release images
+
+Runtime images are built locally or on GitHub-hosted CI, then retained in the private S3-backed registry on both sites. Production servers only publish, pull and roll ready images. Deployments use digests; `Deploy production` → `rollback_revision` restores a recorded release without rebuilding or supplying image archives. See [registry operations](infra/registry/README.md) and [CI/CD](infra/cd/README.md).

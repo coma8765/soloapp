@@ -108,20 +108,21 @@
       src: '{{ project_root }}/infra/cloud/resources.json'
       dest: /etc/soloapp-cd/resources.json
       mode: '0600'
-  - name: Install controller Dockerfile
+  - name: Require locally or CI built controller archive
+    ansible.builtin.assert:
+      that: cd_controller_archive is defined
+  - name: Deliver prebuilt controller
     ansible.builtin.copy:
-      src: Dockerfile
-      dest: /etc/soloapp-cd/Dockerfile
+      src: '{{ cd_controller_archive }}'
+      dest: /var/lib/soloapp-controller.tar
       mode: '0600'
-  - name: Install kubectl command adapter
-    ansible.builtin.copy:
-      src: k3s-controller.sh
-      dest: /etc/soloapp-cd/k3s-controller.sh
-      mode: '0644'
-  - name: Build unprivileged Ansible controller
-    ansible.builtin.command:
-      argv: [docker, build, -t, 'soloapp/deploy-controller:1', /etc/soloapp-cd]
+  - name: Load prebuilt controller without building on production
+    ansible.builtin.command: docker load -i /var/lib/soloapp-controller.tar
     changed_when: true
+  - name: Remove delivered archive
+    ansible.builtin.file:
+      path: /var/lib/soloapp-controller.tar
+      state: absent
   - name: Install namespace-scoped CD identity
     ansible.builtin.command:
       argv: [k3s, kubectl, apply, -f, '-']

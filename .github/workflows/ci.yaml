@@ -21,6 +21,7 @@ jobs:
         run: |
           make check-codegen test-codegen
           python3 -m unittest discover -s infra/cd/tests -v
+          python3 -m unittest discover -s infra/registry/tests -v
           .venv-codegen/bin/python -m unittest discover -s infra/object-storage/tests -v
       - name: Install verified secret scanner
         run: |
