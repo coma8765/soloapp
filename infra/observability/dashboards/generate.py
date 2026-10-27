@@ -55,7 +55,7 @@ def http(service):
     if service=='auth':
         panels += [panel('Auth outcomes — login / registration / logout',f'sum by(dc,route,status)(rate({metric}{{{sel},route=~"/auth/(login|register|logout)"}}[$__rate_interval]))','reqps',description='Login 200=success, 401=denied; registration 201=created, 409=duplicate; 429=rate limited.'),panel('Database /ready — availability',probe_state('dc=~"$dc",service="auth",pod=~"$pod",check="db-ready"'),kind='state-timeline',binary=True),panel('Database /ready — response time','probe_duration_seconds{dc=~"$dc",service="auth",pod=~"$pod",check="db-ready"}','s')]
     if service=='whoami':
-        panels.append(panel('/user-id — successful / rejected requests',f'sum by(dc,status)(rate({metric}{{{sel},route="/user-id"}}[$__rate_interval]))','reqps',description='Client-visible result includes nginx auth_request. A 401 can originate from auth verification before whoami is invoked.'))
+        panels.append(panel('/api/v1/whoami/v1/user-id — successful / rejected requests',f'sum by(dc,status)(rate({metric}{{{sel},route="/api/v1/whoami/v1/user-id"}}[$__rate_interval]))','reqps',description='Client-visible result includes nginx auth_request. A 401 can originate from auth verification before whoami is invoked.'))
     if service=='nginx':
         panels.append(panel('Gateway 429 rate limiting',f'(sum by(dc,route)(rate({metric}{{{sel},status="429"}}[$__rate_interval])) or 0 * sum by(dc,route)(rate({metric}{{{sel}}}[$__rate_interval])))','reqps',description='Zero means no rate limiting for routes with observed traffic.'))
     for p in panels:

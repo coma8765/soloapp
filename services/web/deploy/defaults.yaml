@@ -1,0 +1,7 @@
+image: '{{ web_image | default("soloapp/web:dev") }}'
+image_pull_policy: IfNotPresent
+port: 8080
+release: '{{ web_release | default("") }}'
+resources:
+  requests: {cpu: 30m, memory: 96Mi}
+  limits: {cpu: 500m, memory: 256Mi}

@@ -21,7 +21,7 @@ async def test_http_5xx_excludes_without_failing_liveness(service_client, pgsql)
         cur.execute('ALTER TABLE users RENAME TO users_health_test')
     try:
         for _ in range(3):
-            response = await service_client.post('/auth/login', json={'username':'health.test', 'password':'health-test-password'})
+            response = await service_client.post('/api/v1/auth/v1/login', json={'username':'health.test', 'password':'health-test-password'})
             assert response.status_code == 503
         assert (await service_client.get('/health/ready')).status_code == 503
         assert (await service_client.get('/healthz')).status_code == 200
@@ -33,4 +33,4 @@ async def test_http_5xx_excludes_without_failing_liveness(service_client, pgsql)
             cur.execute('ALTER TABLE users_health_test RENAME TO users')
         await asyncio.sleep(2.1)
     assert (await service_client.get('/health/ready')).status_code == 200
-    assert (await service_client.post('/auth/login', json={'username':'health.test', 'password':'health-test-password'})).status_code == 401
+    assert (await service_client.post('/api/v1/auth/v1/login', json={'username':'health.test', 'password':'health-test-password'})).status_code == 401

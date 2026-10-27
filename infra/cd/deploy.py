@@ -45,13 +45,15 @@ def run(argv, *, cwd=None, capture=False, env=None):
 
 def main():
     os.umask(0o077)
-    if len(sys.argv) != 2:
+    if len(sys.argv) not in (2, 3):
         raise SystemExit('Expected probe or commit SHA')
     cfg = json.loads(CONFIG.read_text())
     if sys.argv[1] == 'probe':
         print(json.dumps({'site': cfg['site'], 'ready': True}))
         return
     sha = validate_revision(sys.argv[1])
+    mode = sys.argv[2] if len(sys.argv) == 3 else 'deploy'
+    if mode not in ('deploy', 'publish'): raise SystemExit('Invalid CD operation')
     STATE.mkdir(mode=0o700, exist_ok=True)
     with (STATE / 'deploy.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -73,9 +75,20 @@ def main():
         # Files mounted into the unprivileged controller must be traversable.
         os.chmod(STATE, 0o755)
         run(['chmod', '-R', 'a+rX', str(source)])
+        storage = ['docker', 'run', '--rm', '-i', '--network', 'host', '--read-only',
+                   '--cap-drop=ALL', '--security-opt', 'no-new-privileges', '--user', '10004:10004',
+                   '--tmpfs', '/tmp:rw,nosuid,nodev', '--entrypoint', 'python3',
+                   '-e', 'PYTHONDONTWRITEBYTECODE=1',
+                   '-v', str(source) + ':/src:ro', '-v', '/run/soloapp-s3publisher:/run/s3:ro',
+                   'soloapp/deploy-controller:1', '/src/infra/object-storage/publish.py', sha]
+        if mode == 'publish':
+            run(storage)
+            return
+        # A new release cannot activate when either copy is missing/unreachable.
+        run(storage + ['--check'])
         tag = 'git-' + sha
-        images = ['soloapp/' + service + ':' + tag for service in ('auth', 'whoami')]
-        for service, image in zip(('auth', 'whoami'), images):
+        images = ['soloapp/' + service + ':' + tag for service in ('auth', 'whoami', 'web')]
+        for service, image in zip(('auth', 'whoami', 'web'), images):
             print('Building ' + service + ' at ' + sha, flush=True)
             run(['docker', 'build', '--target', 'runtime', '--label', 'org.opencontainers.image.revision=' + sha,
                  '-f', 'services/' + service + '/deploy/Dockerfile', '-t', image, '.'], cwd=source)
@@ -96,7 +109,7 @@ def main():
                 context['context']['user'] = 'cd'
             extra = {'project_root': '/src', 'remote_root': '/manifests', 'ansible_connection': 'local',
                      'ansible_python_interpreter': '/usr/local/bin/python3', 'ansible_become': False,
-                     'auth_image': images[0], 'whoami_image': images[1],
+                     'auth_image': images[0], 'whoami_image': images[1], 'web_image': images[2], 'web_release': sha,
                      'cloud': json.loads(Path('/etc/soloapp-cd/resources.json').read_text())}
             for name, value in [('kubeconfig.json', kube), ('extra.json', extra)]:
                 path = runtime / name

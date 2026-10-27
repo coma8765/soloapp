@@ -7,7 +7,7 @@ run('edge',"systemd-run --unit=solo-edge-restore-"+str(int(time.time()))+" --on-
 samples=[];start=time.monotonic()
 try:
  for i in range(12):
-  req=urllib.request.Request(base_url()+'/auth/register',data=json.dumps({'username':'edge_'+secrets.token_hex(7),'password':secrets.token_hex(16)}).encode(),headers={'Content-Type':'application/json'})
+  req=urllib.request.Request(base_url()+'/api/v1/auth/v1/register',data=json.dumps({'username':'edge_'+secrets.token_hex(7),'password':secrets.token_hex(16)}).encode(),headers={'Content-Type':'application/json'})
   try:
    with urllib.request.urlopen(req,timeout=8) as r:status=r.status;r.read()
   except urllib.error.HTTPError as e:status=e.code

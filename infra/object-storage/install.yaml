@@ -1,0 +1,97 @@
+- name: Install independent S3 replica in each site
+  hosts: app_sites
+  serial: 1
+  gather_facts: false
+  become: true
+  tasks:
+  - name: Update Lockbox helper with S3 reload support
+    ansible.builtin.copy:
+      src: '{{ project_root }}/infra/secrets/files/secret-fetch.py'
+      dest: '{{ remote_root }}/secret-fetch.py'
+      mode: '0700'
+  - name: Deliver scoped S3 server configuration
+    ansible.builtin.include_tasks: ../secrets/tasks/delivery.yaml
+    vars:
+      delivery_name: s3server
+      delivery_uid: 10005
+      delivery_secret_ids: "{{ cloud.secrets['s3-server'] }}"
+      delivery_helper: {changed: false}
+  - name: Deliver scoped publication key in RAM for CD
+    ansible.builtin.include_tasks: ../secrets/tasks/delivery.yaml
+    vars:
+      delivery_name: s3publisher
+      delivery_uid: 10004
+      delivery_secret_ids: "{{ cloud.secrets['s3-publisher'] }}"
+      delivery_helper: {changed: false}
+  - name: Create persistent S3 volume directory
+    ansible.builtin.file:
+      path: /var/lib/soloapp-s3
+      state: directory
+      owner: '10005'
+      group: '10005'
+      mode: '0700'
+  - name: Start S3 without publishing master, filer or admin interfaces
+    community.docker.docker_container:
+      name: solo-s3
+      image: 'chrislusf/seaweedfs:4.51@sha256:f7a49e3f3972ebed5be2ed4befa4a0c68eb7bdddba6e692d42729ceb545134b8'
+      user: '10005:10005'
+      restart_policy: unless-stopped
+      read_only: true
+      cap_drop: [ALL]
+      security_opts: ['no-new-privileges:true']
+      memory: 768m
+      cpus: 1.0
+      tmpfs: ['/tmp:rw,nosuid,nodev,size=64m']
+      published_ports: ['{{ private_ip }}:18333:8333']
+      volumes:
+      - /var/lib/soloapp-s3:/data
+      - /run/soloapp-s3server:/secrets:ro
+      command:
+      - server
+      - -dir=/data
+      - -ip=127.0.0.1
+      - -ip.bind=0.0.0.0
+      - -master.telemetry=false
+      - -master.volumeSizeLimitMB=1024
+      - -volume.max=8
+      - -volume.port=18080
+      - -volume.fileSizeLimitMB=64
+      - -filer
+      - -filer.exposeDirectoryData=false
+      - -s3
+      - -s3.config=/secrets/s3.json
+      - -s3.iam=false
+      - -s3.port.iceberg=0
+      - -s3.port.lance=0
+      - -s3.readerCacheSizeMB=32
+      - -s3.concurrentUploadLimitMB=64
+  - name: Wait for S3 listener
+    ansible.builtin.wait_for:
+      host: '{{ private_ip }}'
+      port: 18333
+      timeout: 60
+  - name: Install bucket bootstrap script
+    ansible.builtin.copy:
+      src: init-bucket.py
+      dest: '{{ remote_root }}/s3-init-bucket.py'
+      mode: '0644'
+  - name: Initialize local bucket with object versioning
+    ansible.builtin.command:
+      argv:
+      - docker
+      - run
+      - --rm
+      - --user
+      - '10005:10005'
+      - --network
+      - host
+      - --entrypoint
+      - python3
+      - -v
+      - /run/soloapp-s3server:/secrets:ro
+      - -v
+      - '{{ remote_root }}/s3-init-bucket.py:/init.py:ro'
+      - soloapp/deploy-controller:1
+      - /init.py
+      - 'http://{{ private_ip }}:18333'
+    changed_when: true

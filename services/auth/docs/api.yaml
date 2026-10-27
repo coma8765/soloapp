@@ -54,9 +54,10 @@ paths:
           connect_seconds: 2
           read_seconds: 8
         rate_limit: null
-  /auth/register:
+  /api/v1/auth/v1/register:
     post:
       operationId: auth_register
+      x-backend-aliases: [/auth/register]
       responses:
         '201':
           description: Response
@@ -100,9 +101,10 @@ paths:
           group: auth
           requests_per_second: 5
           burst: 10
-  /auth/login:
+  /api/v1/auth/v1/login:
     post:
       operationId: auth_login
+      x-backend-aliases: [/auth/login]
       responses:
         '200':
           description: Response
@@ -146,9 +148,10 @@ paths:
           group: auth
           requests_per_second: 5
           burst: 10
-  /auth/logout:
+  /api/v1/auth/v1/logout:
     post:
       operationId: auth_logout
+      x-backend-aliases: [/auth/logout]
       responses:
         '204':
           description: Response
@@ -177,9 +180,10 @@ paths:
           group: auth
           requests_per_second: 5
           burst: 10
-  /auth/me:
+  /api/v1/auth/v1/me:
     get:
       operationId: auth_me
+      x-backend-aliases: [/auth/me]
       responses:
         '200':
           description: Response
@@ -212,9 +216,10 @@ paths:
           group: auth
           requests_per_second: 5
           burst: 10
-  /internal/verify:
+  /api/v1/auth/v1/internal/verify:
     get:
       operationId: internal_verify
+      x-backend-aliases: [/internal/verify]
       responses:
         '200':
           description: Response

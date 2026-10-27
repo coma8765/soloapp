@@ -599,7 +599,7 @@
       }
     },
     {
-      "title": "/user-id \u2014 successful / rejected requests",
+      "title": "/api/v1/whoami/v1/user-id \u2014 successful / rejected requests",
       "type": "timeseries",
       "description": "Client-visible result includes nginx auth_request. A 401 can originate from auth verification before whoami is invoked.",
       "datasource": {
@@ -609,7 +609,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by(dc,status)(rate(soloapp_http_requests_total{dc=~\"$dc\",route=~\"$route\",service=\"whoami\",route=\"/user-id\"}[$__rate_interval]))",
+          "expr": "sum by(dc,status)(rate(soloapp_http_requests_total{dc=~\"$dc\",route=~\"$route\",service=\"whoami\",route=\"/api/v1/whoami/v1/user-id\"}[$__rate_interval]))",
           "legendFormat": "{{dc}} {{route}} {{status}}",
           "datasource": {
             "type": "prometheus",

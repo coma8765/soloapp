@@ -10,6 +10,9 @@ Apache-2.0 covers the original Soloapp source, not third-party software download
 | PostgreSQL / libpq | PostgreSQL License; https://www.postgresql.org/about/licence/ |
 | libsodium | ISC; https://github.com/jedisct1/libsodium/blob/master/LICENSE |
 | Boost | Boost Software License 1.0; https://www.boost.org/LICENSE_1_0.txt |
+| SeaweedFS | Apache-2.0; https://github.com/seaweedfs/seaweedfs/blob/4.51/LICENSE |
+| boto3 / botocore | Apache-2.0; https://github.com/boto/boto3/blob/develop/LICENSE |
+| Flutter / Dart HTTP | BSD-3-Clause; upstream SDK and package license files |
 | PyYAML | MIT; https://github.com/yaml/pyyaml/blob/main/LICENSE |
 | Testsuite | Upstream license: https://github.com/yandex/yandex-taxi-testsuite |
 

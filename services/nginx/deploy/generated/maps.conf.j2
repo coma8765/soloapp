@@ -2,20 +2,24 @@
 map $uri $observed_route {
   default /other;
   /healthz /healthz;
+  / /;
+  ~^/web/releases/ /web/releases/;
   ~^/grafana/ /grafana/;
-  /auth/login /auth/login;
-  /auth/logout /auth/logout;
-  /auth/me /auth/me;
-  /auth/register /auth/register;
+  /api/v1/auth/v1/login /api/v1/auth/v1/login;
+  /api/v1/auth/v1/logout /api/v1/auth/v1/logout;
+  /api/v1/auth/v1/me /api/v1/auth/v1/me;
+  /api/v1/auth/v1/register /api/v1/auth/v1/register;
+  /api/v1/whoami/v1/user-id /api/v1/whoami/v1/user-id;
   /ready /ready;
-  /user-id /user-id;
 }
 map $uri $observed_service {
   default nginx;
-  /auth/login auth;
-  /auth/logout auth;
-  /auth/me auth;
-  /auth/register auth;
-  /user-id whoami;
+  / web;
+  ~^/web/releases/ web;
+  /api/v1/auth/v1/login auth;
+  /api/v1/auth/v1/logout auth;
+  /api/v1/auth/v1/me auth;
+  /api/v1/auth/v1/register auth;
+  /api/v1/whoami/v1/user-id whoami;
 }
 limit_req_zone $binary_remote_addr zone=api_auth:10m rate=5r/s;

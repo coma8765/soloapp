@@ -40,9 +40,11 @@ def generate(service):
     policies={}
     for path,method,operation in validated_operations(spec):
         operations.append((path,method,operation['operationId']))
+        for alias in operation.get('x-backend-aliases', []):
+            operations.append((alias,method,operation['operationId']))
         policies[operation['operationId']]=operation['x-route']
-    assert len({op for _,_,op in operations})==len(operations)
-    lines += ['struct Handlers {']+[f'    Handler {op};' for _,_,op in operations]+['};','inline void RegisterRoutes(const Handlers& handlers) {']
+    assert len({(path, method) for path,method,_ in operations})==len(operations)
+    lines += ['struct Handlers {']+[f'    Handler {op};' for op in dict.fromkeys(op for _,_,op in operations)]+['};','inline void RegisterRoutes(const Handlers& handlers) {']
     lines += [f'    drogon::app().setClientMaxBodySize({max(p["max_body_bytes"] for p in policies.values())});']
     for path,method,op in operations:
         lines += [f'    if (!handlers.{op}) throw std::invalid_argument("missing handler: {op}");',

@@ -29,24 +29,24 @@ def main():
         checks.append({'method': method, 'path': path, 'status': status, 'site': site})
         return json.loads(data) if data and data.startswith(b'{') else None
 
-    for path in ('/_verify', '/internal/verify', '/health/ready', '/auth/not-declared'):
+    for path in ('/auth/login', '/auth/register', '/user-id', '/_verify', '/api/v1/auth/v1/internal/verify', '/health/ready', '/api/v1/auth/v1/not-declared'):
         check('GET', path, 404)
-    check('GET', '/auth/login', 405)
-    check('POST', '/user-id', 405)
-    check('GET', '/auth/me', 401)
-    check('GET', '/user-id', 401, headers={'X-Verified-User-Id': 'a' * 32, 'X-User-Signature': 'a' * 64, 'X-User-Timestamp': '9999999999'})
-    check('POST', '/auth/register', 413, b'x' * 8193, {'Content-Type': 'application/json'})
+    check('GET', '/api/v1/auth/v1/login', 405)
+    check('POST', '/api/v1/whoami/v1/user-id', 405)
+    check('GET', '/api/v1/auth/v1/me', 401)
+    check('GET', '/api/v1/whoami/v1/user-id', 401, headers={'X-Verified-User-Id': 'a' * 32, 'X-User-Signature': 'a' * 64, 'X-User-Timestamp': '9999999999'})
+    check('POST', '/api/v1/auth/v1/register', 413, b'x' * 8193, {'Content-Type': 'application/json'})
     credentials = json.dumps({'username': 'routes_smoke_' + secrets.token_hex(8), 'password': secrets.token_hex(20)}).encode()
-    user_id = check('POST', '/auth/register', 201, credentials, {'Content-Type': 'application/json'})['user_id']
-    token = check('POST', '/auth/login', 200, credentials, {'Content-Type': 'application/json'})['access_token']
+    user_id = check('POST', '/api/v1/auth/v1/register', 201, credentials, {'Content-Type': 'application/json'})['user_id']
+    token = check('POST', '/api/v1/auth/v1/login', 200, credentials, {'Content-Type': 'application/json'})['access_token']
     authorization = {'Authorization': 'Bearer ' + token}
     try:
-        check('GET', '/auth/me', 200, headers=authorization, user_id=user_id)
+        check('GET', '/api/v1/auth/v1/me', 200, headers=authorization, user_id=user_id)
         for _ in range(8):
-            check('GET', '/user-id', 200, headers={**authorization, 'X-Verified-User-Id': '0' * 32, 'X-User-Signature': '0' * 64, 'X-User-Timestamp': '9999999999'}, user_id=user_id)
+            check('GET', '/api/v1/whoami/v1/user-id', 200, headers={**authorization, 'X-Verified-User-Id': '0' * 32, 'X-User-Signature': '0' * 64, 'X-User-Timestamp': '9999999999'}, user_id=user_id)
     finally:
-        check('POST', '/auth/logout', 204, headers=authorization)
-    check('GET', '/user-id', 401, headers=authorization)
+        check('POST', '/api/v1/auth/v1/logout', 204, headers=authorization)
+    check('GET', '/api/v1/whoami/v1/user-id', 401, headers=authorization)
     print(json.dumps({'checks': checks, 'passed': len(checks)}, indent=2))
 
 

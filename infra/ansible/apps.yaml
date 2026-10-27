@@ -39,6 +39,10 @@
     ansible.builtin.import_tasks: ../../services/auth/deploy/ansible/tasks.yaml
     tags:
     - auth
+  - name: Deploy web
+    ansible.builtin.import_tasks: ../../services/web/deploy/ansible/tasks.yaml
+    when: web_config.release | length > 0
+    tags: [web]
   - name: Deploy nginx
     ansible.builtin.import_tasks: ../../services/nginx/deploy/ansible/tasks.yaml
     tags: [nginx]

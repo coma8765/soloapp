@@ -11,7 +11,7 @@ pytest_plugins=['libs.testing.pytest_plugin','testsuite.pytest_plugin']
 @pytest.fixture(scope='session')
 async def service_daemon(create_daemon_scope,hmac_file):
     env={**os.environ,'PORT':'18081','LISTEN_ADDRESS':'127.0.0.1','HMAC_KEY_FILE':str(hmac_file)}
-    async with create_daemon_scope(args=[os.environ['SERVICE_BINARY']],env=env,ping_url='http://127.0.0.1:18081/user-id',ping_response_codes=(401,)) as scope:
+    async with create_daemon_scope(args=[os.environ['SERVICE_BINARY']],env=env,ping_url='http://127.0.0.1:18081/api/v1/whoami/v1/user-id',ping_response_codes=(401,)) as scope:
         yield scope
 
 @pytest.fixture

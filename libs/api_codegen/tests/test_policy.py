@@ -27,19 +27,19 @@ class PolicyTests(unittest.TestCase):
 
     def test_internal_routes_not_published(self):
         text = render(self.root)['routes.conf.j2']
-        self.assertNotIn('location = /internal/verify', text)
+        self.assertNotIn('location = /api/v1/auth/v1/internal/verify', text)
         self.assertNotIn('location = /health/ready', text)
         self.assertIn('location = /_verify {\n  internal;', text)
         self.assertIn('auth_request /_verify;', text)
         self.assertNotIn('location /auth/', text)
 
     def test_public_to_internal_removes_route(self):
-        self.specs['auth']['paths']['/auth/register']['post']['x-route']['exposure'] = 'internal'
+        self.specs['auth']['paths']['/api/v1/auth/v1/register']['post']['x-route']['exposure'] = 'internal'
         self.save()
-        self.assertNotIn('location = /auth/register', render(self.root)['routes.conf.j2'])
+        self.assertNotIn('location = /api/v1/auth/v1/register', render(self.root)['routes.conf.j2'])
 
     def test_policy_changes_drive_gateway_and_runtime(self):
-        op = self.specs['whoami']['paths']['/user-id']['get']
+        op = self.specs['whoami']['paths']['/api/v1/whoami/v1/user-id']['get']
         op['x-route']['max_body_bytes'] = 123
         op['x-route']['timeouts']['read_seconds'] = 7
         op['x-route']['rate_limit'] = {'group': 'identity', 'requests_per_second': 2, 'burst': 0}
@@ -52,45 +52,45 @@ class PolicyTests(unittest.TestCase):
         self.assertIn('request->body().size() > 123', generate(self.root / 'services/whoami'))
 
     def test_security_mismatch_rejected(self):
-        self.specs['whoami']['paths']['/user-id']['get']['security'] = []
+        self.specs['whoami']['paths']['/api/v1/whoami/v1/user-id']['get']['security'] = []
         self.save()
         with self.assertRaisesRegex(ValueError, 'security disagrees'):
             render(self.root)
 
     def test_missing_or_unknown_fields_rejected(self):
-        op = self.specs['auth']['paths']['/auth/login']['post']
+        op = self.specs['auth']['paths']['/api/v1/auth/v1/login']['post']
         for policy in ({}, {**op['x-route'], 'typo': 1}):
             op['x-route'] = policy
             self.save()
             with self.assertRaises(ValueError): render(self.root)
 
     def test_invalid_numeric_settings_rejected(self):
-        op = self.specs['whoami']['paths']['/user-id']['get']
+        op = self.specs['whoami']['paths']['/api/v1/whoami/v1/user-id']['get']
         for value in (0, -1, True, '8k', 1048577):
             op['x-route']['max_body_bytes'] = value
             self.save()
             with self.assertRaises(ValueError): render(self.root)
 
     def test_conflicting_shared_rate_rejected(self):
-        self.specs['auth']['paths']['/auth/login']['post']['x-route']['rate_limit']['requests_per_second'] = 6
+        self.specs['auth']['paths']['/api/v1/auth/v1/login']['post']['x-route']['rate_limit']['requests_per_second'] = 6
         self.save()
         with self.assertRaisesRegex(ValueError, 'Conflicting rate group'): render(self.root)
 
     def test_reserved_route_rejected(self):
-        self.specs['auth']['paths']['/internal/verify']['get']['x-route']['exposure'] = 'public'
+        self.specs['auth']['paths']['/api/v1/auth/v1/internal/verify']['get']['x-route']['exposure'] = 'public'
         self.save()
         with self.assertRaises(ValueError): render(self.root)
 
     def test_methods_with_different_policy_rejected(self):
-        op = copy.deepcopy(self.specs['whoami']['paths']['/user-id']['get'])
+        op = copy.deepcopy(self.specs['whoami']['paths']['/api/v1/whoami/v1/user-id']['get'])
         op['operationId'] = 'update_user_id'
         op['x-route']['auth'] = 'none'; op['security'] = []
-        self.specs['whoami']['paths']['/user-id']['post'] = op
+        self.specs['whoami']['paths']['/api/v1/whoami/v1/user-id']['post'] = op
         self.save()
         with self.assertRaisesRegex(ValueError, 'must share gateway policy'): render(self.root)
 
     def test_config_injection_rejected(self):
-        op = self.specs['auth']['paths'].pop('/auth/register')
+        op = self.specs['auth']['paths'].pop('/api/v1/auth/v1/register')
         self.specs['auth']['paths']['/bad;return 200;'] = op
         self.save()
         with self.assertRaises(ValueError): render(self.root)
