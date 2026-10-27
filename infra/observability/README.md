@@ -31,7 +31,7 @@ ansible-playbook infra/ansible/site.yaml --tags certificates --limit app_sites
 
 The observability playbook installs the private NodePort guard before exposing gateway Service 31981. It deploys stores one DC at a time. Monitoring components have one replica per site and Recreate updates; the second site remains available during an individual stack update. Application Deployments retain their two-replica RollingUpdate configuration.
 
-Retention defaults: metrics 3 days / 1 GiB TSDB blocks, logs 72 hours. PVC requests: Prometheus/Loki 2 GiB each, Grafana/Alloy 256 MiB each. K3s local-path requests are not disk quotas; Prometheus WAL and head storage are additional to its retention size. Monitor host free space and adapt retention to actual traffic. Default container memory limits total about 2.6 GiB per site including secret-fetch helpers; actual usage is lower and should be measured in the dashboard. CPU and memory requests/limits are in `defaults.yaml`.
+Retention defaults: metrics 3 days / 1 GiB TSDB blocks, logs 72 hours. PVC requests: Prometheus/Loki 2 GiB each, Grafana/Alloy 256 MiB each. K3s local-path requests are not disk quotas; Prometheus WAL and head storage are additional to its retention size. Monitor host free space and adapt retention to actual traffic. Default container memory limits total about 2.9 GiB per site including secret-fetch helpers; actual usage is lower and should be measured in the dashboard. CPU and memory requests/limits are in `defaults.yaml`.
 
 ## Access and secrets
 
@@ -259,3 +259,18 @@ Grafana retains the full alert list. The private chat ID is not committed.
 
 References: [Alertmanager notification configuration](https://prometheus.io/docs/alerting/latest/configuration/),
 [HA notification deduplication](https://prometheus.io/docs/alerting/latest/high_availability/).
+
+## Resource sizing
+
+Monitoring requests cover observed steady usage with headroom: Prometheus 50m CPU /
+256Mi memory, Alloy 75m / 320Mi, Loki 20m / 192Mi. Alloy has a 512Mi memory limit;
+Prometheus and Loki retain their 512Mi limits. On 2026-10-28 the preceding-hour
+working-set peaks were 152Mi, 213Mi and 122Mi respectively, with CPU peaks below
+28m, 38m and 13m. These are sizing observations, not future capacity guarantees.
+Per-site `observability_overrides.resources` remain supported. Requests reserve
+scheduler capacity; raising a request does not allocate additional VM RAM.
+
+Nginx HTTP latency alerts exclude status 101: its logged request duration for a
+WebSocket upgrade measures the entire session, not message delivery latency.
+Status counters and WebSocket logs remain available; ordinary HTTP latency and
+failed upgrade responses are still evaluated.
