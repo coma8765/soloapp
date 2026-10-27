@@ -127,7 +127,12 @@ BEGIN
 END $$;
 CREATE OR REPLACE FUNCTION chat.delivery_cancel(i text,a bigint) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,chat AS $$
 BEGIN
- UPDATE chat.receipts SET cancelled=true WHERE task_id=i AND attempt=a AND NOT done;
+ PERFORM 1 FROM public.notify_tasks WHERE task_id=i FOR UPDATE;
+ INSERT INTO chat.receipts(task_id,recipient,payload,attempt,deadline_ms,cancelled,done)
+ SELECT task_id,recipient,payload,attempt,lease_ms,true,false FROM public.notify_tasks
+ WHERE task_id=i AND attempt=a AND state<>'done'
+ ON CONFLICT(task_id) DO UPDATE SET attempt=EXCLUDED.attempt,deadline_ms=EXCLUDED.deadline_ms,cancelled=true
+ WHERE NOT chat.receipts.done AND chat.receipts.attempt<=EXCLUDED.attempt;
  PERFORM pg_notify('soloapp_receipt',i);
 END $$;
 REVOKE ALL ON ALL TABLES IN SCHEMA chat FROM PUBLIC;

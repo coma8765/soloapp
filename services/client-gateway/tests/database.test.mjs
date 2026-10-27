@@ -182,6 +182,40 @@ test(
         JSON.stringify({ type: 'ack', task_id: second.task_id, attempt: 2 }),
       );
       assert.equal(await retry, true);
+      // Cancellation may overtake an HTTP delivery before it registers a receipt.
+      const early = { ...task, task_id: task.task_id + '_early_cancel' };
+      await admin.query(
+        "INSERT INTO notify_tasks VALUES($1,$2,$3,'inflight',1,0,$4,false,1)",
+        [early.task_id, early.recipient, early.payload, Date.now() + 30000],
+      );
+      await one.cancel({ ...early, attempt: 1 });
+      assert.equal(
+        await one.deliver({
+          ...early,
+          attempt: 1,
+          deadline_ms: Date.now() + 10000,
+        }),
+        false,
+        'early cancellation fences a delayed HTTP request',
+      );
+      await admin.query('UPDATE notify_tasks SET attempt=2 WHERE task_id=$1', [
+        early.task_id,
+      ]);
+      const afterCancel = one.deliver({
+        ...early,
+        attempt: 2,
+        deadline_ms: Date.now() + 10000,
+      });
+      await until(() =>
+        events.some(
+          (e) =>
+            e.delivery?.task_id === early.task_id && e.delivery.attempt === 2,
+        ),
+      );
+      ws.send(
+        JSON.stringify({ type: 'ack', task_id: early.task_id, attempt: 2 }),
+      );
+      assert.equal(await afterCancel, true);
     } finally {
       ws?.terminate();
       close();
