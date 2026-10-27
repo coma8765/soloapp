@@ -21,18 +21,18 @@ def test_invalid_identity(unit_probe,field,value):
 async def test_signed_request(service_client):
     stamp=str(int(time.time()))
     headers={'X-Verified-User-Id':ID,'X-User-Timestamp':stamp,'X-User-Signature':signature(ID,stamp)}
-    response=await service_client.get('/user-id',headers=headers)
+    response=await service_client.get('/api/v1/whoami/v1/user-id',headers=headers)
     assert response.status_code==200 and response.json()=={'user_id':ID}
     assert response.headers['Cache-Control']=='no-store'
     headers['X-User-Signature']=signature(ID,stamp,'02'*32)
-    assert (await service_client.get('/user-id',headers=headers)).status_code==401
+    assert (await service_client.get('/api/v1/whoami/v1/user-id',headers=headers)).status_code==401
 
 async def test_spoof_without_signature(service_client):
-    assert (await service_client.get('/user-id',headers={'X-Verified-User-Id':ID})).status_code==401
+    assert (await service_client.get('/api/v1/whoami/v1/user-id',headers={'X-Verified-User-Id':ID})).status_code==401
     assert (await service_client.get('/other')).status_code==404
 
 async def test_http_health_and_client_errors(service_client):
     assert (await service_client.get('/healthz')).status_code == 200
     for _ in range(5):
-        assert (await service_client.get('/user-id')).status_code == 401
+        assert (await service_client.get('/api/v1/whoami/v1/user-id')).status_code == 401
     assert (await service_client.get('/health/ready')).status_code == 200

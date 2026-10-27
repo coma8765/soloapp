@@ -31,11 +31,11 @@ libs/                         # runtime, ODB pool, API codegen, test fixtures
 infra/                        # Ansible, сеть, PostgreSQL, ingress, secrets, monitoring
 ```
 
-В каждом ДЦ по два пода auth, nginx и whoami. У каждого сервиса собственные Deployment и Service. RollingUpdate: `maxUnavailable: 0`, `maxSurge: 1`. Реплики и ресурсы переопределяются через `infra/ansible/host_vars/`.
+В каждом ДЦ по два пода auth, nginx, whoami и web. У каждого сервиса собственные Deployment и Service. RollingUpdate: `maxUnavailable: 0`, `maxSurge: 1`. Реплики и ресурсы переопределяются через `infra/ansible/host_vars/`.
 
 ## API
 
-`services/<service>/docs/api.yaml` — обычный YAML. Поле `x-route` на каждой операции задаёт внешнюю публикацию, способ проверки личности, размер тела, таймауты и rate limit. Из схем генерируются C++ DTO/routes и правила nginx.
+`services/<service>/docs/api.yaml` — обычный YAML. Поле `x-route` на каждой операции задаёт внешнюю публикацию, способ проверки личности, размер тела, таймауты и rate limit. Из схем генерируются C++ DTO/routes, правила nginx и типизированные Dart-клиенты.
 
 ```sh
 make codegen
@@ -44,11 +44,11 @@ make check-codegen
 
 | Ручка | Назначение |
 |---|---|
-| POST /auth/register | Регистрация |
-| POST /auth/login | Выдача Bearer-сессии |
-| GET /auth/me | Пользователь действующей сессии |
-| POST /auth/logout | Отзыв сессии |
-| GET /user-id | Проверка сессии через auth и передача подписанной личности в whoami |
+| POST /api/v1/auth/v1/register | Регистрация |
+| POST /api/v1/auth/v1/login | Выдача Bearer-сессии |
+| GET /api/v1/auth/v1/me | Пользователь действующей сессии |
+| POST /api/v1/auth/v1/logout | Отзыв сессии |
+| GET /api/v1/whoami/v1/user-id | Проверка сессии через auth и передача подписанной личности в whoami |
 
 Регистрация открытая. Персональные роли, ACL и блокировка пользователя не реализованы. Подробности — [формат политики ручек](libs/api_codegen/README.md), [auth](services/auth/docs/README.md), [whoami](services/whoami/docs/README.md).
 
@@ -76,9 +76,9 @@ SOLOAPP_BASE_URL=https://your-domain.example python3 services/nginx/tests/smoke.
 
 ## CI/CD
 
-[GitHub Actions](https://github.com/coma8765/soloapp/actions) проверяет C++ сервисы, codegen, секреты и Flutter web. После зелёного CI для `main` production workflow собирает образы на стенде и последовательно обновляет YC и home, проверяя API после каждого ДЦ. Ручной повтор — `Deploy production` → `Run workflow`. [Устройство CD и ротация ключей](infra/cd/README.md).
+[GitHub Actions](https://github.com/coma8765/soloapp/actions) проверяет C++ сервисы, codegen, секреты и Flutter web. После зелёного CI для `main` production workflow собирает образы на стенде и последовательно обновляет YC и home, проверяя API после обновления обеих площадок. Ручной повтор — `Deploy production` → `Run workflow`. [Устройство CD и ротация ключей](infra/cd/README.md).
 
-`services/web` пока содержит Flutter scaffold: он публикуется и проверяется CI, но не заменяет действующие API-маршруты.
+`services/web` содержит форму регистрации/входа и проверку Whoami. Один build публикуется и проверяется на двух собственных S3-площадках до активации релиза. [Хранение версий и rollback](infra/object-storage/README.md).
 
 ## Ограничения
 

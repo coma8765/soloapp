@@ -16,7 +16,9 @@
     "observability-gateway": "REPLACE_WITH_IDENTITIES_OBSERVABILITY_GATEWAY",
     "grafana-admin": "REPLACE_WITH_IDENTITIES_GRAFANA_ADMIN",
     "observability-gateway-home": "REPLACE_WITH_IDENTITIES_OBSERVABILITY_GATEWAY_HOME",
-    "grafana-admin-home": "REPLACE_WITH_IDENTITIES_GRAFANA_ADMIN_HOME"
+    "grafana-admin-home": "REPLACE_WITH_IDENTITIES_GRAFANA_ADMIN_HOME",
+    "web-yc": "REPLACE_WITH_WEB_YC",
+    "web-home": "REPLACE_WITH_WEB_HOME"
   },
   "secrets": {
     "ca": "REPLACE_WITH_SECRETS_CA",
@@ -38,7 +40,11 @@
     "observability-gateway": "REPLACE_WITH_SECRETS_OBSERVABILITY_GATEWAY",
     "grafana-admin": "REPLACE_WITH_SECRETS_GRAFANA_ADMIN",
     "observability-gateway-home": "REPLACE_WITH_SECRETS_OBSERVABILITY_GATEWAY_HOME",
-    "grafana-admin-home": "REPLACE_WITH_SECRETS_GRAFANA_ADMIN_HOME"
+    "grafana-admin-home": "REPLACE_WITH_SECRETS_GRAFANA_ADMIN_HOME",
+    "web-yc": "REPLACE_WITH_WEB_SECRET_YC",
+    "web-home": "REPLACE_WITH_WEB_SECRET_HOME",
+    "s3-server": "REPLACE_WITH_S3_SERVER",
+    "s3-publisher": "REPLACE_WITH_S3_PUBLISHER"
   },
   "federations": {
     "yc": "REPLACE_WITH_FEDERATIONS_YC",

@@ -31,9 +31,9 @@ def render(root=ROOT):
                 require(name not in rates or rates[name] == rate['requests_per_second'], f'Conflicting rate group: {name}')
                 rates[name] = rate['requests_per_second']
     require(verify is not None, 'Missing internal session verifier')
-    maps = ['# Generated from services/*/docs/api.yaml; DO NOT EDIT.', 'map $uri $observed_route {', '  default /other;', '  /healthz /healthz;', '  ~^/grafana/ /grafana/;']
+    maps = ['# Generated from services/*/docs/api.yaml; DO NOT EDIT.', 'map $uri $observed_route {', '  default /other;', '  /healthz /healthz;', '  / /;', '  ~^/web/releases/ /web/releases/;', '  ~^/grafana/ /grafana/;']
     maps += [f'  {path} {path};' for path in sorted(routes)]
-    maps += ['}', 'map $uri $observed_service {', '  default nginx;']
+    maps += ['}', 'map $uri $observed_service {', '  default nginx;', '  / web;', '  ~^/web/releases/ web;']
     maps += [f"  {path} {route['service']};" for path, route in sorted(routes.items()) if path != '/ready']
     maps += ['}']
     maps += [f'limit_req_zone $binary_remote_addr zone=api_{group}:10m rate={rps}r/s;' for group, rps in sorted(rates.items())]

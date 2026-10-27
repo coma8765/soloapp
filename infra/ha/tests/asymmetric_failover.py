@@ -23,7 +23,7 @@ try:
   time.sleep(.25)
  assert promoted,'Promotion not observed'
  body={'username':'asym_'+secrets.token_hex(8),'password':secrets.token_hex(24)}
- req=urllib.request.Request(base_url()+'/auth/register',data=json.dumps(body).encode(),headers={'Content-Type':'application/json'})
+ req=urllib.request.Request(base_url()+'/api/v1/auth/v1/register',data=json.dumps(body).encode(),headers={'Content-Type':'application/json'})
  with urllib.request.urlopen(req,timeout=8) as response:assert response.status==201
  report['write_confirmed_seconds']=round(time.monotonic()-start,3)
  (ROOT/'outputs/asymmetric-report.json').write_text(json.dumps(report,indent=2))

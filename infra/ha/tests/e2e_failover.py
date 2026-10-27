@@ -20,16 +20,16 @@ def expect(name,got,want):
  if got!=want:raise RuntimeError(f'{name}: expected {want}, got {got}')
  report['checks'].append(name);print('PASS',name,flush=True)
 name='test_'+secrets.token_hex(8);password=secrets.token_hex(20)
-status,data,_=request('/auth/register',{'username':name,'password':password});expect('register',status,201);userid=data['user_id']
-status,data,_=request('/auth/login',{'username':name,'password':password});expect('login',status,200);token=data['access_token']
-expect('anonymous denied',request('/user-id')[0],401)
-expect('spoofed user-id denied',request('/user-id',headers={'X-Verified-User-Id':'f'*32,'X-User-Signature':'a'*64,'X-User-Timestamp':str(int(time.time()))})[0],401)
-expect('wrong password denied',request('/auth/login',{'username':name,'password':'not-correct-password'})[0],401)
-expect('duplicate account denied',request('/auth/register',{'username':name,'password':password})[0],409)
-expect('invalid username rejected',request('/auth/register',{'username':"abc'; DROP TABLE users;--",'password':password})[0],400)
+status,data,_=request('/api/v1/auth/v1/register',{'username':name,'password':password});expect('register',status,201);userid=data['user_id']
+status,data,_=request('/api/v1/auth/v1/login',{'username':name,'password':password});expect('login',status,200);token=data['access_token']
+expect('anonymous denied',request('/api/v1/whoami/v1/user-id')[0],401)
+expect('spoofed user-id denied',request('/api/v1/whoami/v1/user-id',headers={'X-Verified-User-Id':'f'*32,'X-User-Signature':'a'*64,'X-User-Timestamp':str(int(time.time()))})[0],401)
+expect('wrong password denied',request('/api/v1/auth/v1/login',{'username':name,'password':'not-correct-password'})[0],401)
+expect('duplicate account denied',request('/api/v1/auth/v1/register',{'username':name,'password':password})[0],409)
+expect('invalid username rejected',request('/api/v1/auth/v1/register',{'username':"abc'; DROP TABLE users;--",'password':password})[0],400)
 sites=set()
 for i in range(12):
- st,body,headers=request('/user-id',token=token);expect('authenticated user-id '+str(i),body.get('user_id'),userid);sites.add(headers.get('x-solo-site',headers.get('X-Solo-Site')));time.sleep(.15)
+ st,body,headers=request('/api/v1/whoami/v1/user-id',token=token);expect('authenticated user-id '+str(i),body.get('user_id'),userid);sites.add(headers.get('x-solo-site',headers.get('X-Solo-Site')));time.sleep(.15)
 report['sites_seen']=sorted(sites);expect('both sites serve requests',sites,{'yc','home'})
 for host in args.hosts:
  restore='iptables -D FORWARD -i wg-solo -j DROP 2>/dev/null || true; iptables -D FORWARD -o wg-solo -j DROP 2>/dev/null || true; iptables -D OUTPUT -o wg-solo -j DROP 2>/dev/null || true; iptables -D INPUT -i wg-solo -j DROP 2>/dev/null || true'
@@ -39,18 +39,18 @@ for host in args.hosts:
  try:
   while time.monotonic()-start<155:
    trial='fail_'+host+'_'+secrets.token_hex(6)
-   st,body,headers=request('/auth/register',{'username':trial,'password':secrets.token_hex(16)},timeout=4)
+   st,body,headers=request('/api/v1/auth/v1/register',{'username':trial,'password':secrets.token_hex(16)},timeout=4)
    elapsed=round(time.monotonic()-start,2);samples.append({'seconds':elapsed,'status':st})
    if st==201:
     # Ensure the pre-failure session also survives, and the failed site is excluded.
-    st2,b2,h2=request('/user-id',token=token,timeout=4)
+    st2,b2,h2=request('/api/v1/whoami/v1/user-id',token=token,timeout=4)
     site=h2.get('x-solo-site',h2.get('X-Solo-Site'))
     if st2==200 and b2.get('user_id')==userid and site!=host:outcome={'failed_site':host,'write_recovered_seconds':elapsed,'surviving_site':site,'session_survived':True,'samples':samples};break
    time.sleep(.25)
   if outcome is None:raise RuntimeError('Failover did not recover within 155 seconds: '+host)
   # Verify a new write after more than the partition detection window, while isolated.
   time.sleep(max(0,25-(time.monotonic()-start)))
-  expect('write with '+host+' isolated',request('/auth/register',{'username':'solo_'+secrets.token_hex(8),'password':secrets.token_hex(16)})[0],201)
+  expect('write with '+host+' isolated',request('/api/v1/auth/v1/register',{'username':'solo_'+secrets.token_hex(8),'password':secrets.token_hex(16)})[0],201)
   report['faults'].append(outcome);(ROOT/'outputs/e2e-report.json').write_text(json.dumps(report,indent=2));print('FAILOVER',json.dumps(outcome),flush=True)
  finally:run(host,restore+'\nsystemctl stop '+restore_unit+'.timer\n')
  # Wait for the repaired cluster to be fully synchronously replicated before next fault.
@@ -62,6 +62,6 @@ for host in args.hosts:
  if not ready:raise RuntimeError('Cluster did not return to primary/secondary after '+host)
  print('RESTORED',host,flush=True)
  expect('failover within target '+host,outcome['write_recovered_seconds'] <= args.target_seconds,True)
-expect('logout',request('/auth/logout',body={},token=token)[0],204)
-expect('revoked session denied',request('/user-id',token=token)[0],401)
+expect('logout',request('/api/v1/auth/v1/logout',body={},token=token)[0],204)
+expect('revoked session denied',request('/api/v1/whoami/v1/user-id',token=token)[0],401)
 (ROOT/'outputs/e2e-report.json').write_text(json.dumps(report,indent=2));print('E2E COMPLETE',flush=True)

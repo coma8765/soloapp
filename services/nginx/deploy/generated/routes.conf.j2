@@ -1,7 +1,7 @@
 # Generated from services/*/docs/api.yaml; DO NOT EDIT.
 location = /_verify {
   internal;
-  proxy_pass http://auth.soloapp.svc.cluster.local:{{ auth_config.port }}/internal/verify;
+  proxy_pass http://auth.soloapp.svc.cluster.local:{{ auth_config.port }}/api/v1/auth/v1/internal/verify;
   proxy_pass_request_body off;
   proxy_set_header Content-Length "";
   proxy_set_header Authorization $http_authorization;
@@ -9,7 +9,7 @@ location = /_verify {
   proxy_connect_timeout 2s;
   proxy_read_timeout 15s;
 }
-location = /auth/login {
+location = /api/v1/auth/v1/login {
   if ($request_method !~ ^(POST)$) { return 405; }
   client_max_body_size 8192;
   limit_req zone=api_auth burst=10 nodelay;
@@ -22,7 +22,7 @@ location = /auth/login {
   proxy_read_timeout 15s;
   proxy_pass http://auth.soloapp.svc.cluster.local:{{ auth_config.port }};
 }
-location = /auth/logout {
+location = /api/v1/auth/v1/logout {
   if ($request_method !~ ^(POST)$) { return 405; }
   client_max_body_size 8192;
   limit_req zone=api_auth burst=10 nodelay;
@@ -35,7 +35,7 @@ location = /auth/logout {
   proxy_read_timeout 15s;
   proxy_pass http://auth.soloapp.svc.cluster.local:{{ auth_config.port }};
 }
-location = /auth/me {
+location = /api/v1/auth/v1/me {
   if ($request_method !~ ^(GET)$) { return 405; }
   client_max_body_size 8192;
   limit_req zone=api_auth burst=10 nodelay;
@@ -48,7 +48,7 @@ location = /auth/me {
   proxy_read_timeout 15s;
   proxy_pass http://auth.soloapp.svc.cluster.local:{{ auth_config.port }};
 }
-location = /auth/register {
+location = /api/v1/auth/v1/register {
   if ($request_method !~ ^(POST)$) { return 405; }
   client_max_body_size 8192;
   limit_req zone=api_auth burst=10 nodelay;
@@ -61,20 +61,7 @@ location = /auth/register {
   proxy_read_timeout 15s;
   proxy_pass http://auth.soloapp.svc.cluster.local:{{ auth_config.port }};
 }
-location = /ready {
-  if ($request_method !~ ^(GET)$) { return 405; }
-  client_max_body_size 8192;
-  access_log off;
-  proxy_set_header X-User-Id "";
-  proxy_set_header X-Verified-User-Id "";
-  proxy_set_header X-User-Signature "";
-  proxy_set_header X-User-Timestamp "";
-  proxy_set_header Authorization "";
-  proxy_connect_timeout 2s;
-  proxy_read_timeout 8s;
-  proxy_pass http://auth.soloapp.svc.cluster.local:{{ auth_config.port }};
-}
-location = /user-id {
+location = /api/v1/whoami/v1/user-id {
   if ($request_method !~ ^(GET)$) { return 405; }
   client_max_body_size 8192;
   proxy_set_header X-User-Id "";
@@ -89,4 +76,17 @@ location = /user-id {
   proxy_connect_timeout 2s;
   proxy_read_timeout 15s;
   proxy_pass http://whoami.soloapp.svc.cluster.local:{{ whoami_config.port }};
+}
+location = /ready {
+  if ($request_method !~ ^(GET)$) { return 405; }
+  client_max_body_size 8192;
+  access_log off;
+  proxy_set_header X-User-Id "";
+  proxy_set_header X-Verified-User-Id "";
+  proxy_set_header X-User-Signature "";
+  proxy_set_header X-User-Timestamp "";
+  proxy_set_header Authorization "";
+  proxy_connect_timeout 2s;
+  proxy_read_timeout 8s;
+  proxy_pass http://auth.soloapp.svc.cluster.local:{{ auth_config.port }};
 }

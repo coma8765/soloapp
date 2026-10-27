@@ -15,14 +15,14 @@ def req(path,body=None,token=None,ip=None):
   c.request('POST' if body is not None else 'GET',path,body=json.dumps(body) if body is not None else None,headers=h);r=c.getresponse();data=r.read();return r.status,(json.loads(data or b'{}') if r.getheader('Content-Type','').startswith('application/json') else {}),r.getheader('X-Solo-Site')
  finally:c.close()
 username='rolling_'+secrets.token_hex(8);password=secrets.token_hex(20)
-s,b,_=req('/auth/register',{'username':username,'password':password});assert s==201,s;uid=b['user_id']
-s,b,_=req('/auth/login',{'username':username,'password':password});assert s==200,s;token=b['access_token']
+s,b,_=req('/api/v1/auth/v1/register',{'username':username,'password':password});assert s==201,s;uid=b['user_id']
+s,b,_=req('/api/v1/auth/v1/login',{'username':username,'password':password});assert s==200,s;token=b['access_token']
 report={'started':time.time(),'requests':0,'failures':[],'targets':{},'max_latency_seconds':0};lock=threading.Lock();start=time.monotonic()
 def worker(label,ip):
  while time.monotonic()-start<a.seconds and not Path(a.stop_file).exists():
   t=time.monotonic()
   try:
-   status,body,site=req('/user-id',token=token,ip=ip);good=status==200 and body.get('user_id')==uid
+   status,body,site=req('/api/v1/whoami/v1/user-id',token=token,ip=ip);good=status==200 and body.get('user_id')==uid
   except Exception as e:status=type(e).__name__;good=False;site=None
   elapsed=time.monotonic()-t
   with lock:

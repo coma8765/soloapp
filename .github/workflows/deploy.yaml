@@ -52,7 +52,29 @@ jobs:
           printf '%s\n' "$YC_KEY" > "$RUNNER_TEMP/cd/yc"
           printf '%s\n' "$HOME_KEY" > "$RUNNER_TEMP/cd/home"
           printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/cd/known_hosts"
-      - name: Roll YC and verify public API
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+      - name: Build exact web revision
+        working-directory: services/web
+        env:
+          SHA: ${{ steps.revision.outputs.sha }}
+        run: |
+          flutter pub get --enforce-lockfile
+          flutter build web --release --no-web-resources-cdn --base-href "/web/releases/$SHA/" --dart-define="APP_VERSION=$SHA"
+          python3 deploy/package.py "$SHA" "$RUNNER_TEMP/web.tar.gz"
+      - name: Publish and verify both S3 replicas before activation
+        env:
+          HOST: ${{ secrets.CD_YC_HOST }}
+          PORT: ${{ secrets.CD_YC_PORT }}
+          SHA: ${{ steps.revision.outputs.sha }}
+        run: |
+          ssh -i "$RUNNER_TEMP/cd/yc" -p "$PORT" -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/cd/known_hosts" \
+            -o ForwardAgent=no -o ConnectTimeout=20 -o ServerAliveInterval=30 \
+            "soloapp-cd@$HOST" "publish $SHA" < "$RUNNER_TEMP/web.tar.gz"
+      - name: Roll YC
         env:
           HOST: ${{ secrets.CD_YC_HOST }}
           PORT: ${{ secrets.CD_YC_PORT }}
@@ -63,7 +85,6 @@ jobs:
             -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/cd/known_hosts" \
             -o ForwardAgent=no -o ConnectTimeout=20 -o ServerAliveInterval=30 \
             "soloapp-cd@$HOST" "deploy $SHA"
-          python3 services/nginx/tests/smoke.py
       - name: Roll home and verify public API
         env:
           HOST: ${{ secrets.CD_HOME_HOST }}
@@ -76,6 +97,7 @@ jobs:
             -o ForwardAgent=no -o ConnectTimeout=20 -o ServerAliveInterval=30 \
             "soloapp-cd@$HOST" "deploy $SHA"
           python3 services/nginx/tests/smoke.py
+          python3 services/web/tests/smoke.py "$SHA"
       - name: Remove deployment keys
         if: always()
         run: rm -rf "$RUNNER_TEMP/cd"

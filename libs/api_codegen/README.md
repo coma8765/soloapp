@@ -5,7 +5,7 @@
 Каждая операция содержит `operationId`, стандартное OpenAPI `security` и обязательный `x-route`.
 
 ```yaml
-/user-id:
+/api/v1/whoami/v1/user-id:
   get:
     operationId: user_id
     security:
@@ -63,3 +63,5 @@ ansible-playbook infra/ansible/apps.yaml
 Проверка опубликованного API: `SOLOAPP_BASE_URL=https://your-domain.example python3 services/nginx/tests/smoke.py` (создаёт одного синтетического пользователя и отзывает его сессию; значения токенов не печатаются).
 
 Локальная зависимость codegen: `python3 -m venv .venv-codegen && .venv-codegen/bin/pip install -r libs/api_codegen/requirements.txt`. Make использует эту среду, если она существует; можно также указать `PYTHON=/path/to/python`. В Docker-зависимости сборки и testsuite включён PyYAML.
+
+Dart-клиенты для web генерируются из тех же YAML командой `make codegen-web`. `x-backend-aliases` сохраняет прежние адреса только внутри backend для rolling-совместимости со старыми pod nginx. Эти aliases не публикуются gateway и не попадают в Dart-клиент. Бизнес API использует `/api/v1/<service>/v1/...`; служебные `/healthz`, `/health/ready`, `/ready` и Grafana сохраняют отдельные адреса.

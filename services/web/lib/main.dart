@@ -1,122 +1,120 @@
 import 'package:flutter/material.dart';
+import 'api/generated/auth_api.dart' as auth;
+import 'api/generated/whoami_api.dart';
+import 'api/transport.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() => runApp(const SoloApp());
+
+class SoloApp extends StatelessWidget {
+  const SoloApp({super.key, this.transport});
+  final ApiTransport? transport;
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    title: 'Soloapp',
+    theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff315be8))),
+    home: AuthPage(transport: transport),
+  );
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  // This widget is the root of your application.
+class AuthPage extends StatefulWidget {
+  const AuthPage({super.key, this.transport});
+  final ApiTransport? transport;
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
-  }
+  State<AuthPage> createState() => _AuthPageState();
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+class _AuthPageState extends State<AuthPage> {
+  final _username = TextEditingController();
+  final _password = TextEditingController();
+  late final ApiTransport _transport = widget.transport ?? ApiTransport();
+  late final auth.AuthApi _auth = auth.AuthApi(_transport);
+  late final WhoamiApi _whoami = WhoamiApi(_transport);
+  auth.ApiSession? _session;
+  String? _message;
+  bool _busy = false;
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
+  Future<void> _run(Future<void> Function() operation) async {
+    if (_busy) return;
+    setState(() { _busy = true; _message = null; });
+    try {
+      await operation();
+    } on ApiException catch (error) {
+      if (mounted) { setState(() {
+        _message = error.message;
+        if (error.status == 401) _session = null;
+      }); }
+    } catch (_) {
+      if (mounted) setState(() { _message = 'Не удалось связаться с сервисом. Попробуйте снова.'; });
+    } finally {
+      if (mounted) { setState(() { _busy = false; }); }
+    }
+  }
 
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+  Future<void> _login({bool register = false}) => _run(() async {
+    final credentials = auth.ApiCredentials(username: _username.text.trim(), password: _password.text);
+    if (register) await _auth.authRegister(credentials);
+    final session = await _auth.authLogin(credentials);
+    _password.clear();
+    if (mounted) setState(() { _session = session; });
+  });
 
-  final String title;
+  Future<void> _identity() => _run(() async {
+    final session = _session!;
+    final identity = await _whoami.userId(session.accessToken);
+    if (mounted) setState(() { _message = 'Whoami подтвердил user-id: ${identity.userId}'; });
+  });
+
+  Future<void> _logout() => _run(() async {
+    await _auth.authLogout(_session!.accessToken);
+    if (mounted) setState(() { _session = null; });
+  });
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  void dispose() {
+    _username.dispose(); _password.dispose();
+    if (widget.transport == null) _transport.close();
+    super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: const Color(0xfff3f5fa),
+    body: Center(child: SingleChildScrollView(padding: const EdgeInsets.all(24),
+      child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 460),
+        child: Card(child: Padding(padding: const EdgeInsets.all(32),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+            Text('Soloapp', style: Theme.of(context).textTheme.headlineLarge),
+            const SizedBox(height: 8),
+            Text(_session == null ? 'Вход в аккаунт' : 'Вы вошли в аккаунт', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 24),
+            if (_session == null) ...[
+              AutofillGroup(child: Column(children: [
+                TextField(controller: _username, enabled: !_busy, autofillHints: const [AutofillHints.username],
+                  decoration: const InputDecoration(labelText: 'Имя пользователя', border: OutlineInputBorder())),
+                const SizedBox(height: 16),
+                TextField(controller: _password, enabled: !_busy, obscureText: true,
+                  autofillHints: const [AutofillHints.password], onSubmitted: (_) => _login(),
+                  decoration: const InputDecoration(labelText: 'Пароль', helperText: 'Для регистрации — от 12 байт', border: OutlineInputBorder())),
+              ])),
+              const SizedBox(height: 24),
+              FilledButton(onPressed: _busy ? null : _login, child: const Text('Войти')),
+              TextButton(onPressed: _busy ? null : () => _login(register: true), child: const Text('Создать аккаунт')),
+              const SizedBox(height: 8),
+              const Text('Сессия хранится в памяти этой вкладки. После обновления страницы потребуется войти снова.', style: TextStyle(fontSize: 12)),
+            ] else ...[
+              const Text('Ваш user-id'),
+              SelectableText(_session!.userId),
+              const SizedBox(height: 24),
+              FilledButton(onPressed: _busy ? null : _identity, child: const Text('Проверить через Whoami')),
+              TextButton(onPressed: _busy ? null : _logout, child: const Text('Выйти')),
+            ],
+            if (_busy) const Padding(padding: EdgeInsets.only(top: 16), child: LinearProgressIndicator()),
+            if (_message != null) Padding(padding: const EdgeInsets.only(top: 16), child: Text(_message!, key: const Key('message'))),
+            const SizedBox(height: 24),
+            const Text('Версия: ${String.fromEnvironment('APP_VERSION', defaultValue: 'development')}', style: TextStyle(fontSize: 11)),
+          ]),
+        )),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
+    )),
+  );
 }

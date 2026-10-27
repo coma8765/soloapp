@@ -11,11 +11,11 @@ CHECK_TARGETS := $(addprefix check-codegen-,$(SERVICES))
 
 .PHONY: all build test test-image codegen check-codegen help $(SERVICES) $(BUILD_TARGETS) $(TEST_TARGETS) $(TEST_IMAGE_TARGETS) $(CODEGEN_TARGETS) $(CHECK_TARGETS)
 all: build
-build: $(BUILD_TARGETS) build-nginx
+build: $(BUILD_TARGETS) build-nginx build-web
 test: test-codegen $(TEST_TARGETS)
 test-image: $(TEST_IMAGE_TARGETS)
-codegen: $(CODEGEN_TARGETS) codegen-nginx
-check-codegen: $(CHECK_TARGETS) check-codegen-nginx
+codegen: $(CODEGEN_TARGETS) codegen-nginx codegen-web
+check-codegen: $(CHECK_TARGETS) check-codegen-nginx check-codegen-web
 
 $(SERVICES): %: build-%
 
@@ -49,3 +49,11 @@ test-codegen:
 .PHONY: public-check
 public-check:
 	$(PYTHON) infra/publication/check.py
+
+.PHONY: codegen-web check-codegen-web build-web test-web
+codegen-web:
+	$(PYTHON) libs/api_codegen/generate_dart.py
+check-codegen-web:
+	$(PYTHON) libs/api_codegen/generate_dart.py --check
+build-web test-web:
+	$(MAKE) -C services/web $(subst -web,,$@)

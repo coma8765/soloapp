@@ -31,3 +31,7 @@ ansible-playbook infra/cd/install.yaml \
 Source checkouts and image build caches remain on the node for diagnosis/reuse; plan periodic disk cleanup while retaining active/previous images. No keys or kubeconfigs should be added to a GitHub artifact or the source repository.
 
 GitHub environment controls: https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments
+
+## Versioned web publication
+
+The production workflow builds Flutter at the selected green main revision and streams a bounded archive via `publish <sha>` before either site rolls. The same fixed gate validates main/CI for publishing and deployment. The publisher container gets only the bucket-scoped key from Lockbox delivery, runs as UID 10004 without capabilities, and verifies both independent S3 replicas. `deploy <sha>` refuses activation without matching commit markers in both replicas. The web gateway image is built per site alongside auth/whoami; the static assets are built once and identified by SHA. Public API smoke checks run after both sites have the migrated API contract. Operator gate upgrades use `infra/cd/upgrade.yaml`; SSH/sudo/RBAC scopes are unchanged.

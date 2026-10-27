@@ -17,6 +17,7 @@ def integer(value, minimum, maximum, label):
 
 def operations(spec):
     seen = set()
+    routes = {(path, method) for path, item in spec['paths'].items() for method in item}
     for path, item in spec['paths'].items():
         require(re.fullmatch(r'/[A-Za-z0-9_/-]*', path), f'Unsupported literal route: {path}')
         for method, op in item.items():
@@ -24,6 +25,11 @@ def operations(spec):
             operation = op['operationId']
             require(re.fullmatch(r'[a-z][a-z0-9_]*', operation) and operation not in seen, f'Invalid/duplicate operationId: {operation}')
             seen.add(operation)
+            aliases = op.get('x-backend-aliases', [])
+            require(isinstance(aliases, list), 'Backend aliases must be a list')
+            for alias in aliases:
+                require(isinstance(alias, str) and re.fullmatch(r'/[A-Za-z0-9_/-]+', alias) and (alias, method) not in routes, 'Invalid or conflicting backend alias')
+                routes.add((alias, method))
             policy = op.get('x-route', {})
             require(set(policy) == {'exposure', 'auth', 'max_body_bytes', 'timeouts', 'rate_limit'}, f'{operation}: x-route needs explicit exposure/auth/body/timeouts/rate_limit, unknown keys forbidden')
             require(policy['exposure'] in ('public', 'internal'), f'{operation}: invalid exposure')

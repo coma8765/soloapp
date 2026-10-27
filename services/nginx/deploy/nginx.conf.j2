@@ -51,6 +51,25 @@ http {
     }
 {% endif %}
 {{ lookup('template', project_root ~ '/services/nginx/deploy/generated/routes.conf.j2') | indent(4, true) }}
+{% if web_config.release | length > 0 %}
+    location = / {
+      if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+      proxy_set_header Authorization "";
+      proxy_set_header Cookie "";
+      proxy_pass http://web.soloapp.svc.cluster.local:{{ web_config.port }};
+    }
+    location /web/releases/ {
+      if ($request_method !~ ^(GET|HEAD)$) { return 405; }
+      proxy_set_header Authorization "";
+      proxy_set_header Cookie "";
+      proxy_connect_timeout 2s;
+      proxy_read_timeout 20s;
+      proxy_hide_header Cache-Control;
+      add_header Cache-Control $upstream_http_cache_control always;
+      add_header X-Solo-Site {{ inventory_hostname }} always;
+      proxy_pass http://web.soloapp.svc.cluster.local:{{ web_config.port }};
+    }
+{% endif %}
     location / { return 404; }
   }
 }

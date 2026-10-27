@@ -6,3 +6,5 @@ whoami_config: "{{ workload_defaults | combine(lookup('template', project_root ~
 
 # Monitoring overrides may be set globally or separately in host_vars.
 obs: "{{ lookup('file', project_root ~ '/infra/observability/defaults.yaml') | from_yaml | combine(observability_overrides | default({}), recursive=true) }}"
+
+web_config: "{{ workload_defaults | combine(lookup('template', project_root ~ '/services/web/deploy/defaults.yaml') | from_yaml, recursive=true) | combine((service_overrides | default({})).web | default({}), recursive=true) }}"

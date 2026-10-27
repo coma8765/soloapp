@@ -4,9 +4,10 @@ info:
   version: 5.0.0
 x-cpp-namespace: solo::whoami::generated
 paths:
-  /user-id:
+  /api/v1/whoami/v1/user-id:
     get:
       operationId: user_id
+      x-backend-aliases: [/user-id]
       description: 'Internal endpoint: nginx supplies HMAC-signed identity. Public clients use Bearer
         at the gateway.'
       parameters:

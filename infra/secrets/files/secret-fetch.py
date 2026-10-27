@@ -44,6 +44,8 @@ def fetch():
  if changed and os.environ.get('RELOAD_HAPROXY'):
   subprocess.run(['docker','kill','--signal=USR2','solo-ingress'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
  if changed and os.environ.get('RELOAD_NGINX') and pathlib.Path('/tmp/nginx.pid').exists():os.kill(int(pathlib.Path('/tmp/nginx.pid').read_text()),signal.SIGHUP)
+ if changed and os.environ.get('RELOAD_S3'):
+  subprocess.run(['docker','kill','--signal=HUP','solo-s3'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
  print('Secret delivery succeeded',flush=True)
 if __name__=='__main__':
  while True:

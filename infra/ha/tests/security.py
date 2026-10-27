@@ -24,7 +24,7 @@ for target in [('169.254.169.254',80),('auth.soloapp.svc.cluster.local',19082)]:
   s=socket.create_connection(target,2);s.close();raise AssertionError('Forbidden connection succeeded: '+str(target))
  except (TimeoutError,ConnectionRefusedError,OSError):pass
 print('Metadata and direct auth denied')
-try:urllib.request.urlopen('http://127.0.0.1:8080/user-id',timeout=2);raise AssertionError('unsigned request accepted')
+try:urllib.request.urlopen('http://127.0.0.1:8080/api/v1/whoami/v1/user-id',timeout=2);raise AssertionError('unsigned request accepted')
 except urllib.error.HTTPError as e:assert e.code==401,e.code
 print('Unsigned identity denied: 401')
 """

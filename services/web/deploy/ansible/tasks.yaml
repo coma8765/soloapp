@@ -1,0 +1,17 @@
+- name: Require immutable web release
+  ansible.builtin.assert:
+    that: web_config.release is match('^[0-9a-f]{40}$')
+- name: Deploy web service
+  ansible.builtin.include_tasks: "{{ project_root }}/infra/kubernetes/tasks/apply.yaml"
+  vars:
+    manifest_source: "{{ project_root }}/services/web/deploy/k8s/service.yaml.j2"
+    manifest_name: web-service
+- name: Deploy web replicas
+  ansible.builtin.include_tasks: "{{ project_root }}/infra/kubernetes/tasks/apply.yaml"
+  vars:
+    manifest_source: "{{ project_root }}/services/web/deploy/k8s/deployment.yaml.j2"
+    manifest_name: web-deployment
+- name: Wait until complete web release is cached by ready pods
+  ansible.builtin.command: k3s kubectl -n soloapp rollout status deployment/web --timeout=300s
+  changed_when: false
+  when: not ansible_check_mode
