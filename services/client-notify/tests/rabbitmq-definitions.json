@@ -43,5 +43,20 @@
         "x-delivery-limit": -1
       }
     }
+  ],
+  "policies": [
+    {
+      "vhost": "/soloapp",
+      "name": "delivery-deadline",
+      "pattern": "^client-notify$",
+      "apply-to": "quorum_queues",
+      "priority": 10,
+      "definition": {
+        "consumer-timeout": 60000,
+        "delayed-retry-type": "all",
+        "delayed-retry-min": 1000,
+        "delayed-retry-max": 1000
+      }
+    }
   ]
 }

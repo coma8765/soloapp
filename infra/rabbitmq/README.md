@@ -29,3 +29,12 @@ ansible-playbook infra/network/isolate.yaml
 Bootstrap requires the operator's existing YC identity, PyYAML and cryptography.
 It creates only delivery-stack identities/secrets and per-secret access bindings.
 It does not print or persist secret payloads locally.
+
+## Fair retries
+
+RabbitMQ 4.4 native quorum delayed retry is enabled for all returns with a fixed
+`retry_delay_ms` (default 1000 ms). Returned messages wait off the ready queue,
+so an offline recipient does not repeatedly occupy its head. No dead-letter drop
+or finite retry limit is used. `ansible-playbook infra/rabbitmq/policy.yaml` applies
+the policy live without restarting either broker; `deploy.yaml` preserves it on
+future starts. See [RabbitMQ delayed retry](https://www.rabbitmq.com/docs/quorum-queues#delayed-retry).

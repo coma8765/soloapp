@@ -21,7 +21,7 @@ def write(path, text):
     os.chown(path, 999, 999)
 
 
-def definitions(credentials):
+def definitions(credentials, retry_delay_ms=1000):
     salt = hashlib.sha256(credentials["password"].encode()).digest()[:4]
     password_hash = base64.b64encode(
         salt + hashlib.sha256(salt + credentials["password"].encode()).digest()
@@ -65,7 +65,12 @@ def definitions(credentials):
                 "pattern": "^client-notify$",
                 "apply-to": "quorum_queues",
                 "priority": 10,
-                "definition": {"consumer-timeout": 60000},
+                "definition": {
+                    "consumer-timeout": 60000,
+                    "delayed-retry-type": "all",
+                    "delayed-retry-min": retry_delay_ms,
+                    "delayed-retry-max": retry_delay_ms,
+                },
             }
         ],
     }
@@ -78,7 +83,10 @@ def main(number):
     runtime.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chown(runtime, 999, 999)
     write(runtime / ".erlang.cookie", credentials["cookie"])
-    write(runtime / "definitions.json", json.dumps(definitions(credentials)))
+    write(
+        runtime / "definitions.json",
+        json.dumps(definitions(credentials, config.get("retry_delay_ms", 1000))),
+    )
     write(runtime / "enabled_plugins", "[rabbitmq_prometheus].\n")
     index = number - 1
     text = f"""listeners.tcp = none

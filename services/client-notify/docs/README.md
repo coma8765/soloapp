@@ -30,7 +30,12 @@ with prefetch=1. The consumer reloads the task from the primary, claims a lease,
 `/internal/delivery` to the configured gateway. HTTP 200 plus matching `task_id`, `attempt`
 and `status: delivered` is required. It commits `done` **before** ACK. On redelivery a done
 task is ACKed without contacting the gateway. An error/timeout marks it retryable and sends
-NACK(requeue=true). Retries have a configurable one-second delay and no attempt limit.
+NACK(requeue=true). RabbitMQ's native quorum delayed-retry policy holds returned
+messages for one second, allowing later messages to proceed. The application also
+uses its configurable one-second retry pause. There is no attempt limit.
+An unsuccessful attempt retains its recovery lease and does not request a new
+publication: the existing queue entry is retried. The reconciler republishes only
+after that lease expires, avoiding an extra queue copy on every ordinary failure.
 
 ## Deadlines and cancellation
 

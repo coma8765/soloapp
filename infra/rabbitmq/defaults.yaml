@@ -6,3 +6,4 @@ watermark: 256MiB
 ports: [5671, 5673]
 metrics_ports: [15691, 15693]
 distribution_ports: [25671, 25673]
+retry_delay_ms: 1000
