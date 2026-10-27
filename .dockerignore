@@ -20,3 +20,11 @@ infra/ha/deployment-history.md
 **/.fvm
 **/.dart_tool
 **/.gradle
+
+**/node_modules
+**/dist
+**/coverage
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+**/.ast-index

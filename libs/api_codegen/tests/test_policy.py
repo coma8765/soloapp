@@ -15,7 +15,7 @@ class PolicyTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.specs = {}
-        for name in ('auth', 'whoami'):
+        for name in ('auth', 'whoami', 'app-api'):
             self.specs[name] = load(ROOT / 'services' / name)
         self.save()
 
@@ -32,6 +32,16 @@ class PolicyTests(unittest.TestCase):
         self.assertIn('location = /_verify {\n  internal;', text)
         self.assertIn('auth_request /_verify;', text)
         self.assertNotIn('location /auth/', text)
+
+    def test_app_api_uses_verified_identity_and_valid_ansible_variable(self):
+        text = render(self.root)['routes.conf.j2']
+        route = text.split('location = /api/v1/app-api/v1/user-id {', 1)[1].split('\n}', 1)[0]
+        self.assertIn('auth_request /_verify;', route)
+        self.assertIn('proxy_set_header X-Verified-User-Id $verified_id;', route)
+        self.assertIn('proxy_set_header X-User-Signature $user_signature;', route)
+        self.assertIn('proxy_set_header X-User-Timestamp $user_timestamp;', route)
+        self.assertIn('proxy_set_header Authorization "";', route)
+        self.assertIn('whoami.soloapp.svc.cluster.local:{{ whoami_config.port }};', route)
 
     def test_public_to_internal_removes_route(self):
         self.specs['auth']['paths']['/api/v1/auth/v1/register']['post']['x-route']['exposure'] = 'internal'

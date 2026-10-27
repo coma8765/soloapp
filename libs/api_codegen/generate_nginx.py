@@ -5,12 +5,13 @@ from pathlib import Path
 from route_policy import load, operations, require
 
 ROOT = Path(__file__).resolve().parents[2]
-SERVICES = ('auth', 'whoami')
+SERVICES = ('auth', 'whoami', 'app-api')
 
 
 def render(root=ROOT):
     routes = {}; rates = {}; verify = None
     for service in SERVICES:
+        backend = 'whoami' if service == 'app-api' else service
         for path, method, op in operations(load(root / 'services' / service)):
             policy = op['x-route']
             if service == 'auth' and op['operationId'] == 'internal_verify':
@@ -21,10 +22,10 @@ def render(root=ROOT):
             require(path not in ('/healthz', '/_verify') and not path.startswith('/grafana') and not path.startswith('/internal/'), f'Reserved gateway route: {path}')
             if path in routes:
                 previous = routes[path]
-                require(previous['service'] == service and previous['policy'] == policy, f'{path}: methods sharing a path must share gateway policy')
+                require(previous['service'] == backend and previous['policy'] == policy, f'{path}: methods sharing a path must share gateway policy')
                 previous['methods'].append(method.upper())
             else:
-                routes[path] = {'service': service, 'policy': policy, 'methods': [method.upper()]}
+                routes[path] = {'service': backend, 'policy': policy, 'methods': [method.upper()]}
             rate = policy['rate_limit']
             if rate:
                 name = rate['group']
@@ -53,7 +54,7 @@ def render(root=ROOT):
             lines += ['  auth_request /_verify;', '  auth_request_set $verified_id $upstream_http_x_verified_user_id;', '  auth_request_set $user_signature $upstream_http_x_user_signature;', '  auth_request_set $user_timestamp $upstream_http_x_user_timestamp;', '  proxy_set_header X-Verified-User-Id $verified_id;', '  proxy_set_header X-User-Signature $user_signature;', '  proxy_set_header X-User-Timestamp $user_timestamp;', '  proxy_set_header Authorization "";']
         else:
             lines += ['  proxy_set_header X-Verified-User-Id "";', '  proxy_set_header X-User-Signature "";', '  proxy_set_header X-User-Timestamp "";', '  proxy_set_header Authorization ' + ('$http_authorization;' if policy['auth'] == 'bearer' else '"";')]
-        lines += [f"  proxy_connect_timeout {policy['timeouts']['connect_seconds']}s;", f"  proxy_read_timeout {policy['timeouts']['read_seconds']}s;", '  proxy_pass http://' + service + '.soloapp.svc.cluster.local:{{ ' + service + '_config.port }};', '}']
+        lines += [f"  proxy_connect_timeout {policy['timeouts']['connect_seconds']}s;", f"  proxy_read_timeout {policy['timeouts']['read_seconds']}s;", '  proxy_pass http://' + service + '.soloapp.svc.cluster.local:{{ ' + service.replace('-', '_') + '_config.port }};', '}']
     return {'maps.conf.j2': '\n'.join(maps) + '\n', 'routes.conf.j2': '\n'.join(lines) + '\n'}
 
 

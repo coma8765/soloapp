@@ -37,3 +37,29 @@ class RegistryTests(unittest.TestCase):
                 self.assertEqual(len(gate.registry_images('a'*40,require_both=False)),3)
             with patch.object(gate.urllib.request,'urlopen',side_effect=OSError('offline')):
                 with self.assertRaises(RuntimeError):gate.registry_images('a'*40,require_both=False)
+
+class AppApiRegistryTests(unittest.TestCase):
+    def test_app_api_digest_is_checked_on_both_sites(self):
+        from unittest.mock import patch, MagicMock
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'manifest'
+        services = ('auth', 'whoami', 'web', 'app-api')
+        with patch.object(gate.ssl, 'create_default_context'), patch.object(
+                gate.urllib.request, 'urlopen', return_value=response) as fetch:
+            images = gate.registry_images('a' * 40, services=services)
+        self.assertEqual(len(images), 4)
+        self.assertIn('/app-api@sha256:', images[3])
+        urls = [call.args[0].full_url for call in fetch.call_args_list]
+        self.assertEqual(sum('/app-api/manifests/' in url for url in urls), 2)
+
+    def test_app_api_mismatch_blocks_rollout(self):
+        from unittest.mock import patch, MagicMock
+        def response(payload):
+            value = MagicMock()
+            value.__enter__.return_value.read.return_value = payload
+            return value
+        with patch.object(gate.ssl, 'create_default_context'), patch.object(
+                gate.urllib.request, 'urlopen',
+                side_effect=[response(b'a')] * 7 + [response(b'b')]):
+            with self.assertRaisesRegex(RuntimeError, 'disagree'):
+                gate.registry_images('a' * 40, services=('auth', 'whoami', 'web', 'app-api'))

@@ -40,3 +40,7 @@ The production workflow builds Flutter at the selected green main revision and s
 ## Release versions
 
 Production reserves a Git tag `v0.1.P` for each new source revision, starting at `v0.1.0`. P is the maximum existing patch plus one; workflow concurrency serializes allocation. Reruns of the same SHA reuse its version, and rollback does not consume a version. A tag reserves a number, so a failed deployment may leave a gap; only successful per-site deployment records are eligible for rollback. The version appears in the Flutter UI, web build metadata, OCI image labels and immutable registry version aliases. SHA-based asset paths and image digests remain immutable. `rollback_revision` accepts either `v0.1.P` or a full SHA. Only the small version-allocation job has repository write permission; build/deploy jobs retain read-only GitHub permissions.
+
+## NestJS identity runtime
+
+The `whoami` image is built from `services/app-api` (NestJS), using the existing whoami deployment, secret identity and three-image release format. Rollback to earlier C++ images uses the same digest-based flow. No additional IAM mappings or gate command are required.

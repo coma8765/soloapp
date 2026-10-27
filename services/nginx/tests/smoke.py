@@ -33,6 +33,8 @@ def main():
         check('GET', path, 404)
     check('GET', '/api/v1/auth/v1/login', 405)
     check('POST', '/api/v1/whoami/v1/user-id', 405)
+    check('GET', '/api/v1/app-api/v1/user-id', 401)
+    check('POST', '/api/v1/app-api/v1/user-id', 405)
     check('GET', '/api/v1/auth/v1/me', 401)
     check('GET', '/api/v1/whoami/v1/user-id', 401, headers={'X-Verified-User-Id': 'a' * 32, 'X-User-Signature': 'a' * 64, 'X-User-Timestamp': '9999999999'})
     check('POST', '/api/v1/auth/v1/register', 413, b'x' * 8193, {'Content-Type': 'application/json'})
@@ -42,6 +44,7 @@ def main():
     authorization = {'Authorization': 'Bearer ' + token}
     try:
         check('GET', '/api/v1/auth/v1/me', 200, headers=authorization, user_id=user_id)
+        check('GET', '/api/v1/app-api/v1/user-id', 200, headers=authorization, user_id=user_id)
         for _ in range(8):
             check('GET', '/api/v1/whoami/v1/user-id', 200, headers={**authorization, 'X-Verified-User-Id': '0' * 32, 'X-User-Signature': '0' * 64, 'X-User-Timestamp': '9999999999'}, user_id=user_id)
     finally:

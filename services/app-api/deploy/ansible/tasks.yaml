@@ -1,0 +1,3 @@
+# Compatibility entry point: app-api is the whoami runtime, not a fourth workload.
+- name: Deploy NestJS identity through the existing whoami workload
+  ansible.builtin.import_tasks: ../../../whoami/deploy/ansible/tasks.yaml
