@@ -222,7 +222,7 @@ tests:
     values: 1+0x80
   promql_expr_test:
   - expr: count(ALERTS{alertname="ContainerCpuRequestHigh",alertstate="firing"}) or vector(0)
-    eval_time: 6m
+    eval_time: 7m15s
     exp_samples:
     - labels: '{}'
       value: 0
@@ -238,6 +238,11 @@ tests:
   promql_expr_test:
   - expr: count(ALERTS{alertname="ContainerCpuRequestHigh",alertstate="firing"}) or vector(0)
     eval_time: 6m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="ContainerCpuRequestHigh",alertstate="firing"}) or vector(0)
+    eval_time: 7m15s
     exp_samples:
     - labels: '{}'
       value: 1
