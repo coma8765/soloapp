@@ -34,6 +34,7 @@ export class Outbox {
   constructor(
     database: Database,
     publish: (task: DeliveryTask) => Promise<void>,
+    now?: () => number,
   );
   start(): void;
   close(): Promise<void>;
