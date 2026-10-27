@@ -74,6 +74,12 @@ Live-тесты требуют вашего inventory и меняют состо
 SOLOAPP_BASE_URL=https://your-domain.example python3 services/nginx/tests/smoke.py
 ```
 
+## CI/CD
+
+[GitHub Actions](https://github.com/coma8765/soloapp/actions) проверяет C++ сервисы, codegen, секреты и Flutter web. После зелёного CI для `main` production workflow собирает образы на стенде и последовательно обновляет YC и home, проверяя API после каждого ДЦ. Ручной повтор — `Deploy production` → `Run workflow`. [Устройство CD и ротация ключей](infra/cd/README.md).
+
+`services/web` пока содержит Flutter scaffold: он публикуется и проверяется CI, но не заменяет действующие API-маршруты.
+
 ## Ограничения
 
 - Синхронная репликация в штатном режиме; после потери второй площадки допускается запись на одной копии. Её последующая потеря может уничтожить новые данные.

@@ -1,0 +1,81 @@
+name: Deploy production
+on:
+  workflow_run:
+    workflows: [Validate source]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment: production
+    steps:
+      - name: Select current green main revision
+        id: revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REQUESTED: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$REQUESTED" =~ ^[0-9a-f]{40}$ ]]
+          test "$(gh api "repos/$REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$REQUESTED"
+          gh api "repos/$REPOSITORY/actions/workflows/ci.yaml/runs?event=push&branch=main&head_sha=$REQUESTED" \
+            --jq '.workflow_runs[] | select(.conclusion == "success") | .id' | head -n1 > "$RUNNER_TEMP/green-ci"
+          test -s "$RUNNER_TEMP/green-ci"
+          echo "sha=$REQUESTED" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ steps.revision.outputs.sha }}
+          persist-credentials: false
+      - name: Prepare restricted deployment identities
+        env:
+          YC_KEY: ${{ secrets.CD_YC_KEY }}
+          HOME_KEY: ${{ secrets.CD_HOME_KEY }}
+          KNOWN_HOSTS: ${{ secrets.CD_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/cd"
+          printf '%s\n' "$YC_KEY" > "$RUNNER_TEMP/cd/yc"
+          printf '%s\n' "$HOME_KEY" > "$RUNNER_TEMP/cd/home"
+          printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/cd/known_hosts"
+      - name: Roll YC and verify public API
+        env:
+          HOST: ${{ secrets.CD_YC_HOST }}
+          PORT: ${{ secrets.CD_YC_PORT }}
+          SHA: ${{ steps.revision.outputs.sha }}
+          SOLOAPP_BASE_URL: ${{ secrets.SOLOAPP_BASE_URL }}
+        run: |
+          ssh -i "$RUNNER_TEMP/cd/yc" -p "$PORT" -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/cd/known_hosts" \
+            -o ForwardAgent=no -o ConnectTimeout=20 -o ServerAliveInterval=30 \
+            "soloapp-cd@$HOST" "deploy $SHA"
+          python3 services/nginx/tests/smoke.py
+      - name: Roll home and verify public API
+        env:
+          HOST: ${{ secrets.CD_HOME_HOST }}
+          PORT: ${{ secrets.CD_HOME_PORT }}
+          SHA: ${{ steps.revision.outputs.sha }}
+          SOLOAPP_BASE_URL: ${{ secrets.SOLOAPP_BASE_URL }}
+        run: |
+          ssh -i "$RUNNER_TEMP/cd/home" -p "$PORT" -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/cd/known_hosts" \
+            -o ForwardAgent=no -o ConnectTimeout=20 -o ServerAliveInterval=30 \
+            "soloapp-cd@$HOST" "deploy $SHA"
+          python3 services/nginx/tests/smoke.py
+      - name: Remove deployment keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/cd"

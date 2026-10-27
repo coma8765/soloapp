@@ -1,0 +1,101 @@
+# Operator bootstrap; private key material never goes to these servers.
+- name: Install constrained deployment gate on each app site
+  hosts: app_sites
+  gather_facts: false
+  become: true
+  tasks:
+  - name: Require explicit expiring public keys
+    ansible.builtin.assert:
+      that:
+      - cd_key_directory is defined
+      - cd_key_expiry is match('^[0-9]{14}Z$')
+      - cd_repository is match('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')
+  - name: Install Git for public source retrieval
+    ansible.builtin.apt:
+      name: git
+      state: present
+      update_cache: true
+      cache_valid_time: 3600
+  - name: Create locked deployment identity
+    ansible.builtin.user:
+      name: soloapp-cd
+      home: /var/lib/soloapp-cd-login
+      shell: /bin/sh
+      password_lock: true
+      create_home: true
+  - name: Create root-owned configuration directories
+    ansible.builtin.file:
+      path: '{{ item }}'
+      state: directory
+      owner: root
+      group: root
+      mode: '0755'
+    loop:
+    - /usr/local/libexec
+    - /var/lib/soloapp-cd-login
+    - /var/lib/soloapp-cd-login/.ssh
+  - name: Create private deployment configuration directory
+    ansible.builtin.file:
+      path: /etc/soloapp-cd
+      state: directory
+      owner: root
+      group: root
+      mode: '0700'
+  - name: Install SSH entry point
+    ansible.builtin.copy:
+      src: entry.py
+      dest: /usr/local/libexec/soloapp-cd-entry
+      owner: root
+      group: root
+      mode: '0755'
+  - name: Install validated deploy gate
+    ansible.builtin.copy:
+      src: deploy.py
+      dest: /usr/local/libexec/soloapp-cd
+      owner: root
+      group: root
+      mode: '0755'
+  - name: Restrict public key to deploy gate and expiry
+    ansible.builtin.copy:
+      content: 'restrict,expiry-time="{{ cd_key_expiry }}",command="/usr/local/libexec/soloapp-cd-entry" {{ lookup("file", cd_key_directory ~ "/" ~ inventory_hostname ~ ".pub") }}'
+      dest: /var/lib/soloapp-cd-login/.ssh/authorized_keys
+      owner: root
+      group: root
+      mode: '0644'
+  - name: Allow only root-owned validated gate
+    ansible.builtin.copy:
+      content: 'soloapp-cd ALL=(root) NOPASSWD: /usr/local/libexec/soloapp-cd *'
+      dest: /etc/sudoers.d/soloapp-cd
+      owner: root
+      group: root
+      mode: '0440'
+      validate: /usr/sbin/visudo -cf %s
+  - name: Store site identity
+    ansible.builtin.copy:
+      content: '{{ {"site": inventory_hostname, "repository": cd_repository} | to_nice_json }}'
+      dest: /etc/soloapp-cd/config.json
+      mode: '0600'
+  - name: Copy local deployment inventory
+    ansible.builtin.copy:
+      src: '{{ inventory_file }}'
+      dest: /etc/soloapp-cd/inventory.yaml
+      mode: '0600'
+  - name: Copy deployment resource identifiers
+    ansible.builtin.copy:
+      src: '{{ project_root }}/infra/cloud/resources.json'
+      dest: /etc/soloapp-cd/resources.json
+      mode: '0600'
+  - name: Install controller Dockerfile
+    ansible.builtin.copy:
+      src: Dockerfile
+      dest: /etc/soloapp-cd/Dockerfile
+      mode: '0600'
+  - name: Build unprivileged Ansible controller
+    ansible.builtin.command:
+      argv: [docker, build, -t, 'soloapp/deploy-controller:1', /etc/soloapp-cd]
+    changed_when: true
+  - name: Install namespace-scoped CD identity
+    ansible.builtin.command:
+      argv: [k3s, kubectl, apply, -f, '-']
+      stdin: '{{ lookup("file", playbook_dir ~ "/rbac.yaml") }}'
+    changed_when: true
