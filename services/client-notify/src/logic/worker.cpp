@@ -24,7 +24,7 @@ void Worker::PublishLoop() {
                     if (stop_)
                         break;
                     queue.Publish(task.task_id);
-                    repository_.Published(task);
+                    repository_.Published(task, config_.ack_ms);
                 }
                 Pause(1000);
             }
@@ -41,7 +41,6 @@ void Worker::ConsumeLoop() {
                 if (!delivery)
                     continue;
                 solo::Deadline deadline(config_.ack_ms, [&] { queue.Interrupt(); });
-                auto &expired = deadline.expired;
                 try {
                     if (!std::regex_match(delivery->key, std::regex("^[a-zA-Z0-9_-]{16,128}$")))
                         throw std::runtime_error("Invalid task key");
@@ -63,14 +62,14 @@ void Worker::ConsumeLoop() {
                         } else {
                             bool delivered = false;
                             try {
-                                delivered = gateway_.Deliver(*claimed, expired);
+                                delivered = gateway_.Deliver(*claimed, deadline.expired);
                             } catch (...) {
                             }
                             if (!delivered)
                                 gateway_.Cancel(*claimed);
-                            bool saved = repository_.Finish(*claimed, delivered && !expired,
-                                                            config_.retry_ms);
-                            if (expired)
+                            bool saved = repository_.Finish(
+                                *claimed, delivered && !deadline.expired, config_.retry_ms);
+                            if (deadline.expired)
                                 throw std::runtime_error("ACK deadline expired");
                             if (delivered && saved)
                                 queue.Ack(delivery->tag);

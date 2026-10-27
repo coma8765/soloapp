@@ -30,6 +30,9 @@ items:
           image: "{{ notify_config.image }}"
           imagePullPolicy: {{ notify_config.image_pull_policy }}
           env:
+          - {name: NOTIFY_ACK_TIMEOUT_MS, value: '{{ notify_config.ack_timeout_ms }}'}
+          - {name: NOTIFY_DELIVERY_TIMEOUT_MS, value: '{{ notify_config.delivery_timeout_ms }}'}
+          - {name: NOTIFY_RETRY_DELAY_MS, value: '{{ notify_config.retry_delay_ms }}'}
           - {name: DATABASE_URL_FILE, value: /run/soloapp-secrets/data/database-url}
           - {name: NOTIFY_CONFIG_FILE, value: /run/soloapp-secrets/data/notify-config.json}
           - {name: NOTIFY_API_TOKEN_FILE, value: /run/soloapp-secrets/data/api-token}

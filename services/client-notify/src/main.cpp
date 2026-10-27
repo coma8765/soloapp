@@ -47,7 +47,7 @@ int main() {
         });
         generated::RegisterRoutes(handlers);
         auto address = std::getenv("LISTEN_ADDRESS");
-        auto port = std::getenv("PORT");
+        const char *const port = std::getenv("PORT");
         drogon::app()
             .setLogLevel(trantor::Logger::kWarn)
             .setThreadNum(2)

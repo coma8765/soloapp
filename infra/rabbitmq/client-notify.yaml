@@ -1,0 +1,20 @@
+# Nonsecret definitions fragment; merge with operator-managed identities before import.
+# No TTL/max-length eviction: tasks remain pending until the application ACKs success.
+vhosts:
+- name: /soloapp
+queues:
+- name: client-notify
+  vhost: /soloapp
+  durable: true
+  auto_delete: false
+  arguments:
+    x-queue-type: quorum
+    x-delivery-limit: -1
+policies:
+- name: client-notify-ack-fallback
+  vhost: /soloapp
+  pattern: ^client-notify$
+  apply-to: quorum_queues
+  priority: 10
+  definition:
+    consumer-timeout: 60000

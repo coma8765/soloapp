@@ -14,6 +14,10 @@ callers cannot supply arbitrary callback URLs. A successful HTTP 202 means **com
 PostgreSQL**, not delivered. Reusing a key with different contents returns 409. POST
 `/api/v1/client-notify/v1/status` accepts `task_id` and returns pending/inflight/done.
 
+Timeouts in `deploy/defaults.yaml` support per-site `service_overrides.client_notify` and
+are passed as `NOTIFY_ACK_TIMEOUT_MS`, `NOTIFY_DELIVERY_TIMEOUT_MS`, `NOTIFY_RETRY_DELAY_MS`.
+Environment overrides take precedence over the secret JSON configuration.
+
 Task and outbox state are one row committed atomically. The publisher sends only its ID
 as a persistent AMQP message, uses mandatory routing and publisher confirms, and marks
 publication afterwards. A crash between confirmation and commit may duplicate the queue

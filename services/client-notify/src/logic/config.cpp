@@ -1,4 +1,5 @@
 #include "config.hpp"
+#include "odb/pool_config.hpp"
 #include <cstdlib>
 #include <fstream>
 #include <json/json.h>
@@ -45,6 +46,9 @@ Config Config::Load() {
     c.delivery_ms = j.get("delivery_timeout_ms", 10000).asUInt();
     c.ack_ms = j.get("ack_timeout_ms", 30000).asUInt();
     c.retry_ms = j.get("retry_delay_ms", 1000).asUInt();
+    c.delivery_ms = solo::db::PoolSetting("NOTIFY_DELIVERY_TIMEOUT_MS", c.delivery_ms, 290000);
+    c.ack_ms = solo::db::PoolSetting("NOTIFY_ACK_TIMEOUT_MS", c.ack_ms, 300000);
+    c.retry_ms = solo::db::PoolSetting("NOTIFY_RETRY_DELAY_MS", c.retry_ms, 10000);
     if (c.rabbit_host.empty() || c.rabbit_user.empty() || c.rabbit_password.empty() ||
         c.gateway_url.empty() || c.gateway_token.empty() || c.queue.empty() || c.delivery_ms < 1 ||
         c.ack_ms <= c.delivery_ms + 1000 || c.ack_ms > 300000 || c.retry_ms < 100 ||

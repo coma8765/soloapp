@@ -103,3 +103,45 @@ async def test_timeout_cancels_without_waiting(service_client, mockserver):
     assert 9 <= attempts[1][1] - attempts[0][1] < 14
     assert cancellations[0]["task_id"] == data["task_id"]
     assert cancellations[0]["attempt"] == attempts[0][0]
+
+
+async def test_mismatched_gateway_ack_is_retried(service_client, mockserver):
+    attempts = []
+
+    @mockserver.json_handler("/internal/delivery")
+    def delivery(request):
+        data = request.json
+        attempts.append(data["attempt"])
+        return {
+            "task_id": data["task_id"],
+            "attempt": data["attempt"] + (100 if len(attempts) == 1 else 0),
+            "status": "delivered",
+        }
+
+    @mockserver.json_handler("/internal/delivery/cancel")
+    def cancel(request):
+        return {"cancelled": True}
+
+    data = task()
+    assert (await service_client.post(BASE + "tasks", json=data, headers=HEADERS)).status == 202
+    result = await completed(service_client, data["task_id"])
+    assert result["attempt"] >= 2
+
+
+async def test_concurrent_duplicate_submission(service_client, mockserver):
+    calls = []
+
+    @mockserver.json_handler("/internal/delivery")
+    def delivery(request):
+        data = request.json
+        calls.append(data)
+        return {"task_id": data["task_id"], "attempt": data["attempt"], "status": "delivered"}
+
+    data = task()
+    responses = await asyncio.gather(
+        *(service_client.post(BASE + "tasks", json=data, headers=HEADERS) for _ in range(8))
+    )
+    assert all(response.status == 202 for response in responses)
+    await completed(service_client, data["task_id"])
+    await asyncio.sleep(1)
+    assert len(calls) == 1

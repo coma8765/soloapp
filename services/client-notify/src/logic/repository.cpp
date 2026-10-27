@@ -59,14 +59,14 @@ std::vector<Task> Repository::Pending() {
     tx->commit();
     return result;
 }
-void Repository::Published(const Task &snapshot) {
+void Repository::Published(const Task &snapshot, long long redelivery_ms) {
     try {
         auto tx = Begin();
         std::unique_ptr<Task> stored(db_.load<Task>(snapshot.task_id));
         auto &row = *stored;
         if (row.version == snapshot.version && row.state != "done") {
             row.needs_publish = false;
-            row.lease_ms = NowMs() + 30000;
+            row.lease_ms = NowMs() + redelivery_ms;
             db_.update(row);
         }
         tx->commit();

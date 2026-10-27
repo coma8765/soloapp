@@ -9,6 +9,7 @@ WORKDIR /src
 COPY CMakeLists.txt pytest.ini ./
 COPY libs ./libs
 COPY services ./services
+COPY infra/rabbitmq ./infra/rabbitmq
 RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSOLO_SERVICE=client-notify && cmake --build build -j2 && cmake --install build
 FROM toolchain AS test-deps
 RUN apt-get update && apt-get install -y --no-install-recommends python3-venv postgresql-16 locales && localedef -i en_US -f UTF-8 en_US.UTF-8 && rm -rf /var/lib/apt/lists/*

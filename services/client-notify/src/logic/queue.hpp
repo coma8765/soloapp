@@ -7,7 +7,7 @@
 namespace solo::notify {
 struct Delivery {
     std::string key;
-    uint64_t tag;
+    uint64_t tag = 0;
 };
 class Queue {
   public:
@@ -26,6 +26,6 @@ class Queue {
     std::mutex socket_mutex_;
     int socket_ = -1;
     std::string queue_;
-    void Check(amqp_rpc_reply_t reply);
+    static void Check(amqp_rpc_reply_t reply);
 };
 } // namespace solo::notify
