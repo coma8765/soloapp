@@ -49,6 +49,24 @@ http {
       proxy_http_version 1.1;
       proxy_read_timeout 60s;
     }
+    location = /k8s { return 308 /k8s/; }
+    location /k8s/ {
+      proxy_pass https://{{ private_ip }}:{{ obs.gateway_node_port }};
+      proxy_ssl_trusted_certificate /run/soloapp-secrets/data/ca.crt;
+      proxy_ssl_certificate /run/soloapp-secrets/data/tls.crt;
+      proxy_ssl_certificate_key /run/soloapp-secrets/data/tls.key;
+      proxy_ssl_verify on;
+      proxy_ssl_name {{ obs.gateway_names[inventory_hostname] }};
+      proxy_ssl_server_name on;
+      proxy_set_header Host {{ public_domain }};
+      proxy_set_header X-Forwarded-Proto https;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      proxy_http_version 1.1;
+      proxy_read_timeout 3600s;
+      proxy_buffering off;
+      client_max_body_size 4m;
+    }
 {% endif %}
 {{ lookup('template', project_root ~ '/services/nginx/deploy/generated/routes.conf.j2') | indent(4, true) }}
 {% if nginx_web_enabled | default(web_config.release | length > 0) %}

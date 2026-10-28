@@ -1,0 +1,4 @@
+{% set central = lookup('template', project_root ~ '/infra/observability/k8s/central.yaml.j2') | from_yaml %}
+apiVersion: v1
+kind: List
+items: {{ central['items'] | selectattr('metadata.name', 'equalto', 'gateway') | list | to_json }}

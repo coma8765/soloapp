@@ -1,0 +1,29 @@
+- name: Collect public Kubernetes trust anchors from both sites
+  hosts: app_sites
+  any_errors_fatal: true
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Read the public server CA (no private keys or admin kubeconfig)
+    ansible.builtin.slurp:
+      src: /var/lib/rancher/k3s/server/tls/server-ca.crt
+    register: headlamp_cluster_ca
+- name: Deploy stateless Headlamp on each site
+  hosts: app_sites
+  serial: 1
+  any_errors_fatal: true
+  become: true
+  gather_facts: false
+  vars:
+    headlamp: "{{ lookup('file', project_root ~ '/infra/headlamp/defaults.yaml') | from_yaml | combine(headlamp_overrides | default({}), recursive=true) }}"
+  tasks:
+  - name: Apply Headlamp permissions and UI
+    ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
+    loop: [access, ui]
+    vars:
+      manifest_source: '{{ project_root }}/infra/headlamp/k8s/{{ item }}.yaml.j2'
+      manifest_name: 'headlamp-{{ item }}'
+  - name: Wait for Headlamp
+    ansible.builtin.command: k3s kubectl -n observability rollout status deployment/headlamp --timeout=300s
+    changed_when: false
+    when: not ansible_check_mode

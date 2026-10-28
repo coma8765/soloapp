@@ -1,0 +1,25 @@
+- ansible.builtin.import_playbook: deploy.yaml
+- name: Expose Headlamp through the existing private gateway, one site at a time
+  hosts: app_sites
+  serial: 1
+  any_errors_fatal: true
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Apply explicit network permissions
+    ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
+    vars:
+      manifest_source: '{{ project_root }}/infra/network/k8s/isolation.yaml.j2'
+      manifest_name: pod-isolation
+  - name: Update only the monitoring gateway objects
+    ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
+    vars:
+      manifest_source: '{{ project_root }}/infra/headlamp/k8s/gateway.yaml.j2'
+      manifest_name: headlamp-gateway
+  - name: Wait for the monitoring gateway
+    ansible.builtin.command: k3s kubectl -n observability rollout status deployment/gateway --timeout=300s
+    changed_when: false
+    when: not ansible_check_mode
+  - name: Update the application nginx routing
+    ansible.builtin.include_tasks: '{{ project_root }}/services/nginx/deploy/ansible/tasks.yaml'
+- ansible.builtin.import_playbook: ../ingress/cutover.yaml
