@@ -1,0 +1,73 @@
+import importlib.util
+import sys
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parents[1]))
+spec = importlib.util.spec_from_file_location(
+    "wait_green", Path(__file__).parents[1] / "wait_green.py"
+)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+
+class WaitGreenTests(unittest.TestCase):
+    def test_running_ci_is_waited_for(self):
+        statuses = iter(["in_progress", "completed"])
+        sleeps = []
+
+        def fetch(path):
+            if path.endswith("heads/main"):
+                return {"object": {"sha": "a" * 40}}
+            state = next(statuses)
+            return {
+                "workflow_runs": [
+                    {
+                        "head_sha": "a" * 40,
+                        "head_branch": "main",
+                        "event": "push",
+                        "head_repository": {"full_name": "o/r"},
+                        "status": state,
+                        "conclusion": "success" if state == "completed" else None,
+                    }
+                ]
+            }
+
+        module.wait_green("o/r", "a" * 40, fetch=fetch, sleep=sleeps.append)
+        self.assertEqual(sleeps, [15])
+
+    def test_failed_ci_and_advanced_main_fail_closed(self):
+        for advanced in [False, True]:
+
+            def fetch(path):
+                if path.endswith("heads/main"):
+                    return {"object": {"sha": ("b" if advanced else "a") * 40}}
+                return {
+                    "workflow_runs": [
+                        {"head_sha": "a" * 40, "status": "completed", "conclusion": "failure"}
+                    ]
+                }
+
+            with self.assertRaisesRegex(RuntimeError, "advanced|failed"):
+                module.wait_green("o/r", "a" * 40, fetch=fetch)
+
+    def test_missing_ci_waits_then_times_out(self):
+        def fetch(path):
+            return (
+                {"object": {"sha": "a" * 40}}
+                if path.endswith("heads/main")
+                else {"workflow_runs": []}
+            )
+
+        clock = iter([0, 0, 30])
+        sleeps = []
+        with self.assertRaisesRegex(RuntimeError, "Timed out"):
+            module.wait_green(
+                "o/r",
+                "a" * 40,
+                fetch=fetch,
+                clock=lambda: next(clock),
+                sleep=sleeps.append,
+                timeout=20,
+            )
+        self.assertEqual(sleeps, [15])

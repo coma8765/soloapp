@@ -19,7 +19,7 @@ async function authorized(request, secret) {
   return difference === 0;
 }
 
-async function readPayload(request) {
+async function readPayload(request, deployment = false) {
   if (
     !request.body ||
     Number(request.headers.get('Content-Length') || 0) > MAX_BYTES
@@ -46,6 +46,10 @@ async function readPayload(request) {
     offset += chunk.length;
   }
   const payload = JSON.parse(new TextDecoder().decode(buffer));
+  if (deployment) {
+    deploymentMessage(payload);
+    return payload;
+  }
   if (
     !['firing', 'resolved'].includes(payload.status) ||
     !Array.isArray(payload.alerts) ||
@@ -219,12 +223,78 @@ export function messages(payload, env = {}) {
   return result;
 }
 
+const DEPLOY_SERVICES = [
+  'auth',
+  'app-api',
+  'nginx',
+  'web',
+  'client-notify',
+  'client-gateway',
+];
+export function deploymentMessage(payload) {
+  const states = {
+    started: '🚀 НАЧАЛО',
+    success: '✅ ЗАВЕРШЁН',
+    failure: '🔴 ОШИБКА',
+    cancelled: '⏹ ОТМЕНЁН',
+  };
+  if (
+    !payload ||
+    payload.project !== 'soloapp' ||
+    !DEPLOY_SERVICES.includes(payload.service) ||
+    !Object.hasOwn(states, payload.state) ||
+    !['deploy', 'rollback'].includes(payload.operation) ||
+    !/^[0-9a-f]{40}$/.test(payload.revision || '') ||
+    !/^(?:[0-9a-f]{40}|v0\.1\.\d+)$/.test(payload.target || '') ||
+    !/^\d{1,20}$/.test(payload.run_id || '') ||
+    !/^\d{1,6}$/.test(payload.attempt || '') ||
+    !['prepare', 'rollout'].includes(payload.phase) ||
+    ![payload.service, 'all'].includes(payload.scope) ||
+    (payload.version && !/^v0\.1\.\d+$/.test(payload.version))
+  )
+    throw new Error('Invalid deployment event');
+  const lines = [
+    `Soloapp · ${states[payload.state]} · ${payload.operation}`,
+    `Сервис: ${payload.service}`,
+    'Площадки: YC → home',
+    `Ревизия: ${payload.target}`,
+    `Этап: ${payload.phase}`,
+    `Попытка: ${payload.attempt}`,
+  ];
+  if (payload.version) lines.push(`Версия: ${payload.version}`);
+  if (payload.state === 'started')
+    lines.push('Запуск принят; ожидаем успешный CI, затем сборку и раскатку.');
+  if (payload.state === 'success')
+    lines.push('Обе площадки обновлены, итоговые smoke-проверки пройдены.');
+  if (['failure', 'cancelled'].includes(payload.state))
+    lines.push(
+      payload.phase === 'prepare'
+        ? 'Раскатка не началась. Проверьте подготовку и результат CI.'
+        : 'Релиз не завершён; возможна частичная раскатка. Проверьте состояние обеих площадок перед повтором.',
+    );
+  if (payload.scope === 'all')
+    lines.push(
+      'Сервис входит в общий релиз all; указан результат общего запуска.',
+    );
+  lines.push(
+    `Запуск: https://github.com/coma8765/soloapp/actions/runs/${payload.run_id}/attempts/${payload.attempt}`,
+  );
+  return lines.join('\n');
+}
+
 export async function handle(request, env, send = fetch) {
   const path = new URL(request.url).pathname;
-  if (path !== '/alerts') return new Response('Not found', { status: 404 });
+  const deployment = path === '/deployments';
+  if (path !== '/alerts' && !deployment)
+    return new Response('Not found', { status: 404 });
   if (request.method !== 'POST')
     return new Response('Method not allowed', { status: 405 });
-  if (!(await authorized(request, env.RELAY_TOKEN)))
+  if (
+    !(await authorized(
+      request,
+      deployment ? env.DEPLOY_TOKEN : env.RELAY_TOKEN,
+    ))
+  )
     return new Response('Unauthorized', { status: 401 });
   if (
     !env.TELEGRAM_BOT_TOKEN ||
@@ -235,13 +305,15 @@ export async function handle(request, env, send = fetch) {
   }
   let payload;
   try {
-    payload = await readPayload(request);
+    payload = await readPayload(request, deployment);
   } catch {
     return new Response('Invalid alert payload', { status: 400 });
   }
   let failure = 'transport';
   try {
-    for (const message of messages(payload, env)) {
+    for (const message of deployment
+      ? [deploymentMessage(payload)]
+      : messages(payload, env)) {
       const response = await send(
         `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
         {

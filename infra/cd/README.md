@@ -2,7 +2,7 @@
 
 `Validate source` runs codegen/policy tests, secret/history scanning, Docker testsuite for auth plus the explicit app-api (NestJS) build/lint/unit/e2e and production-image job, and Flutter analyze/test/web build. Public PRs run only on GitHub-hosted runners and receive no production environment secrets.
 
-`Deploy production` is manually started through Actions (`workflow_dispatch`, main only). Deploy one service at a time (recommended); `all` is an explicit coordinated release. A push still runs validation, but no longer automatically rolls every service. It rechecks the current main SHA and green CI; the server independently checks the same conditions. The production environment permits only the main branch. Older queued revisions fail closed when main has advanced. GitHub concurrency and per-server file locks prevent overlapping deployments.
+`Deploy production` is manually started through Actions (`workflow_dispatch`, main only). Deploy one service at a time (recommended); `all` is an explicit coordinated release. A push still runs validation, but no longer automatically rolls every service. It waits up to 40 minutes for green push CI on the requested main SHA, checking every 15 seconds; the server independently checks the same conditions. The production environment permits only the main branch. Older queued revisions fail closed when main has advanced. GitHub concurrency and per-server file locks prevent overlapping deployments.
 
 Each site has a separate expiring Ed25519 key, stored in GitHub Environment Secrets. SSH uses pinned host keys, a root-owned forced command, and disables PTY/forwarding. The login has no general sudo; only the fixed gate accepts `probe` or a validated commit SHA. Possession of this key grants deployment of current green main, not a shell. People allowed to change main/workflows remain trusted deployers; changes there must be reviewed.
 
@@ -84,3 +84,33 @@ Infrastructure and monitoring use their own Ansible playbooks and are not change
 Install updated fixed command parsing with `ansible-playbook infra/cd/upgrade.yaml` before
 using scoped workflow commands. Existing legacy `deploy <sha>` and `rollback <sha>` still
 mean a full release for compatibility with old workflows.
+
+## Deployment notifications
+
+The alert Telegram chat receives start and success/failure/cancelled events for each selected
+service, including revision/version, phase, both data centers and an Actions attempt link.
+Start means the workflow was accepted (including waiting for CI), not that pods have changed.
+Success requires both sites and final smoke tests. For `all`, each service is explicitly marked
+as part of the coordinated release: failure means the release failed, possibly partially, not
+that all service pods are down. Notifications are separate from Prometheus incidents.
+
+A separate final job uses `always()` to report failures in prepare, rollout and timed-out jobs.
+Notification transport failure is visible as a failed notification job but does not prevent
+prepare/rollout. Delivery retries three times; ambiguous network failures may produce duplicates.
+GitHub outage/forced termination can prevent final notification; the Actions run is authoritative.
+
+The relay `/deployments` accepts a dedicated `DEPLOY_TOKEN` only, validates fixed service/status
+fields and sends to the configured alert chat; it cannot redirect messages to another chat.
+The alert credential cannot use this endpoint, and the deploy credential cannot send alerts.
+Bot secrets remain in Lockbox/Cloudflare. GitHub production stores only the dedicated relay
+credential and endpoint (`CD_NOTIFY_TOKEN`, `CD_NOTIFY_URL`); untrusted PRs have no access.
+
+Operator setup/rotation (credential transfer requires operator authorization):
+
+```sh
+.venv-codegen/bin/python infra/telegram-relay/deploy.py --grafana-url https://soloapp.secure-l3.stream/grafana/
+.venv-codegen/bin/python infra/cd/configure_notifications.py
+```
+
+CI still fails closed if main advances, validation fails/cancels, or the 40-minute wait expires.
+The server gate independently rechecks CI/main before publication or mutation.
