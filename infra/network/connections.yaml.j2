@@ -31,6 +31,7 @@ pod_links:
 - {source: observability/gateway, target: observability/prometheus, port: 9090}
 - {source: observability/gateway, target: observability/loki, port: 3100}
 - {source: observability/gateway, target: observability/grafana, port: 3000}
+- {source: observability/gateway, target: observability/headlamp, port: 4466}
 host_egress:
 - namespace: soloapp
   apps: [whoami, client-gateway, client-notify]
@@ -77,6 +78,10 @@ host_egress:
   hosts: [{{ hostvars.yc.private_ip }}, {{ hostvars.home.private_ip }}]
   ports: [{{ obs.alertmanager.cluster_port }}]
   protocols: [TCP, UDP]
+- namespace: observability
+  apps: [headlamp]
+  hosts: [{{ hostvars.yc.private_ip }}, {{ hostvars.home.private_ip }}]
+  ports: [6443]
 # Docker DNAT is applied before the pod egress policy on these nodes.
 # This permission is restricted to the web workload and S3 container port.
 docker_s3_cidr: 172.17.0.0/16

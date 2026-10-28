@@ -1,0 +1,52 @@
+# This identity belongs to the human operator, never to the UI pods.
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: headlamp-operator, namespace: observability}
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: headlamp-operator, namespace: soloapp}
+rules:
+- apiGroups: ['']
+  resources: [pods, pods/log, events, services, endpoints, configmaps, persistentvolumeclaims]
+  verbs: [get, list, watch]
+- apiGroups: [apps]
+  resources: [deployments, replicasets, statefulsets, daemonsets]
+  verbs: [get, list, watch]
+- apiGroups: [batch]
+  resources: [jobs, cronjobs]
+  verbs: [get, list, watch]
+- apiGroups: [autoscaling]
+  resources: [horizontalpodautoscalers]
+  verbs: [get, list, watch]
+- apiGroups: [policy]
+  resources: [poddisruptionbudgets]
+  verbs: [get, list, watch]
+- apiGroups: [metrics.k8s.io]
+  resources: [pods]
+  verbs: [get, list]
+- apiGroups: [apps]
+  resources: [deployments, deployments/scale]
+  resourceNames: [auth, nginx, whoami, web, client-notify, client-gateway]
+  verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: headlamp-operator, namespace: soloapp}
+subjects: [{kind: ServiceAccount, name: headlamp-operator, namespace: observability}]
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: headlamp-operator}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: soloapp-headlamp-discovery}
+rules:
+- apiGroups: ['']
+  resources: [namespaces]
+  verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: soloapp-headlamp-discovery}
+subjects: [{kind: ServiceAccount, name: headlamp-operator, namespace: observability}]
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: soloapp-headlamp-discovery}

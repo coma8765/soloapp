@@ -1,0 +1,6 @@
+image: ghcr.io/headlamp-k8s/headlamp:v0.46.0
+replicas: 2
+base_path: /k8s
+resources:
+  requests: {cpu: 25m, memory: 96Mi}
+  limits: {cpu: 500m, memory: 256Mi}

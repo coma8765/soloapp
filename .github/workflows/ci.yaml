@@ -17,11 +17,12 @@ jobs:
       - name: Install codegen dependencies
         run: |
           python3 -m venv .venv-codegen
-          .venv-codegen/bin/pip install -r libs/api_codegen/requirements.txt -r libs/storage/requirements.txt
+          .venv-codegen/bin/pip install -r libs/api_codegen/requirements.txt -r libs/storage/requirements.txt -r infra/headlamp/tests/requirements.txt
       - name: Validate codegen and policy
         run: |
           make check-codegen test-codegen check-dashboards test-alerts
           .venv-codegen/bin/python -m unittest discover -s infra/cd/tests -v
+          .venv-codegen/bin/python -m unittest discover -s infra/headlamp/tests -p "test_*.py" -v
           python3 -m unittest discover -s infra/registry/tests -v
           python3 -m unittest discover -s infra/redis/tests -v
           python3 -m unittest discover -s infra/network/tests -v
