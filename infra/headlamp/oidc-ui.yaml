@@ -1,0 +1,27 @@
+- name: Allow only OIDC HTTPS and DNS for the admin UIs
+  hosts: app_sites
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Apply constrained OIDC network access
+    ansible.builtin.command:
+      argv: [k3s, kubectl, apply, -f, '-']
+      stdin: '{{ lookup("file", project_root ~ "/infra/headlamp/k8s/oidc-network.yaml") }}'
+    changed_when: true
+- import_playbook: deploy.yaml
+- name: Enable strict Grafana OIDC one site at a time
+  hosts: app_sites
+  serial: 1
+  any_errors_fatal: true
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Apply only Grafana resources
+    ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
+    vars:
+      manifest_source: '{{ project_root }}/infra/headlamp/k8s/grafana-oidc.yaml.j2'
+      manifest_name: grafana-oidc
+  - name: Wait for Grafana readiness
+    ansible.builtin.command: k3s kubectl -n observability rollout status deployment/grafana --timeout=300s
+    changed_when: false
+    when: not ansible_check_mode
