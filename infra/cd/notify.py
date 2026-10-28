@@ -60,7 +60,11 @@ def send_events(env, *, send=None, sleep=time.sleep):
         request = urllib.request.Request(
             url,
             data=json.dumps(event).encode(),
-            headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
+            headers={
+                "Authorization": "Bearer " + token,
+                "Content-Type": "application/json",
+                "User-Agent": "soloapp-cd/1",
+            },
             method="POST",
         )
         for attempt in range(3):

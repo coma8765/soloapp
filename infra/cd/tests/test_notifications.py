@@ -60,6 +60,7 @@ class NotificationsTests(unittest.TestCase):
         send = MagicMock(return_value=response)
         notify.send_events(self.environment(), send=send)
         self.assertEqual(send.call_count, 1)
+        self.assertEqual(send.call_args.args[0].get_header("User-agent"), "soloapp-cd/1")
 
     def test_workflow_covers_prepare_failure_and_separates_deployment_status(self):
         import yaml
