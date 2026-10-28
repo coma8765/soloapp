@@ -240,3 +240,89 @@ test('unknown service safely uses infrastructure dashboard', () => {
   };
   assert.match(messages(input, env).join('\n'), /\/d\/soloapp-infrastructure/);
 });
+
+const deployment = {
+  project: 'soloapp',
+  service: 'auth',
+  state: 'started',
+  revision: 'a'.repeat(40),
+  target: 'a'.repeat(40),
+  run_id: '123',
+  attempt: '1',
+  operation: 'deploy',
+  phase: 'prepare',
+  scope: 'auth',
+};
+const deployEnv = { ...env, DEPLOY_TOKEN: 'd'.repeat(48) };
+function deployRequest(body = deployment, token = deployEnv.DEPLOY_TOKEN) {
+  return new Request('https://relay.example/deployments', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+}
+test('deployment and alert credentials are isolated', async () => {
+  assert.equal(
+    (
+      await handle(deployRequest(deployment, env.RELAY_TOKEN), deployEnv, () =>
+        assert.fail(),
+      )
+    ).status,
+    401,
+  );
+  assert.equal(
+    (
+      await handle(request(payload, deployEnv.DEPLOY_TOKEN), deployEnv, () =>
+        assert.fail(),
+      )
+    ).status,
+    401,
+  );
+});
+test('deployment lifecycle reaches fixed chat and includes service and run link', async () => {
+  for (const state of ['started', 'success', 'failure', 'cancelled']) {
+    let body;
+    const response = await handle(
+      deployRequest({
+        ...deployment,
+        state,
+        phase: 'rollout',
+        scope: 'all',
+        chat_id: 'other',
+      }),
+      deployEnv,
+      async (_url, options) => {
+        body = JSON.parse(options.body);
+        return Response.json({ ok: true });
+      },
+    );
+    assert.equal(response.status, 204);
+    assert.equal(body.chat_id, env.TELEGRAM_CHAT_ID);
+    assert.match(body.text, /Сервис: auth/);
+    assert.match(body.text, /actions\/runs\/123\/attempts\/1/);
+    assert.match(body.text, /общего запуска/);
+    if (state === 'failure') assert.match(body.text, /частичная раскатка/);
+  }
+});
+test('invalid deployment metadata cannot inject arbitrary links or services', async () => {
+  for (const change of [
+    { service: 'anything' },
+    { run_id: '../evil' },
+    { state: 'firing' },
+    { revision: 'bad' },
+    { project: 'other' },
+    { phase: 'user supplied' },
+    { target: 'evil\ntext' },
+  ]) {
+    assert.equal(
+      (
+        await handle(
+          deployRequest({ ...deployment, ...change }),
+          deployEnv,
+          () => assert.fail(),
+        )
+      ).status,
+      400,
+    );
+  }
+});

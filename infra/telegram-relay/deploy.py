@@ -107,10 +107,28 @@ def main():
             payload=json.dumps([{"key": "relay-token", "textValue": value}]),
         )["id"]
         save()
+    deploy_name = "cd-notify-relay"
+    if deploy_name not in cloud["secrets"]:
+        cloud["secrets"][deploy_name] = yc(
+            "lockbox",
+            "secret",
+            "create",
+            "--name",
+            "soloapp-" + deploy_name,
+            "--folder-id",
+            cloud["folder"],
+            "--deletion-protection",
+            "--payload",
+            "-",
+            payload=json.dumps([{"key": "relay-token", "textValue": secrets.token_urlsafe(48)}]),
+        )["id"]
+        save()
+    deploy_token = payload(deploy_name)["relay-token"]
     relay = payload(name)
     telegram = payload("alertmanager-telegram")
     bindings = {
         "RELAY_TOKEN": relay["relay-token"],
+        "DEPLOY_TOKEN": deploy_token,
         "TELEGRAM_BOT_TOKEN": telegram["telegram-token"],
         "TELEGRAM_CHAT_ID": telegram["telegram-chat-id"],
     }

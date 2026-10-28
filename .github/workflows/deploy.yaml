@@ -19,7 +19,25 @@ concurrency:
   group: production
   cancel-in-progress: false
 jobs:
+  notify-start:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: production
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Notify deployment start per service
+        env:
+          SERVICE: ${{ inputs.service }}
+          DEPLOY_STATE: started
+          ROLLBACK: ${{ inputs.rollback_revision }}
+          CD_NOTIFY_URL: ${{ secrets.CD_NOTIFY_URL }}
+          CD_NOTIFY_TOKEN: ${{ secrets.CD_NOTIFY_TOKEN }}
+        run: python3 infra/cd/notify.py
   prepare:
+    needs: notify-start
     permissions:
       contents: write
       actions: read
@@ -30,9 +48,9 @@ jobs:
       operation: ${{ steps.version.outputs.operation }}
       service: ${{ steps.scope.outputs.service }}
       images: ${{ steps.scope.outputs.images }}
-    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    if: always() && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && !cancelled()
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 50
     environment: production
     steps:
       - name: Validate isolated deployment scope
@@ -52,24 +70,16 @@ jobs:
           esac
           echo "service=$SERVICE" >> "$GITHUB_OUTPUT"
           echo "images=$images" >> "$GITHUB_OUTPUT"
-      - name: Select current green main revision
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Wait for current main push CI (up to 40 minutes)
         id: revision
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           REQUESTED: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          [[ "$REQUESTED" =~ ^[0-9a-f]{40}$ ]]
-          test "$(gh api "repos/$REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$REQUESTED"
-          gh api "repos/$REPOSITORY/actions/workflows/ci.yaml/runs?event=push&branch=main&head_sha=$REQUESTED" \
-            --jq '.workflow_runs[] | select(.conclusion == "success") | .id' | head -n1 > "$RUNNER_TEMP/green-ci"
-          test -s "$RUNNER_TEMP/green-ci"
-          echo "sha=$REQUESTED" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          ref: ${{ steps.revision.outputs.sha }}
-          persist-credentials: false
+        run: python3 infra/cd/wait_green.py
       - name: Reserve version or resolve rollback
         id: version
         env:
@@ -192,3 +202,24 @@ jobs:
       - name: Remove deployment keys
         if: always()
         run: rm -rf "$RUNNER_TEMP/cd"
+  notify-result:
+    needs: [notify-start, prepare, deploy]
+    if: always() && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: production
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Notify deployment result per service
+        env:
+          SERVICE: ${{ inputs.service }}
+          DEPLOY_STATE: ${{ (needs.prepare.result == 'cancelled' || needs.deploy.result == 'cancelled') && 'cancelled' || (needs.prepare.result == 'success' && needs.deploy.result == 'success') && 'success' || 'failure' }}
+          PHASE: ${{ needs.prepare.result == 'success' && 'rollout' || 'prepare' }}
+          ROLLBACK: ${{ inputs.rollback_revision }}
+          TARGET: ${{ needs.prepare.outputs.target }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          CD_NOTIFY_URL: ${{ secrets.CD_NOTIFY_URL }}
+          CD_NOTIFY_TOKEN: ${{ secrets.CD_NOTIFY_TOKEN }}
+        run: python3 infra/cd/notify.py
