@@ -49,13 +49,21 @@ class OidcTests(unittest.TestCase):
             oidc = user["user"]["auth-provider"]["config"]
             self.assertEqual(oidc["client-id"], "headlamp")
             self.assertEqual(oidc["client-secret"], "__OIDC_CLIENT_SECRET__")
+        service = next(d for d in docs if d["kind"] == "Service")
+        self.assertEqual(service["spec"]["sessionAffinity"], "ClientIP")
+        self.assertIn(
+            "-oidc-auto-login=true",
+            next(d for d in docs if d["kind"] == "Deployment")["spec"]["template"]["spec"][
+                "containers"
+            ][0]["args"],
+        )
         pod = next(d for d in docs if d["kind"] == "Deployment")["spec"]["template"]["spec"]
         volumes = {v["name"]: v for v in pod["volumes"]}
         self.assertEqual(volumes["config"]["emptyDir"]["medium"], "Memory")
         self.assertFalse(pod["automountServiceAccountToken"])
         self.assertNotIn("identity", [v["name"] for v in pod["containers"][0]["volumeMounts"]])
         self.assertIn("-oidc-use-pkce=true", pod["containers"][0]["args"])
-        self.assertIn("-oidc-use-token-broadcast=true", pod["containers"][0]["args"])
+        self.assertIn("-oidc-use-token-broadcast=false", pod["containers"][0]["args"])
 
     def test_roles_are_required_at_apiserver_and_grafana(self):
         text = jinja2.Template(

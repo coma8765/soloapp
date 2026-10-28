@@ -8,6 +8,7 @@
       argv: [k3s, kubectl, apply, -f, '-']
       stdin: '{{ lookup("file", project_root ~ "/infra/headlamp/k8s/oidc-network.yaml") }}'
     changed_when: true
+- import_playbook: oidc-gateway.yaml
 - import_playbook: deploy.yaml
 - name: Enable strict Grafana OIDC one site at a time
   hosts: app_sites

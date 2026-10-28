@@ -37,6 +37,10 @@ apiVersion: v1
 kind: Service
 metadata: {name: headlamp, namespace: observability}
 spec:
+  # Keep OIDC state/PKCE on the same replica behind the site gateway.
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP: {timeoutSeconds: 10800}
   selector: {app: headlamp}
   ports: [{name: http, port: 4466, targetPort: http}]
 ---
@@ -99,7 +103,7 @@ spec:
       containers:
       - name: headlamp
         image: {{ headlamp.image }}
-        args: ['-kubeconfig=/headlamp/clusters/config', '-base-url={{ headlamp.base_path }}', '-plugins-dir=/headlamp/plugins'{% if oidc_enabled | default(false) %}, '-oidc-use-token-broadcast=true', '-oidc-use-pkce=true', '-oidc-use-cookie=true', '-oidc-callback-url=https://{{ public_domain }}/k8s/oidc-callback'{% endif %}]
+        args: ['-kubeconfig=/headlamp/clusters/config', '-base-url={{ headlamp.base_path }}', '-plugins-dir=/headlamp/plugins'{% if oidc_enabled | default(false) %}, '-oidc-auto-login=true', '-oidc-use-token-broadcast=false', '-oidc-use-pkce=true', '-oidc-use-cookie=true', '-oidc-callback-url=https://{{ public_domain }}/k8s/oidc-callback'{% endif %}]
         ports: [{name: http, containerPort: 4466}]
         resources: {{ headlamp.resources | to_json }}
         securityContext:

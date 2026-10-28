@@ -79,13 +79,14 @@ frontend metrics
 # UI availability is independent of application/database readiness.
 backend headlamp_sites
   balance roundrobin
+  cookie HEADLAMP_SITE insert indirect nocache httponly secure
   timeout tunnel 1h
   option httpchk
   http-check send meth GET uri /k8s/ ver HTTP/1.1 hdr Host {{ public_domain }}
   http-check expect status 200
   default-server inter 1s fall 2 rise 1
 {% for site in groups['app_sites'] %}
-  server {{ site }} {{ hostvars[site].private_ip }}:{{ hostvars[site].nginx_config.node_port }} ssl verify required ca-file /run/soloapp-ingress/ca.crt crt /run/soloapp-ingress/client.pem verifyhost nginx-{{ site }} check
+  server {{ site }} {{ hostvars[site].private_ip }}:{{ hostvars[site].nginx_config.node_port }} ssl verify required ca-file /run/soloapp-ingress/ca.crt crt /run/soloapp-ingress/client.pem verifyhost nginx-{{ site }} check cookie {{ site }}
 {% endfor %}
 
 {% if keycloak_enabled | default(false) %}

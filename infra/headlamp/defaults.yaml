@@ -1,4 +1,4 @@
-image: ghcr.io/headlamp-k8s/headlamp:v0.46.0
+image: registry.soloapp.internal:5043/soloapp/headlamp@sha256:765e501378c8ded23ac04d668725992b9625130bd4718fd63bad561753ae8635
 replicas: 2
 base_path: /k8s
 resources:

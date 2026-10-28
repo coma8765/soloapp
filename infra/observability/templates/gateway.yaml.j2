@@ -2,6 +2,7 @@ worker_processes 1;
 pid /tmp/nginx.pid;
 events { worker_connections 256; }
 http {
+  large_client_header_buffers 4 32k;
   map $http_upgrade $headlamp_connection { default upgrade; '' close; }
   access_log off;
   client_body_temp_path /tmp/body;
@@ -34,6 +35,9 @@ http {
       proxy_http_version 1.1;
     }
     location /k8s/ {
+      # Allow chunked OIDC token cookies and refresh response headers.
+      proxy_buffer_size 32k;
+      proxy_buffers 8 32k;
       if ($ssl_client_s_dn !~ "^CN=nginx-(yc|home)$") { return 403; }
       # Resolve at request time: missing UI must not prevent the metrics gateway starting.
       resolver 10.{{ cluster_octet | int + 1 }}.0.10 valid=10s ipv6=off;
