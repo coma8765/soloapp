@@ -41,3 +41,79 @@ groups:
       action: Проверьте Alertmanager, доступность Cloudflare relay и Telegram. Не публикуйте токены или полный URL Telegram
         API в логах.
     keep_firing_for: 3m
+  - alert: HAProxyScrapeFailed
+    expr: (min by(observer, ingress) (up{job="haproxy",observer="yc",ingress="yc"}) == 0) or absent_over_time(up{job="haproxy",observer="yc",ingress="yc"}[1m])
+    for: 1m
+    keep_firing_for: 3m
+    labels:
+      severity: warning
+      project: soloapp
+      service: observability
+      dc: yc
+      observer: yc
+      ingress: yc
+    annotations:
+      summary: Недоступен сбор метрик HAProxy
+      description: 'Наблюдатель yc не получает метрики HAProxy yc: scrape неуспешен 1 минуту либо серия отсутствует (окно
+        1 минута + выдержка 1 минута). Успех другой площадки не скрывает этот отказ.'
+      action: Проверьте цель ingress в Alloy, NetworkPolicy после Docker DNAT, WireGuard и mTLS сертификаты. Не отключайте
+        проверку TLS.
+      dashboard_url: https://soloapp.secure-l3.stream/grafana/
+      runbook_url: https://github.com/coma8765/soloapp/blob/main/infra/observability/deploy/metrics/README.md#haproxyscrapefailed
+  - alert: HAProxyScrapeFailed
+    expr: (min by(observer, ingress) (up{job="haproxy",observer="yc",ingress="edge"}) == 0) or absent_over_time(up{job="haproxy",observer="yc",ingress="edge"}[1m])
+    for: 1m
+    keep_firing_for: 3m
+    labels:
+      severity: warning
+      project: soloapp
+      service: observability
+      dc: yc
+      observer: yc
+      ingress: edge
+    annotations:
+      summary: Недоступен сбор метрик HAProxy
+      description: 'Наблюдатель yc не получает метрики HAProxy edge: scrape неуспешен 1 минуту либо серия отсутствует (окно
+        1 минута + выдержка 1 минута). Успех другой площадки не скрывает этот отказ.'
+      action: Проверьте цель ingress в Alloy, NetworkPolicy после Docker DNAT, WireGuard и mTLS сертификаты. Не отключайте
+        проверку TLS.
+      dashboard_url: https://soloapp.secure-l3.stream/grafana/
+      runbook_url: https://github.com/coma8765/soloapp/blob/main/infra/observability/deploy/metrics/README.md#haproxyscrapefailed
+  - alert: HAProxyScrapeFailed
+    expr: (min by(observer, ingress) (up{job="haproxy",observer="home",ingress="yc"}) == 0) or absent_over_time(up{job="haproxy",observer="home",ingress="yc"}[1m])
+    for: 1m
+    keep_firing_for: 3m
+    labels:
+      severity: warning
+      project: soloapp
+      service: observability
+      dc: home
+      observer: home
+      ingress: yc
+    annotations:
+      summary: Недоступен сбор метрик HAProxy
+      description: 'Наблюдатель home не получает метрики HAProxy yc: scrape неуспешен 1 минуту либо серия отсутствует (окно
+        1 минута + выдержка 1 минута). Успех другой площадки не скрывает этот отказ.'
+      action: Проверьте цель ingress в Alloy, NetworkPolicy после Docker DNAT, WireGuard и mTLS сертификаты. Не отключайте
+        проверку TLS.
+      dashboard_url: https://soloapp.secure-l3.stream/grafana/
+      runbook_url: https://github.com/coma8765/soloapp/blob/main/infra/observability/deploy/metrics/README.md#haproxyscrapefailed
+  - alert: HAProxyScrapeFailed
+    expr: (min by(observer, ingress) (up{job="haproxy",observer="home",ingress="edge"}) == 0) or absent_over_time(up{job="haproxy",observer="home",ingress="edge"}[1m])
+    for: 1m
+    keep_firing_for: 3m
+    labels:
+      severity: warning
+      project: soloapp
+      service: observability
+      dc: home
+      observer: home
+      ingress: edge
+    annotations:
+      summary: Недоступен сбор метрик HAProxy
+      description: 'Наблюдатель home не получает метрики HAProxy edge: scrape неуспешен 1 минуту либо серия отсутствует (окно
+        1 минута + выдержка 1 минута). Успех другой площадки не скрывает этот отказ.'
+      action: Проверьте цель ingress в Alloy, NetworkPolicy после Docker DNAT, WireGuard и mTLS сертификаты. Не отключайте
+        проверку TLS.
+      dashboard_url: https://soloapp.secure-l3.stream/grafana/
+      runbook_url: https://github.com/coma8765/soloapp/blob/main/infra/observability/deploy/metrics/README.md#haproxyscrapefailed

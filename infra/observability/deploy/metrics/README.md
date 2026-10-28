@@ -134,3 +134,15 @@ healthz и сеть до backend. Возврат в балансировку о�
 с `--grafana-url https://<domain>/grafana/`, затем выполните
 `ansible-playbook infra/observability/deploy.yaml --tags stores`. Площадки обновляются
 последовательно; приложение и его pod не раскатываются этим playbook.
+
+## HAProxyScrapeFailed
+
+Отдельный сигнал для каждой пары observer → ingress. `up=0` в течение минуты
+вызывает warning; отсутствие серии обнаруживается через окно 1 минута и выдержку
+ещё 1 минута. Краткий сбой не уведомляет, восстановление удерживается 3 минуты.
+Проверьте `prometheus.scrape.ingress_<ingress>` в Alloy именно указанного observer.
+`connection refused` на локальной Docker-публикации может означать запрет egress
+после DNAT: NetworkPolicy видит адрес Docker-контейнера, а не WireGuard-адрес хоста.
+Разрешение `allow-alloy-haproxy-dnat` ограничено Alloy и портом exporter; mTLS
+и проверка CN остаются обязательными. При TLS-ошибке проверьте срок сертификатов
+и server_name, не отключая проверку. Успешный сбор из другого ДЦ не закрывает инцидент.
