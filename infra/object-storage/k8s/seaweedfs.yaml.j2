@@ -1,0 +1,149 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata: {name: seaweedfs-data}
+spec:
+  capacity: {storage: {{ s3_config.capacity }}}
+  volumeMode: Filesystem
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  local: {path: {{ s3_config.data_path }}}
+  claimRef: {namespace: soloapp, name: seaweedfs-data}
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - {key: kubernetes.io/hostname, operator: In, values: [{{ s3_node_name.stdout }}]}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: seaweedfs-data, namespace: soloapp}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ""
+  volumeName: seaweedfs-data
+  resources: {requests: {storage: {{ s3_config.capacity }}}}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: seaweedfs, namespace: soloapp}
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata: {name: seaweedfs, namespace: soloapp}
+spec:
+  clusterIP: None
+  selector: {app: seaweedfs}
+  ports: [{name: s3, port: 8333, targetPort: s3}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: seaweedfs, namespace: soloapp}
+spec:
+  serviceName: seaweedfs
+  replicas: 1
+  selector: {matchLabels: {app: seaweedfs}}
+  template:
+    metadata: {labels: {app: seaweedfs}}
+    spec:
+      serviceAccountName: seaweedfs
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10005
+        runAsGroup: 10005
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+      - name: wait-for-lockbox
+        image: {{ s3_config.image }}
+        command: [/bin/sh, -ec, 'until test -s /secrets/s3.json; do sleep 2; done']
+        resources: {requests: {cpu: 5m, memory: 16Mi}, limits: {cpu: 100m, memory: 32Mi}}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: {drop: [ALL]}
+        volumeMounts: [{name: secrets, mountPath: /secrets, readOnly: true}]
+      containers:
+      - name: seaweedfs
+        image: {{ s3_config.image }}
+        command: [/usr/bin/weed]
+        args:
+        - server
+        - -dir=/data
+        - -ip=127.0.0.1
+        - -ip.bind=127.0.0.1
+        - -s3.ip.bind=0.0.0.0
+        - -master.telemetry=false
+        - -master.volumeSizeLimitMB=1024
+        - -volume.max={{ s3_config.volume_max }}
+        - -volume.port=18080
+        - -volume.fileSizeLimitMB=64
+        - -filer
+        - -filer.exposeDirectoryData=false
+        - -s3
+        - -s3.config=/secrets/s3.json
+        - -s3.iam=false
+        - -s3.port.iceberg=0
+        - -s3.port.lance=0
+        - -s3.readerCacheSizeMB=32
+        - -s3.concurrentUploadLimitMB=64
+        ports:
+        - {name: s3, containerPort: 8333, hostPort: 18333, hostIP: '{{ private_ip }}'}
+        resources: {{ s3_config.resources | to_json }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: {drop: [ALL]}
+        startupProbe:
+          tcpSocket: {port: s3}
+          periodSeconds: 3
+          failureThreshold: 100
+        readinessProbe:
+          exec:
+            command: [/bin/sh, -ec, 'wget -q -O /dev/null http://127.0.0.1:9333/cluster/status && wget -q -O /dev/null http://127.0.0.1:8888/healthz']
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          tcpSocket: {port: s3}
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 6
+        volumeMounts:
+        - {name: data, mountPath: /data}
+        - {name: secrets, mountPath: /secrets, readOnly: true}
+        - {name: tmp, mountPath: /tmp}
+      volumes:
+      - name: data
+        persistentVolumeClaim: {claimName: seaweedfs-data}
+      - name: secrets
+        hostPath: {path: /run/soloapp-s3server, type: DirectoryOrCreate}
+      - name: tmp
+        emptyDir: {medium: Memory, sizeLimit: 64Mi}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: seaweedfs-isolation, namespace: soloapp}
+spec:
+  podSelector: {matchLabels: {app: seaweedfs}}
+  policyTypes: [Ingress, Egress]
+  egress: []
+  ingress:
+  - from:
+    - podSelector: {matchLabels: {app: web}}
+    - ipBlock: {cidr: {{ hostvars.yc.private_ip }}/32}
+    - ipBlock: {cidr: {{ hostvars.home.private_ip }}/32}
+    ports: [{port: 8333, protocol: TCP}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: allow-web-seaweedfs, namespace: soloapp}
+spec:
+  podSelector: {matchLabels: {app: web}}
+  policyTypes: [Egress]
+  egress:
+  - to:
+    - podSelector: {matchLabels: {app: seaweedfs}}
+    ports: [{port: 8333, protocol: TCP}]

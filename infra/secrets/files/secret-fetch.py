@@ -163,11 +163,33 @@ def fetch():
     if changed and os.environ.get("RELOAD_NGINX") and pathlib.Path("/tmp/nginx.pid").exists():
         os.kill(int(pathlib.Path("/tmp/nginx.pid").read_text()), signal.SIGHUP)
     if changed and os.environ.get("RELOAD_S3"):
-        subprocess.run(
-            ["docker", "kill", "--signal=HUP", "solo-s3"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+        migrated = (
+            subprocess.run(
+                ["k3s", "kubectl", "-n", "soloapp", "get", "statefulset", "seaweedfs"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            ).returncode
+            == 0
         )
+        command = (
+            [
+                "k3s",
+                "kubectl",
+                "-n",
+                "soloapp",
+                "exec",
+                "seaweedfs-0",
+                "-c",
+                "seaweedfs",
+                "--",
+                "/bin/sh",
+                "-c",
+                "kill -HUP 1",
+            ]
+            if migrated
+            else ["docker", "kill", "--signal=HUP", "solo-s3"]
+        )
+        subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if os.environ.get("REGISTRY_BUNDLES"):
         dest = pathlib.Path("/run/soloapp-registry-publisher")
         dest.mkdir(exist_ok=True)
