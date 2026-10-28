@@ -338,7 +338,6 @@ tests:
     exp_samples:
     - labels: '{}'
       value: 0
-
 - name: Long upgraded WebSocket sessions do not trigger HTTP latency alerts
   interval: 15s
   input_series:
@@ -369,3 +368,65 @@ tests:
     exp_samples:
     - labels: '{}'
       value: 1
+- name: failed local scrape despite healthy peer
+  interval: 15s
+  input_series:
+  - series: up{job="haproxy",observer="yc",ingress="yc"}
+    values: 0+0x40
+  - series: up{job="haproxy",observer="home",ingress="yc"}
+    values: 1+0x40
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="HAProxyScrapeFailed",observer="yc",ingress="yc",alertstate="firing"}) or vector(0)
+    eval_time: 45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="HAProxyScrapeFailed",observer="yc",ingress="yc",alertstate="firing"}) or vector(0)
+    eval_time: 75s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: short scrape failure recovers
+  interval: 15s
+  input_series:
+  - series: up{job="haproxy",observer="yc",ingress="yc"}
+    values: 1 0 0 1+0x40
+  - series: up{job="haproxy",observer="home",ingress="yc"}
+    values: 1+0x40
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="HAProxyScrapeFailed",observer="yc",ingress="yc",alertstate="firing"}) or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: missing scrape series
+  interval: 15s
+  input_series:
+  - series: up{job="haproxy",observer="yc",ingress="yc"}
+    values: 1 stale _x40
+  - series: up{job="haproxy",observer="home",ingress="yc"}
+    values: 1+0x40
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="HAProxyScrapeFailed",observer="yc",ingress="yc",alertstate="firing"}) or vector(0)
+    eval_time: 1m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="HAProxyScrapeFailed",observer="yc",ingress="yc",alertstate="firing"}) or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+- name: healthy scrape
+  interval: 15s
+  input_series:
+  - series: up{job="haproxy",observer="yc",ingress="yc"}
+    values: 1+0x40
+  - series: up{job="haproxy",observer="home",ingress="yc"}
+    values: 1+0x40
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="HAProxyScrapeFailed",observer="yc",ingress="yc",alertstate="firing"}) or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0

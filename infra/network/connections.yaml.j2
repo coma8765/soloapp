@@ -89,3 +89,7 @@ host_ingress:
   app: gateway
   cidrs: [{{ hostvars.yc.private_ip }}/32, {{ hostvars.home.private_ip }}/32]
   port: 19091
+
+# Local Docker publications are DNATed before NetworkPolicy evaluation.
+# Only the monitoring identity may reach the mTLS HAProxy exporter port.
+docker_metrics_cidr: 172.17.0.0/16
