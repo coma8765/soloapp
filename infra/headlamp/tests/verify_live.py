@@ -31,6 +31,14 @@ def check_api(tokens):
         assert request(path)[0] == 401, "Anonymous Kubernetes access was not rejected"
         status, serving_site, body = request(path, token)
         assert status == 200 and json.loads(body)["kind"] == "PodList"
+        for resource, kind in [
+            ("/api/v1/pods", "PodList"),
+            ("/api/v1/nodes", "NodeList"),
+            ("/api/v1/events", "EventList"),
+            ("/apis/apps/v1/deployments", "DeploymentList"),
+        ]:
+            code, _, data = request(f"/clusters/{site}{resource}", token)
+            assert code == 200 and json.loads(data)["kind"] == kind, resource
         assert request(f"/clusters/{site}/api/v1/namespaces/soloapp/secrets", token)[0] == 403
         print(
             f"{site}: authenticated PodList via {serving_site}; anonymous 401; Secrets 403",
