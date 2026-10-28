@@ -42,7 +42,7 @@ tests:
   - expr: count(ALERTS{alertname="HttpRateLimited",service="app-api",alertstate="firing"}) or vector(0)
     eval_time: 2m30s
     exp_samples: *id001
-- name: Pod alerts preserve exact identity and wait a minute
+- name: One unavailable pod does not page
   interval: 15s
   input_series:
   - &id002
@@ -58,21 +58,11 @@ tests:
     series: kube_pod_created{dc="home",namespace="soloapp",pod="whoami-broken"}
     values: 0+0x20
   promql_expr_test:
-  - expr: count(ALERTS{alertname="PodUnavailable",alertstate="firing"}) or vector(0)
-    eval_time: 45s
+  - expr: count(ALERTS{alertname=~"PodUnavailable|PodStartupTooLong|PodHealthProbeFailed",alertstate="firing"}) or vector(0)
+    eval_time: 3m
     exp_samples:
     - labels: '{}'
       value: 0
-  - expr: ALERTS{alertname="PodUnavailable",alertstate="firing"}
-    eval_time: 75s
-    exp_samples:
-    - labels: ALERTS{alertname="PodUnavailable",alertstate="firing",dc="home",namespace="soloapp",pod="whoami-broken",service="app-api",severity="critical",project="soloapp"}
-      value: 1
-  - expr: count(ALERTS{alertname="PodStartupTooLong",alertstate="firing"}) or vector(0)
-    eval_time: 75s
-    exp_samples:
-    - labels: '{}'
-      value: 1
 - name: Terminating rolling-update pod does not page
   interval: 15s
   input_series:
@@ -430,3 +420,337 @@ tests:
     exp_samples:
     - labels: '{}'
       value: 0
+- name: Two pods retain names and wait one minute
+  interval: 15s
+  input_series:
+  - series: kube_pod_labels{dc="home",namespace="soloapp",pod="a",label_app="whoami"}
+    values: 1+0x80
+  - series: kube_pod_status_ready{dc="home",namespace="soloapp",pod="a",condition="true"}
+    values: 0+0x80
+  - series: kube_pod_status_phase{dc="home",namespace="soloapp",pod="a",phase="Pending"}
+    values: 1+0x80
+  - series: kube_pod_created{dc="home",namespace="soloapp",pod="a"}
+    values: 0+0x80
+  - series: kube_pod_labels{dc="home",namespace="soloapp",pod="b",label_app="whoami"}
+    values: 1+0x80
+  - series: kube_pod_status_ready{dc="home",namespace="soloapp",pod="b",condition="true"}
+    values: 0+0x80
+  - series: kube_pod_status_phase{dc="home",namespace="soloapp",pod="b",phase="Pending"}
+    values: 1+0x80
+  - series: kube_pod_created{dc="home",namespace="soloapp",pod="b"}
+    values: 0+0x80
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="PodUnavailable",alertstate="firing"}) or vector(0)
+    eval_time: 45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="PodUnavailable",alertstate="firing"}) or vector(0)
+    eval_time: 75s
+    exp_samples:
+    - labels: '{}'
+      value: 2
+  - expr: count(ALERTS{alertname="PodStartupTooLong",alertstate="firing"}) or vector(0)
+    eval_time: 75s
+    exp_samples:
+    - labels: '{}'
+      value: 2
+  - expr: ALERTS{alertname="PodUnavailable",alertstate="firing",pod="a"}
+    eval_time: 75s
+    exp_samples:
+    - labels: ALERTS{alertname="PodUnavailable",alertstate="firing",dc="home",namespace="soloapp",pod="a",service="app-api",severity="critical",project="soloapp"}
+      value: 1
+- name: Different DCs do not combine
+  interval: 15s
+  input_series:
+  - series: kube_pod_labels{dc="home",namespace="soloapp",pod="a",label_app="whoami"}
+    values: 1+0x80
+  - series: kube_pod_status_ready{dc="home",namespace="soloapp",pod="a",condition="true"}
+    values: 0+0x80
+  - series: kube_pod_status_phase{dc="home",namespace="soloapp",pod="a",phase="Pending"}
+    values: 1+0x80
+  - series: kube_pod_created{dc="home",namespace="soloapp",pod="a"}
+    values: 0+0x80
+  - series: kube_pod_labels{dc="yc",namespace="soloapp",pod="b",label_app="whoami"}
+    values: 1+0x80
+  - series: kube_pod_status_ready{dc="yc",namespace="soloapp",pod="b",condition="true"}
+    values: 0+0x80
+  - series: kube_pod_status_phase{dc="yc",namespace="soloapp",pod="b",phase="Pending"}
+    values: 1+0x80
+  - series: kube_pod_created{dc="yc",namespace="soloapp",pod="b"}
+    values: 0+0x80
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="PodUnavailable",alertstate="firing"}) or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="PodStartupTooLong",alertstate="firing"}) or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: Different services do not combine
+  interval: 15s
+  input_series:
+  - series: kube_pod_labels{dc="home",namespace="soloapp",pod="a",label_app="whoami"}
+    values: 1+0x80
+  - series: kube_pod_status_ready{dc="home",namespace="soloapp",pod="a",condition="true"}
+    values: 0+0x80
+  - series: kube_pod_status_phase{dc="home",namespace="soloapp",pod="a",phase="Pending"}
+    values: 1+0x80
+  - series: kube_pod_created{dc="home",namespace="soloapp",pod="a"}
+    values: 0+0x80
+  - series: kube_pod_labels{dc="home",namespace="soloapp",pod="b",label_app="auth"}
+    values: 1+0x80
+  - series: kube_pod_status_ready{dc="home",namespace="soloapp",pod="b",condition="true"}
+    values: 0+0x80
+  - series: kube_pod_status_phase{dc="home",namespace="soloapp",pod="b",phase="Pending"}
+    values: 1+0x80
+  - series: kube_pod_created{dc="home",namespace="soloapp",pod="b"}
+    values: 0+0x80
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="PodUnavailable",alertstate="firing"}) or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="PodStartupTooLong",alertstate="firing"}) or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: Different namespaces do not combine
+  interval: 15s
+  input_series:
+  - series: kube_pod_labels{dc="home",namespace="soloapp",pod="a",label_app="whoami"}
+    values: 1+0x80
+  - series: kube_pod_status_ready{dc="home",namespace="soloapp",pod="a",condition="true"}
+    values: 0+0x80
+  - series: kube_pod_status_phase{dc="home",namespace="soloapp",pod="a",phase="Pending"}
+    values: 1+0x80
+  - series: kube_pod_created{dc="home",namespace="soloapp",pod="a"}
+    values: 0+0x80
+  - series: kube_pod_labels{dc="home",namespace="observability",pod="b",label_app="whoami"}
+    values: 1+0x80
+  - series: kube_pod_status_ready{dc="home",namespace="observability",pod="b",condition="true"}
+    values: 0+0x80
+  - series: kube_pod_status_phase{dc="home",namespace="observability",pod="b",phase="Pending"}
+    values: 1+0x80
+  - series: kube_pod_created{dc="home",namespace="observability",pod="b"}
+    values: 0+0x80
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="PodUnavailable",alertstate="firing"}) or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="PodStartupTooLong",alertstate="firing"}) or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: Three failed checks still represent one pod
+  interval: 15s
+  input_series:
+  - series: kube_pod_labels{dc="home",namespace="soloapp",pod="a",label_app="whoami"}
+    values: 1+0x80
+  - series: kube_pod_status_ready{dc="home",namespace="soloapp",pod="a",condition="true"}
+    values: 1+0x80
+  - series: kube_pod_status_phase{dc="home",namespace="soloapp",pod="a",phase="Pending"}
+    values: 1+0x80
+  - series: kube_pod_created{dc="home",namespace="soloapp",pod="a"}
+    values: 0+0x80
+  - series: probe_success{dc="home",service="whoami",pod="a",check="healthz"}
+    values: 0+0x80
+  - series: probe_success{dc="home",service="whoami",pod="a",check="readiness"}
+    values: 0+0x80
+  - series: probe_success{dc="home",service="whoami",pod="a",check="db-ready"}
+    values: 0+0x80
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="PodHealthProbeFailed",alertstate="firing"}) or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: Two probe-failed pods alert
+  interval: 15s
+  input_series:
+  - series: kube_pod_labels{dc="home",namespace="soloapp",pod="a",label_app="whoami"}
+    values: 1+0x80
+  - series: kube_pod_status_ready{dc="home",namespace="soloapp",pod="a",condition="true"}
+    values: 1+0x80
+  - series: kube_pod_status_phase{dc="home",namespace="soloapp",pod="a",phase="Pending"}
+    values: 1+0x80
+  - series: kube_pod_created{dc="home",namespace="soloapp",pod="a"}
+    values: 0+0x80
+  - series: probe_success{dc="home",service="whoami",pod="a",check="healthz"}
+    values: 0+0x80
+  - series: probe_success{dc="home",service="whoami",pod="a",check="readiness"}
+    values: 0+0x80
+  - series: probe_success{dc="home",service="whoami",pod="a",check="db-ready"}
+    values: 0+0x80
+  - series: kube_pod_labels{dc="home",namespace="soloapp",pod="b",label_app="whoami"}
+    values: 1+0x80
+  - series: kube_pod_status_ready{dc="home",namespace="soloapp",pod="b",condition="true"}
+    values: 1+0x80
+  - series: kube_pod_status_phase{dc="home",namespace="soloapp",pod="b",phase="Pending"}
+    values: 1+0x80
+  - series: kube_pod_created{dc="home",namespace="soloapp",pod="b"}
+    values: 0+0x80
+  - series: probe_success{dc="home",service="whoami",pod="b",check="healthz"}
+    values: 0+0x80
+  - series: probe_success{dc="home",service="whoami",pod="b",check="readiness"}
+    values: 0+0x80
+  - series: probe_success{dc="home",service="whoami",pod="b",check="db-ready"}
+    values: 0+0x80
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="PodHealthProbeFailed",alertstate="firing"}) or vector(0)
+    eval_time: 45s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="PodHealthProbeFailed",alertstate="firing"}) or vector(0)
+    eval_time: 75s
+    exp_samples:
+    - labels: '{}'
+      value: 6
+- name: Mixed readiness and probe failures count distinct pods
+  interval: 15s
+  input_series:
+  - series: kube_pod_labels{dc="home",namespace="soloapp",pod="a",label_app="whoami"}
+    values: 1+0x80
+  - series: kube_pod_status_ready{dc="home",namespace="soloapp",pod="a",condition="true"}
+    values: 0+0x80
+  - series: kube_pod_status_phase{dc="home",namespace="soloapp",pod="a",phase="Pending"}
+    values: 1+0x80
+  - series: kube_pod_created{dc="home",namespace="soloapp",pod="a"}
+    values: 0+0x80
+  - series: kube_pod_labels{dc="home",namespace="soloapp",pod="b",label_app="whoami"}
+    values: 1+0x80
+  - series: kube_pod_status_ready{dc="home",namespace="soloapp",pod="b",condition="true"}
+    values: 1+0x80
+  - series: kube_pod_status_phase{dc="home",namespace="soloapp",pod="b",phase="Pending"}
+    values: 1+0x80
+  - series: kube_pod_created{dc="home",namespace="soloapp",pod="b"}
+    values: 0+0x80
+  - series: probe_success{dc="home",service="whoami",pod="b",check="healthz"}
+    values: 0+0x80
+  - series: probe_success{dc="home",service="whoami",pod="b",check="readiness"}
+    values: 0+0x80
+  - series: probe_success{dc="home",service="whoami",pod="b",check="db-ready"}
+    values: 0+0x80
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="PodUnavailable",alertstate="firing"}) or vector(0)
+    eval_time: 75s
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="PodHealthProbeFailed",alertstate="firing"}) or vector(0)
+    eval_time: 75s
+    exp_samples:
+    - labels: '{}'
+      value: 3
+- name: Terminating second pod does not meet threshold
+  interval: 15s
+  input_series:
+  - series: kube_pod_labels{dc="home",namespace="soloapp",pod="a",label_app="whoami"}
+    values: 1+0x80
+  - series: kube_pod_status_ready{dc="home",namespace="soloapp",pod="a",condition="true"}
+    values: 0+0x80
+  - series: kube_pod_status_phase{dc="home",namespace="soloapp",pod="a",phase="Pending"}
+    values: 1+0x80
+  - series: kube_pod_created{dc="home",namespace="soloapp",pod="a"}
+    values: 0+0x80
+  - series: kube_pod_labels{dc="home",namespace="soloapp",pod="b",label_app="whoami"}
+    values: 1+0x80
+  - series: kube_pod_status_ready{dc="home",namespace="soloapp",pod="b",condition="true"}
+    values: 0+0x80
+  - series: kube_pod_status_phase{dc="home",namespace="soloapp",pod="b",phase="Pending"}
+    values: 1+0x80
+  - series: kube_pod_created{dc="home",namespace="soloapp",pod="b"}
+    values: 0+0x80
+  - series: kube_pod_deletion_timestamp{dc="home",namespace="soloapp",pod="b"}
+    values: 1+0x80
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="PodUnavailable",alertstate="firing"}) or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="PodStartupTooLong",alertstate="firing"}) or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: Recovery below two holds three minutes
+  interval: 15s
+  input_series:
+  - series: kube_pod_labels{dc="home",namespace="soloapp",pod="a",label_app="whoami"}
+    values: 1+0x80
+  - series: kube_pod_status_ready{dc="home",namespace="soloapp",pod="a",condition="true"}
+    values: 0+0x80
+  - series: kube_pod_status_phase{dc="home",namespace="soloapp",pod="a",phase="Pending"}
+    values: 1+0x80
+  - series: kube_pod_created{dc="home",namespace="soloapp",pod="a"}
+    values: 0+0x80
+  - series: kube_pod_labels{dc="home",namespace="soloapp",pod="b",label_app="whoami"}
+    values: 1+0x80
+  - series: kube_pod_status_ready{dc="home",namespace="soloapp",pod="b",condition="true"}
+    values: 0+0x8 1+0x71
+  - series: kube_pod_status_phase{dc="home",namespace="soloapp",pod="b",phase="Pending"}
+    values: 1+0x80
+  - series: kube_pod_created{dc="home",namespace="soloapp",pod="b"}
+    values: 0+0x80
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="PodUnavailable",alertstate="firing"}) or vector(0)
+    eval_time: 75s
+    exp_samples:
+    - labels: '{}'
+      value: 2
+  - expr: count(ALERTS{alertname="PodUnavailable",alertstate="firing"}) or vector(0)
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 2
+  - expr: count(ALERTS{alertname="PodUnavailable",alertstate="firing"}) or vector(0)
+    eval_time: 6m
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: Deployment missing 1 replicas
+  interval: 15s
+  input_series:
+  - series: kube_deployment_spec_replicas{dc="yc",namespace="soloapp",deployment="auth"}
+    values: 2+0x80
+  - series: kube_deployment_status_replicas_available{dc="yc",namespace="soloapp",deployment="auth"}
+    values: 1+0x80
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="DeploymentReplicasMissing",alertstate="firing"}) or vector(0)
+    eval_time: 105s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="DeploymentReplicasMissing",alertstate="firing"}) or vector(0)
+    eval_time: 135s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+- name: Deployment missing 2 replicas
+  interval: 15s
+  input_series:
+  - series: kube_deployment_spec_replicas{dc="yc",namespace="soloapp",deployment="auth"}
+    values: 2+0x80
+  - series: kube_deployment_status_replicas_available{dc="yc",namespace="soloapp",deployment="auth"}
+    values: 0+0x80
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="DeploymentReplicasMissing",alertstate="firing"}) or vector(0)
+    eval_time: 105s
+    exp_samples:
+    - labels: '{}'
+      value: 0
+  - expr: count(ALERTS{alertname="DeploymentReplicasMissing",alertstate="firing"}) or vector(0)
+    eval_time: 135s
+    exp_samples:
+    - labels: '{}'
+      value: 1
