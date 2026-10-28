@@ -43,6 +43,11 @@ class NotificationsTests(unittest.TestCase):
             self.assertEqual(event["target"], "v0.1.3")
             self.assertEqual(event["state"], state)
 
+    def test_invalid_rollback_still_reports_prepare_failure(self):
+        env = self.environment(ROLLBACK="unknown-tag")
+        env["DEPLOY_STATE"] = "failure"
+        self.assertEqual(notify.events(env)[0]["target"], "a" * 40)
+
     def test_retries_are_bounded_and_do_not_expose_secrets(self):
         send = MagicMock(side_effect=OSError("sensitive response"))
         with self.assertRaisesRegex(RuntimeError, "failed after 3"):

@@ -3,6 +3,7 @@
 
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -23,13 +24,17 @@ def events(env):
     state = env["DEPLOY_STATE"]
     if state not in ("started", "success", "failure", "cancelled"):
         raise ValueError("Invalid deployment state")
+    target = env.get("TARGET") or env.get("ROLLBACK") or env["GITHUB_SHA"]
+    if not re.fullmatch(r"(?:[0-9a-f]{40}|v0\.1\.\d+)", target):
+        # Invalid rollback input must still produce a prepare-failure notification.
+        target = env["GITHUB_SHA"]
     return [
         {
             "project": "soloapp",
             "service": service,
             "state": state,
             "revision": env["GITHUB_SHA"],
-            "target": env.get("TARGET") or env.get("ROLLBACK") or env["GITHUB_SHA"],
+            "target": target,
             "version": env.get("VERSION", ""),
             "operation": "rollback" if env.get("ROLLBACK") else "deploy",
             "run_id": env["GITHUB_RUN_ID"],
