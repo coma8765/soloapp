@@ -15,7 +15,10 @@ operator Mac, then paste the clipboard into the corresponding cluster login.
 The token expires in one hour. No token is written to a file, Git or chat.
 Clear the clipboard afterwards: `pbcopy </dev/null`.
 
-The human operator can read application workloads/logs and edit/scale the six
+The overview role reads workload status, nodes, events and resource
+metrics across namespaces, as required by Headlamp aggregate views. Application
+logs and ConfigMaps remain limited to `soloapp`. The expanded read-only role was explicitly approved by the operator.
+The human operator can edit/scale the six
 existing application Deployments in `soloapp`. No secret reads, exec, RBAC edits,
 namespace deletion or infrastructure editing. Deployment editing is nevertheless
 a privileged operation: changing its image/volumes can execute code with that

@@ -47,6 +47,10 @@ class HeadlampConfigTest(unittest.TestCase):
             for subject in obj.get("subjects", []):
                 self.assertEqual(subject["name"], "headlamp-operator")
             for rule in obj.get("rules", []):
+                if obj["kind"] == "ClusterRole":
+                    self.assertLessEqual(set(rule["verbs"]), {"get", "list", "watch"})
+                    self.assertNotIn("pods/log", rule["resources"])
+                    self.assertNotIn("configmaps", rule["resources"])
                 self.assertNotIn("*", rule["verbs"])
                 self.assertNotIn("secrets", rule["resources"])
                 self.assertNotIn("pods/exec", rule["resources"])
