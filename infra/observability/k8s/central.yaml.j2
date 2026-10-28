@@ -573,7 +573,7 @@
                   },
                   {
                     "name": "SECRET_IDS",
-                    "value": "{{ cloud.secrets['grafana-admin' ~ ('-home' if inventory_hostname == 'home' else '')] }}"
+                    "value": "{{ cloud.secrets['grafana-admin' ~ ('-home' if inventory_hostname == 'home' else '')] }}{% if oidc_enabled | default(false) %},{{ cloud.secrets['grafana-oidc'] }}{% endif %}"
                   },
                   {
                     "name": "SECRET_DIR",
@@ -679,7 +679,7 @@
                   },
                   {
                     "name": "SECRET_IDS",
-                    "value": "{{ cloud.secrets['grafana-admin' ~ ('-home' if inventory_hostname == 'home' else '')] }}"
+                    "value": "{{ cloud.secrets['grafana-admin' ~ ('-home' if inventory_hostname == 'home' else '')] }}{% if oidc_enabled | default(false) %},{{ cloud.secrets['grafana-oidc'] }}{% endif %}"
                   },
                   {
                     "name": "SECRET_DIR",

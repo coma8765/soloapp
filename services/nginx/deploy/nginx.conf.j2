@@ -32,6 +32,26 @@ http {
     add_header X-Solo-Site {{ inventory_hostname }} always;
     add_header Cache-Control "no-store" always;
     location = /healthz { access_log off; return 200 "ok"; }
+{% if keycloak_enabled | default(false) %}
+    location = /id { return 308 /id/; }
+    location = /id/healthz {
+      access_log off;
+      proxy_pass http://keycloak.soloapp.svc.cluster.local:9000/health/ready;
+    }
+    location /id/ {
+      proxy_pass http://keycloak.soloapp.svc.cluster.local:8080;
+      proxy_set_header Host {{ public_domain }};
+      proxy_set_header X-Forwarded-Proto https;
+      proxy_set_header X-Forwarded-Host {{ public_domain }};
+      proxy_set_header X-Forwarded-Port 443;
+      proxy_set_header X-Forwarded-For $remote_addr;
+      proxy_connect_timeout 2s;
+      proxy_read_timeout 30s;
+      proxy_buffer_size 32k;
+      proxy_buffers 8 32k;
+      client_max_body_size 4m;
+    }
+{% endif %}
 {% if obs.public_grafana %}
     location = /grafana { return 308 /grafana/; }
     location /grafana/ {
