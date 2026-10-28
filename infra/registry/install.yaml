@@ -1,4 +1,4 @@
-- name: Install private S3-backed registry replicas
+- name: Install private filesystem-backed registry replicas
   hosts: app_sites
   serial: 1
   gather_facts: false
@@ -12,15 +12,21 @@
       dest: '{{ remote_root }}/secret-fetch.py'
       mode: '0700'
     register: registry_helper
-  - name: Update bucket initialization script
-    ansible.builtin.copy:
-      src: '{{ project_root }}/infra/object-storage/init-bucket.py'
-      dest: '{{ remote_root }}/s3-init-bucket.py'
-      mode: '0644'
-  - name: Refresh S3 identities from Lockbox
-    ansible.builtin.systemd_service:
-      name: solo-s3server-secrets
-      state: started
+  - name: Create persistent registry directory
+    ansible.builtin.file:
+      path: /var/lib/soloapp-registry
+      state: directory
+      owner: '10006'
+      group: '10006'
+      mode: '0700'
+  - name: Check verified migration marker
+    ansible.builtin.stat:
+      path: /var/lib/soloapp-registry/.migration-verified.json
+    register: registry_migration
+  - name: Require migrated data or explicit fresh installation
+    ansible.builtin.assert:
+      that: registry_migration.stat.exists or (registry_initialize_empty | default(false) | bool)
+      fail_msg: 'Migrate and verify the existing registry before changing its storage; fresh installations must explicitly set registry_initialize_empty=true.'
   - name: Deliver registry secrets into RAM
     ansible.builtin.include_tasks: ../secrets/tasks/delivery.yaml
     vars:
@@ -28,10 +34,17 @@
       delivery_uid: 10006
       delivery_secret_ids: "{{ cloud.secrets['registry-' ~ inventory_hostname] }}"
       delivery_helper: '{{ registry_helper }}'
-  - name: Initialize registry bucket
+  - name: Refresh filesystem configuration from Lockbox
+    ansible.builtin.systemd_service:
+      name: solo-registry-secrets
+      state: started
+  - name: Require the filesystem storage driver
     ansible.builtin.command:
-      argv: [docker, run, --rm, --user, '10005:10005', --network, host, --entrypoint, python3, -v, '/run/soloapp-s3server:/secrets:ro', -v, '{{ remote_root }}/s3-init-bucket.py:/init.py:ro', 'soloapp/deploy-controller:1', /init.py, 'http://{{ private_ip }}:18333', soloapp-registry]
-    changed_when: true
+      argv:
+      - python3
+      - -c
+      - "import json,pathlib; configs=[json.loads(pathlib.Path('/run/soloapp-registry-'+m+'/'+m+'.json').read_text()) for m in ('read','write')]; assert all(c['storage'].get('filesystem',{}).get('rootdirectory')=='/var/lib/registry' and 's3' not in c['storage'] for c in configs)"
+    changed_when: false
   - name: Start read-only mTLS registry and loopback-only publisher
     community.docker.docker_container:
       name: 'solo-registry-{{ item.mode }}'
@@ -48,6 +61,7 @@
       published_ports: ['{{ item.bind }}:{{ item.port }}:{{ item.port }}']
       volumes:
       - '/run/soloapp-registry-{{ item.mode }}:/tls:ro'
+      - '/var/lib/soloapp-registry:/var/lib/registry:{{ "ro" if item.mode == "read" else "rw" }}'
     loop:
     - {mode: read, bind: '{{ private_ip }}', port: 5043, ca: pull}
     - {mode: write, bind: '127.0.0.1', port: 5044, ca: push}
@@ -67,3 +81,27 @@
           ca = "/run/soloapp-registry/ca.crt"
           client = [["/run/soloapp-registry/pull.crt", "/run/soloapp-registry/pull.key"]]
         {% endfor %}
+  - name: Start registry after its private network and certificates on boot
+    ansible.builtin.copy:
+      dest: /etc/systemd/system/solo-registry.service
+      mode: '0644'
+      content: |
+        [Unit]
+        Description=Soloapp private filesystem registry
+        Requires=docker.service wg-quick@wg-solo.service solo-registry-secrets.service
+        After=docker.service wg-quick@wg-solo.service solo-registry-secrets.service
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=/usr/bin/docker start solo-registry-read solo-registry-write
+        ExecStop=/usr/bin/docker stop --time 30 solo-registry-write solo-registry-read
+        TimeoutStartSec=90
+        TimeoutStopSec=90
+        [Install]
+        WantedBy=multi-user.target
+  - name: Enable ordered registry startup
+    ansible.builtin.systemd_service:
+      name: solo-registry
+      daemon_reload: true
+      enabled: true
+      state: started

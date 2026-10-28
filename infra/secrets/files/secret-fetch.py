@@ -182,7 +182,7 @@ def fetch():
             os.chmod(dest, 0o700)
             for name in [mode + ".json", "server.crt", "server.key", ca + "-ca.crt"]:
                 atomic(dest / name, (out / name).read_text(), 10006)
-            if changed:
+            if changed and not pathlib.Path("/run/soloapp-registry-migrating").exists():
                 subprocess.run(
                     ["docker", "restart", "solo-registry-" + mode],
                     stdout=subprocess.DEVNULL,
