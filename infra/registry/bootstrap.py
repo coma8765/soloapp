@@ -120,37 +120,6 @@ def main():
                 for name, pair in [("server", server_ca), ("pull", pull_ca), ("push", push_ca)]
             },
         )
-    payload = yc("lockbox", "payload", "get", cloud["secrets"]["s3-server"])
-    entries = {e["key"]: e.get("textValue", e.get("text_value")) for e in payload["entries"]}
-    s3 = json.loads(entries["s3.json"])
-
-    def s3key():
-        return {"accessKey": "solo" + secrets.token_hex(12), "secretKey": secrets.token_hex(32)}
-
-    writer, reader = s3key(), s3key()
-    bucket = "soloapp-registry"
-    s3["identities"] += [
-        dict(
-            name="registry-publisher",
-            credentials=[writer],
-            actions=["Read:" + bucket, "Write:" + bucket, "WriteAcp:" + bucket, "List:" + bucket],
-        ),
-        dict(
-            name="registry-reader",
-            credentials=[reader],
-            actions=["Read:" + bucket, "List:" + bucket],
-        ),
-    ]
-    entries["s3.json"] = json.dumps(s3)
-    yc(
-        "lockbox",
-        "secret",
-        "add-version",
-        cloud["secrets"]["s3-server"],
-        "--payload",
-        "-",
-        payload=json.dumps([{"key": k, "textValue": v} for k, v in entries.items()]),
-    )
     for site, ip in [("yc", "10.77.26.11"), ("home", "10.77.26.12")]:
         server = certificate(site, server_ca, ip=ip)
         pull = certificate("k3s-" + site, pull_ca, client=True)
@@ -166,23 +135,12 @@ def main():
             "push.crt": certpem(push),
             "push.key": pem(push[0]),
         }
-        for mode, credential, port in [("read", reader, 5043), ("write", writer, 5044)]:
+        for mode, port in [("read", 5043), ("write", 5044)]:
             cfg = {
                 "version": 0.1,
                 "log": {"level": "warn"},
                 "storage": {
-                    "s3": {
-                        "accesskey": credential["accessKey"],
-                        "secretkey": credential["secretKey"],
-                        "region": "us-east-1",
-                        "regionendpoint": "http://" + ip + ":18333",
-                        "forcepathstyle": True,
-                        "bucket": bucket,
-                        "secure": False,
-                        "v4auth": True,
-                        "chunksize": 5242880,
-                        "multipartcopymaxconcurrency": 2,
-                    },
+                    "filesystem": {"rootdirectory": "/var/lib/registry"},
                     "redirect": {"disable": True},
                     "delete": {"enabled": False},
                     "maintenance": {
