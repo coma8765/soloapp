@@ -138,7 +138,7 @@ class IsolatedDeploymentTests(unittest.TestCase):
             new,
             "c" * 40,
             "all",
-            ["auth-new", "identity-next", "web-new", "notify-new", "gateway-new"],
+            ["auth-new", "identity-next", "web-new", "notify-new", "gateway-new", "keycloak-new"],
         )
         self.assertEqual(full["revision"], "c" * 40)
 
@@ -242,7 +242,7 @@ class IsolatedDeploymentTests(unittest.TestCase):
                     )
                 current = json.loads((state / "deployed.json").read_text())
                 for other in gate.WORKLOADS:
-                    if other in ("client-notify", "client-gateway") and other != scope:
+                    if other in ("client-notify", "client-gateway", "keycloak") and other != scope:
                         self.assertNotIn(other, current["services"])
                         continue
                     self.assertEqual(

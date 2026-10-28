@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: keycloak, namespace: soloapp}
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: keycloak, namespace: soloapp}
+spec:
+  replicas: {{ keycloak_config.replicas }}
+  strategy: {type: Recreate}
+  minReadySeconds: 10
+  progressDeadlineSeconds: 600
+  selector: {matchLabels: {app: keycloak}}
+  template:
+    metadata:
+      labels: {app: keycloak}
+    spec:
+      serviceAccountName: keycloak
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      initContainers:
+      - name: fetch-secrets
+        image: '{{ secrets_image }}'
+        imagePullPolicy: Never
+        command: [python3, /usr/local/bin/secret-fetch.py]
+        env:
+        - {name: TOKEN_FILE, value: /run/identity/token}
+        - {name: SERVICE_ACCOUNT_ID, value: '{{ cloud.identities["keycloak-" ~ inventory_hostname] }}'}
+        - {name: SECRET_IDS, value: '{{ cloud.secrets["keycloak-runtime"] }}'}
+        - {name: SECRET_DIR, value: /run/soloapp-secrets/data}
+        resources:
+          requests: {cpu: 10m, memory: 24Mi}
+          limits: {cpu: 200m, memory: 64Mi}
+        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+        volumeMounts:
+        - {name: identity, mountPath: /run/identity, readOnly: true}
+        - {name: secrets, mountPath: /run/soloapp-secrets}
+      containers:
+      - name: keycloak
+        image: '{{ keycloak_config.image }}'
+        imagePullPolicy: {{ keycloak_config.image_pull_policy }}
+        env:
+        - {name: KC_HOSTNAME, value: 'https://{{ public_domain }}/id'}
+        - {name: KC_CACHE_EMBEDDED_NETWORK_BIND_ADDRESS, value: '0.0.0.0'}
+        - {name: KC_CACHE_EMBEDDED_NETWORK_EXTERNAL_ADDRESS, value: '{{ private_ip }}'}
+        - {name: KC_CACHE_EMBEDDED_NETWORK_EXTERNAL_PORT, value: '7800'}
+        - {name: KC_CACHE_EMBEDDED_NODE_NAME, value: 'keycloak-{{ inventory_hostname }}'}
+        ports:
+        - {name: http, containerPort: 8080}
+        - {name: management, containerPort: 9000}
+        - {name: cache, containerPort: 7800, hostPort: 7800, hostIP: '{{ private_ip }}'}
+        - {name: failure, containerPort: 57800, hostPort: 57800, hostIP: '{{ private_ip }}'}
+        resources: {{ keycloak_config.resources | to_json }}
+        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+        volumeMounts:
+        - {name: secrets, mountPath: /run/soloapp-secrets, readOnly: true}
+        - {name: data, mountPath: /opt/keycloak/data}
+        - {name: tmp, mountPath: /tmp}
+        readinessProbe:
+          httpGet: {path: /health/ready, port: management}
+          periodSeconds: 5
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet: {path: /health/live, port: management}
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 6
+        startupProbe:
+          httpGet: {path: /health/started, port: management}
+          periodSeconds: 5
+          failureThreshold: 100
+      volumes:
+      - {name: data, emptyDir: {}}
+      - {name: tmp, emptyDir: {medium: Memory, sizeLimit: 64Mi}}
+      - {name: secrets, emptyDir: {medium: Memory, sizeLimit: 4Mi}}
+      - name: identity
+        projected:
+          sources:
+          - serviceAccountToken: {path: token, expirationSeconds: 600, audience: soloapp-lockbox}

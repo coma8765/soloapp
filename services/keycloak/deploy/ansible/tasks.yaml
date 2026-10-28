@@ -1,0 +1,18 @@
+- name: Validate Keycloak runtime prerequisites
+  ansible.builtin.assert:
+    that:
+    - keycloak_config.replicas | int == 1
+    - "'keycloak-' ~ inventory_hostname in cloud.identities"
+    - "'keycloak-runtime' in cloud.secrets"
+    - "'@sha256:' in keycloak_config.image"
+    quiet: true
+- name: Apply Keycloak resources
+  ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
+  loop: [service, networkpolicy, deployment]
+  vars:
+    manifest_source: '{{ project_root }}/services/keycloak/deploy/k8s/{{ item }}.yaml.j2'
+    manifest_name: 'keycloak-{{ item }}'
+- name: Wait for Keycloak readiness before rolling the next site
+  ansible.builtin.command: k3s kubectl -n soloapp rollout status deployment/keycloak --timeout=600s
+  changed_when: false
+  when: not ansible_check_mode

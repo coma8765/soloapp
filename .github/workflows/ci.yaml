@@ -181,7 +181,7 @@ jobs:
   required:
     name: Required checks
     if: always()
-    needs: [source, quality, services, app-api, web, gateway]
+    needs: [source, quality, services, app-api, web, gateway, keycloak]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -192,3 +192,21 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
         run: python3 infra/ci/gate.py
+
+  keycloak:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: {persist-credentials: false}
+      - run: pip install -r infra/headlamp/tests/requirements.txt
+      - run: make test-keycloak
+      - name: Build optimized Keycloak runtime on CI
+        run: |
+          docker buildx create --use
+          bash infra/registry/build.sh "$GITHUB_SHA" "$RUNNER_TEMP/images" keycloak
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: keycloak-image
+          path: ${{ runner.temp }}/images/keycloak.oci.tar
+          retention-days: 3
