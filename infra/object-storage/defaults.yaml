@@ -1,0 +1,8 @@
+image: chrislusf/seaweedfs:4.51@sha256:f7a49e3f3972ebed5be2ed4befa4a0c68eb7bdddba6e692d42729ceb545134b8
+data_path: /var/lib/soloapp-s3
+volume_max: 32
+# PV capacity describes the allocation; local directories do not enforce a quota.
+capacity: 40Gi
+resources:
+  requests: {cpu: 100m, memory: 256Mi}
+  limits: {cpu: '1', memory: 768Mi}
