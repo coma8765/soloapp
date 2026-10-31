@@ -88,6 +88,7 @@ def render(root=ROOT):
     lines += [
         "location = /_verify {",
         "  internal;",
+        "  client_max_body_size 0;",
         "  proxy_pass http://auth.soloapp.svc.cluster.local:{{ auth_config.port }}"
         + verifier_path
         + ";",

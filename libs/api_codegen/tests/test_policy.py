@@ -32,7 +32,7 @@ class PolicyTests(unittest.TestCase):
         text = render(self.root)["routes.conf.j2"]
         self.assertNotIn("location = /api/v1/auth/v1/internal/verify", text)
         self.assertNotIn("location = /health/ready", text)
-        self.assertIn("location = /_verify {\n  internal;", text)
+        self.assertIn("location = /_verify {\n  internal;\n  client_max_body_size 0;", text)
         self.assertIn("auth_request /_verify;", text)
         self.assertNotIn("location /auth/", text)
 

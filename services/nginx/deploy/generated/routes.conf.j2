@@ -1,6 +1,7 @@
 # Generated from services/*/docs/api.yaml; DO NOT EDIT.
 location = /_verify {
   internal;
+  client_max_body_size 0;
   proxy_pass http://auth.soloapp.svc.cluster.local:{{ auth_config.port }}/api/v1/auth/v1/internal/verify;
   proxy_pass_request_body off;
   proxy_set_header Content-Length "";
