@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: whisper, namespace: soloapp}
+spec:
+  replicas: {{ (whisper_overrides | default({})).replicas | default(1) }}
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  progressDeadlineSeconds: 600
+  selector: {matchLabels: {app: whisper}}
+  template:
+    metadata: {labels: {app: whisper}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+      - name: whisper
+        image: '{{ whisper_image }}'
+        ports: [{name: http, containerPort: 8178}]
+        resources:
+          requests: {cpu: 100m, memory: 512Mi}
+          limits: {cpu: '2', memory: 1536Mi}
+        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+        startupProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 5, failureThreshold: 60}
+        readinessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 5, timeoutSeconds: 2}
+        livenessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 15, timeoutSeconds: 3, failureThreshold: 4}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: whisper, namespace: soloapp}
+spec:
+  selector: {app: whisper}
+  ports: [{port: 8178, targetPort: http}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: whisper-isolation, namespace: soloapp}
+spec:
+  podSelector: {matchLabels: {app: whisper}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+  - from: [{podSelector: {matchLabels: {app: whoami}}}]
+    ports: [{protocol: TCP, port: 8178}]
+  egress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: whoami-to-whisper, namespace: soloapp}
+spec:
+  podSelector: {matchLabels: {app: whoami}}
+  policyTypes: [Egress]
+  egress:
+  - to: [{podSelector: {matchLabels: {app: whisper}}}]
+    ports: [{protocol: TCP, port: 8178}]

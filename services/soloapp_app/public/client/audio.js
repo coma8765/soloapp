@@ -120,8 +120,14 @@ export class NatureAudio {
   update(player, underwater) {
     if (!this.ready) return;
     const ctx = this.context,
-      t = ctx.currentTime,
-      wet = player.position.length() < WATER_RADIUS - 0.08;
+      t = ctx.currentTime;
+    if (player.worldMap === 'white-room') {
+      for (const layer of this.layers)
+        layer.gain.gain.setTargetAtTime(0, t, 0.18);
+      this.wasWet = false;
+      return;
+    }
+    const wet = player.position.length() < WATER_RADIUS - 0.08;
     if (performance.now() > this.nextShore) {
       this.shore = this.terrain.shoreDistance(player.position.asArray());
       this.nextShore = performance.now() + 250;

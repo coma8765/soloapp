@@ -20,7 +20,17 @@ from pathlib import Path
 
 CONFIG = Path("/etc/soloapp-cd/config.json")
 STATE = Path("/var/lib/soloapp-cd")
-SCOPES = ("auth", "app-api", "nginx", "web", "client-notify", "client-gateway", "keycloak", "all")
+SCOPES = (
+    "auth",
+    "app-api",
+    "nginx",
+    "web",
+    "client-notify",
+    "client-gateway",
+    "keycloak",
+    "whisper",
+    "all",
+)
 IMAGE_SERVICES = {
     "auth": ("auth",),
     "app-api": ("whoami",),
@@ -29,7 +39,8 @@ IMAGE_SERVICES = {
     "client-notify": ("client-notify",),
     "client-gateway": ("client-gateway",),
     "keycloak": ("keycloak",),
-    "all": ("auth", "whoami", "web", "client-notify", "client-gateway", "keycloak"),
+    "whisper": ("whisper",),
+    "all": ("auth", "whoami", "web", "client-notify", "client-gateway", "keycloak", "whisper"),
 }
 WORKLOADS = {
     "auth": "auth",
@@ -39,6 +50,7 @@ WORKLOADS = {
     "client-notify": "client-notify",
     "client-gateway": "client-gateway",
     "keycloak": "keycloak",
+    "whisper": "whisper",
 }
 
 
@@ -57,6 +69,7 @@ def deployment_operation(mode):
         "push-client-notify",
         "push-client-gateway",
         "push-keycloak",
+        "push-whisper",
     ):
         return mode, None
     raise ValueError("Invalid CD operation")

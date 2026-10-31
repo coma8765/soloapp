@@ -1,0 +1,9 @@
+- name: Deploy private Whisper service
+  ansible.builtin.include_tasks: "{{ project_root }}/infra/kubernetes/tasks/apply.yaml"
+  vars:
+    manifest_source: "{{ project_root }}/services/whisper/deploy/k8s/deployment.yaml.j2"
+    manifest_name: whisper
+- name: Wait for Whisper readiness
+  ansible.builtin.command: k3s kubectl -n soloapp rollout status deployment/whisper --timeout=600s
+  changed_when: false
+  when: not ansible_check_mode

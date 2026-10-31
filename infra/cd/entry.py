@@ -8,7 +8,7 @@ command = os.environ.get("SSH_ORIGINAL_COMMAND", "")
 if command == "probe":
     os.execv("/usr/bin/sudo", ["sudo", "-n", "/usr/local/libexec/soloapp-cd", "probe"])
 if not re.fullmatch(
-    r"(deploy(?:-(?:auth|app-api|nginx|web|client-notify|client-gateway|keycloak|all))?|publish|push-auth|push-whoami|push-web|push-client-notify|push-client-gateway|push-keycloak|rollback(?:-(?:auth|app-api|nginx|web|client-notify|client-gateway|keycloak|all))?) [0-9a-f]{40}",
+    r"(deploy(?:-(?:auth|app-api|nginx|web|client-notify|client-gateway|keycloak|whisper|all))?|publish|push-auth|push-whoami|push-web|push-client-notify|push-client-gateway|push-keycloak|push-whisper|rollback(?:-(?:auth|app-api|nginx|web|client-notify|client-gateway|keycloak|whisper|all))?) [0-9a-f]{40}",
     command,
 ):
     raise SystemExit("Only approved release operations with a full commit SHA are allowed")

@@ -74,6 +74,52 @@ paths:
       description: First frame authenticates with a Soloapp token; strict Origin check.
         Shared PG world with one fenced simulator, WSS snapshots and peer SDP/ICE
         relay.
+  /api/v1/soloapp_app/v1/speech/health:
+    get:
+      operationId: speech_health
+      security:
+      - bearerAuth: []
+      x-route:
+        exposure: public
+        auth: signed-user
+        max_body_bytes: 256044
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 95
+        rate_limit:
+          group: speech
+          requests_per_second: 1
+          burst: 4
+      responses:
+        '200':
+          description: Whisper readiness
+        '429':
+          description: Busy
+        '503':
+          description: Unavailable
+  /api/v1/soloapp_app/v1/speech/transcribe:
+    post:
+      operationId: speech_transcribe
+      security:
+      - bearerAuth: []
+      x-route:
+        exposure: public
+        auth: signed-user
+        max_body_bytes: 256044
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 95
+        rate_limit:
+          group: speech
+          requests_per_second: 1
+          burst: 4
+      responses:
+        '200':
+          description: Word-level transcript
+        '429':
+          description: Busy
+        '503':
+          description: Unavailable
 components:
   securitySchemes:
     bearerAuth:

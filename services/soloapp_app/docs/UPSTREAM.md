@@ -1,6 +1,7 @@
 Source: https://github.com/coma8765/soloapp_app
-Imported revision: fd30d64ade63c93a1aa97ceb072af7697ea44de5
+Imported revision: 657e6c0b1bc8d8338ab9fcc93d673bf8f1e3592e
 
-This is a vendored copy, not a submodule. Updates require a reviewed import;
-upstream scripts/CI are not executed automatically. Integrated deployments use
-Soloapp auth and PostgreSQL/ODB instead of the standalone SQLite account store.
+Vendored copy, not a submodule. Soloapp auth and PostgreSQL/ODB remain authoritative.
+One shared planet is retained; standalone SQLite rooms and server WebRTC are not enabled.
+Graphics, avatars, mobile/gamepad controls and professor speech UI are imported.
+Whisper runs as a private service; browser requests require a Soloapp session.

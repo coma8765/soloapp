@@ -1,0 +1,19 @@
+openapi: 3.0.3
+info: {title: Private Whisper worker, version: 1.0.0}
+paths:
+  /healthz:
+    get:
+      responses:
+        '200': {description: Model loaded}
+  /transcribe:
+    post:
+      description: Internal only; reachable from authenticated soloapp_app proxy.
+      requestBody:
+        required: true
+        content:
+          audio/wav:
+            schema: {type: string, format: binary, maxLength: 256044}
+      responses:
+        '200': {description: Word timestamps}
+        '400': {description: Invalid WAV}
+        '429': {description: Inference busy}

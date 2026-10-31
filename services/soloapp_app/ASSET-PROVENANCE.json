@@ -18,7 +18,77 @@
   "assetSha256": {
     "public/assets/world.json": "4e67af509df70d92e86548897cca7113d61cbc7b8b105ad284f9c3a8e2b8c773",
     "public/assets/lakes.json": "ba5b508fd2f2bcdd09f46254e92aaf19b1ff622c529d79e54909e1e85cb8e373",
-    "public/vendor/babylon.js": "37c77bf920c0d7a3912c28a6120479f3d08fccd87a75e1f7558f76bd124cc6c4"
+    "public/vendor/babylon.js": "37c77bf920c0d7a3912c28a6120479f3d08fccd87a75e1f7558f76bd124cc6c4",
+    "public/assets/avatar/player.glb": "8711d8ac735cf0418384fec1ebabb75d1d11fe8cb7edd2710924f1fdd991cf1b",
+    "public/assets/avatar/LICENSE.txt": "c232257c8a2545520aa120cda96acb23d00a355d2e3339cba20b7ebf56f28a09",
+    "public/vendor/babylonjs.loaders.min.js": "fb6e975962c8ed333e6ccefc4fe46eac9c5f989419e3347198e795b96e86c5b3",
+    "public/assets/avatar/player-female.glb": "a1925ef139cd2c2a6d5af591b5ea9b7df14ef40cbe666cda2f587a5610c4ad18",
+    "public/assets/avatar/uraraka-ochako.glb": "260ea1d80e24c3b97d732aa8247a4bc47cddd158b964251da2b6a605c1252b23",
+    "public/assets/avatar/URARAKA-LICENSE.txt": "9c654ce26c3d5da5e60e210fda5890897cc7c6313ede3e3615ba89924e80e7c0",
+    "public/assets/professor/professor-einstein.glb": "ee0b1674d60d5dc464206108caa89d4f333c296e206b2670ac9ce27a9e3b3367",
+    "public/assets/professor/LICENSE.txt": "d7b4254cefd7255762f1e6f4d8d057665f55fa8b0e21f2d590ce9102ce88a987",
+    "public/assets/marine/clownfish.glb": "1ead5982ec41bffac00a80ab6f3d3b532eadc159d929b6156074b17ed0a46830",
+    "public/assets/marine/lobster.glb": "46953edfd7a46a966de71b42db0e58aa419d7b6ee89e072f7e0804c4dc25963a"
   },
-  "instanceExport": "CPU placement matrices captured before MultiMesh upload; compatible with Godot headless dummy renderer."
+  "instanceExport": "CPU placement matrices captured before MultiMesh upload; compatible with Godot headless dummy renderer.",
+  "localAvatar": {
+    "source": "https://quaternius.itch.io/universal-base-characters",
+    "author": "Quaternius",
+    "pack": "Universal Base Characters [Standard]",
+    "license": "CC0-1.0",
+    "licenseFile": "public/assets/avatar/LICENSE.txt",
+    "sourceArchiveSha256": "fdbf1804c90dfc1ea03e992bff7da2dfd1a79318e13270a660180f9308455f40",
+    "processing": [
+      "Resolved T_Eye_Normal_png.png and T_Hair_1_Normal_png.png to the corresponding supplied normal maps.",
+      "Resampled PNGs to a maximum of 1024 pixels with macOS sips, retaining alpha.",
+      "Embedded original geometry, 65-joint skin and resized PNGs in GLB 2.0; no external resources or animation clips."
+    ],
+    "loaderSource": "https://cdn.jsdelivr.net/npm/babylonjs-loaders@8.56.2/babylonjs.loaders.min.js",
+    "models": [
+      "Superhero_Male_FullBody.gltf",
+      "Superhero_Female_FullBody.gltf"
+    ]
+  },
+  "urarakaAvatar": {
+    "source": "https://sketchfab.com/3d-models/uraraka-ochako-040a689bf9e443f9a97710c2264f3d57",
+    "author": "Padalab",
+    "license": "CC-BY-NC-SA-4.0",
+    "licenseFile": "public/assets/avatar/URARAKA-LICENSE.txt",
+    "sourceFile": "uraraka_ochako.glb (provided by user)",
+    "sourceSha256": "28f476e54697cd900b75d056e28b476cdeae98cba640ce57aa2f1650a9d9ce96",
+    "processing": [
+      "Extracted the central pose; removed two side poses and decorative backdrop without cutting triangles.",
+      "Compacted vertex/index buffers; preserved materials, embedded textures and attribution.",
+      "No skeleton or animations in the source; used as a static avatar."
+    ],
+    "reproduce": "python3 scripts/prepare-uraraka.py SOURCE.glb public/assets/avatar/uraraka-ochako.glb"
+  },
+  "lakeProfessor": {
+    "author": "klava88",
+    "source": "https://sketchfab.com/3d-models/professor-einstein-d1f7606bee9e425ab9393d3114ce9878",
+    "license": "CC-BY-4.0",
+    "licenseFile": "public/assets/professor/LICENSE.txt",
+    "sourceFile": "professor_einstein.glb (provided by user)",
+    "processing": [
+      "Original GLB preserved without modification.",
+      "Instanced at four dry shoreline sites; normalized to 1.9 m at runtime."
+    ],
+    "model": "public/assets/professor/professor-einstein.glb"
+  },
+  "marineAnimals": [
+    {
+      "file": "public/assets/marine/clownfish.glb",
+      "author": "Jungle Jim (https://sketchfab.com/jungle_jim)",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+      "source": "https://sketchfab.com/3d-models/cartoon-clownfish-animated-ac8e67efb08c499eadfdb6179f955bcc",
+      "title": "Cartoon Clownfish (animated)"
+    },
+    {
+      "file": "public/assets/marine/lobster.glb",
+      "author": "majidakbarimoganjogi (https://sketchfab.com/majidakbarimoganjogi)",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+      "source": "https://sketchfab.com/3d-models/lobster-515fa925b50a4c9e93ac7df0dd5a6576",
+      "title": "Lobster"
+    }
+  ]
 }
