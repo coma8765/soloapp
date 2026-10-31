@@ -31,6 +31,9 @@
       label: '{{ item.image }}'
     tags: [always]
   tasks:
+  - name: Deploy Keycloak
+    ansible.builtin.import_tasks: ../../services/keycloak/deploy/ansible/tasks.yaml
+    tags: [keycloak]
   - name: Deploy client gateway
     ansible.builtin.import_tasks: ../../services/client-gateway/deploy/ansible/tasks.yaml
     tags: [client-gateway]
@@ -38,7 +41,7 @@
     ansible.builtin.import_tasks: ../../services/client-notify/deploy/ansible/tasks.yaml
     tags: [client-notify]
   - name: Deploy whoami
-    ansible.builtin.import_tasks: ../../services/whoami/deploy/ansible/tasks.yaml
+    ansible.builtin.import_tasks: ../../services/soloapp_app/deploy/ansible/tasks.yaml
     tags:
     - whoami
   - name: Deploy auth

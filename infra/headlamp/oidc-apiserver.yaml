@@ -1,0 +1,62 @@
+# Operator-only: CD may update application pods, never API-server authentication.
+- name: Enable role-constrained OIDC on Kubernetes API servers
+  hosts: app_sites
+  serial: 1
+  any_errors_fatal: true
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Verify public issuer discovery before changing API-server authentication
+    ansible.builtin.uri:
+      url: 'https://{{ public_domain }}/id/realms/soloapp/.well-known/openid-configuration'
+      return_content: true
+    register: oidc_discovery
+    failed_when: oidc_discovery.status != 200 or oidc_discovery.json.issuer != 'https://' ~ public_domain ~ '/id/realms/soloapp'
+  - name: Read existing k3s configuration without exposing credentials
+    ansible.builtin.slurp:
+      src: /etc/rancher/k3s/config.yaml
+    register: oidc_k3s_original
+    no_log: true
+  - name: Preserve existing settings including workload identity issuers
+    ansible.builtin.set_fact:
+      oidc_k3s_config: '{{ oidc_k3s_original.content | b64decode | from_yaml }}'
+    no_log: true
+  - name: Refuse to replace an existing OIDC authentication mechanism
+    ansible.builtin.assert:
+      that:
+      - oidc_k3s_config['kube-apiserver-arg'] | default([]) | select('match', '^(--)?oidc-') | list | length == 0
+      - oidc_k3s_config['kube-apiserver-arg'] | default([]) | select('match', '^(--)?authentication-config=') | reject('equalto', 'authentication-config=/etc/rancher/k3s/oidc-authentication.yaml') | list | length == 0
+      quiet: true
+  - name: Install role-constrained JWT authenticator
+    ansible.builtin.template:
+      src: k8s/authentication.yaml.j2
+      dest: /etc/rancher/k3s/oidc-authentication.yaml
+      owner: root
+      group: root
+      mode: '0600'
+    register: oidc_auth_changed
+  - name: Add authentication configuration without changing other k3s arguments
+    ansible.builtin.copy:
+      content: "{{ oidc_k3s_config | combine({'kube-apiserver-arg': ((oidc_k3s_config['kube-apiserver-arg'] | default([])) + ['authentication-config=/etc/rancher/k3s/oidc-authentication.yaml']) | unique | list}) | to_nice_yaml }}"
+      dest: /etc/rancher/k3s/config.yaml
+      owner: root
+      group: root
+      mode: '0600'
+      backup: true
+    no_log: true
+    register: oidc_k3s_changed
+  - name: Restart one control plane at a time
+    ansible.builtin.systemd_service: {name: k3s, state: restarted}
+    when: oidc_k3s_changed.changed
+  - name: Wait for the local API server
+    ansible.builtin.command: k3s kubectl get --raw=/readyz
+    register: oidc_ready
+    until: oidc_ready.rc == 0 and oidc_ready.stdout == 'ok'
+    retries: 60
+    delay: 3
+    changed_when: false
+  - name: Bind only existing Headlamp privileges to explicitly assigned roles
+    ansible.builtin.command:
+      argv: [k3s, kubectl, apply, -f, '-']
+      stdin: '{{ lookup("file", project_root ~ "/infra/headlamp/k8s/oidc-rbac.yaml") }}'
+    changed_when: true

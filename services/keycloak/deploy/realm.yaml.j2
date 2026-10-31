@@ -1,0 +1,71 @@
+# Secret-free realm policy; confidential client credentials are injected from Lockbox.
+realm: soloapp
+enabled: true
+sslRequired: all
+registrationAllowed: false
+resetPasswordAllowed: false
+loginWithEmailAllowed: false
+bruteForceProtected: true
+permanentLockout: false
+failureFactor: 5
+waitIncrementSeconds: 60
+maxFailureWaitSeconds: 900
+accessTokenLifespan: 300
+ssoSessionIdleTimeout: 1800
+ssoSessionMaxLifespan: 43200
+webAuthnPolicyPasswordlessRpEntityName: Soloapp
+webAuthnPolicyPasswordlessRpId: '{{ public_domain }}'
+webAuthnPolicyPasswordlessSignatureAlgorithms: [ES256, RS256]
+webAuthnPolicyPasswordlessUserVerificationRequirement: required
+webAuthnPolicyPasswordlessResidentKey: required
+webAuthnPolicyPasswordlessPasskeysEnabled: true
+webAuthnPolicyPasswordlessMediation: conditional
+adminEventsEnabled: true
+adminEventsDetailsEnabled: false
+eventsEnabled: true
+eventsExpiration: 604800
+roles:
+  client:
+    headlamp:
+    - {name: viewer, description: Read Kubernetes overview}
+    - {name: operator, description: Read overview and update explicitly allowed application Deployments}
+    grafana:
+    - {name: viewer, description: Read dashboards}
+    - {name: editor, description: Edit dashboards}
+    - {name: admin, description: Manage the Grafana organization}
+clients:
+{% for client, callback, claim in [('headlamp', '/k8s/oidc-callback', 'headlamp_roles'), ('grafana', '/grafana/login/generic_oauth', 'grafana_roles')] %}
+- clientId: {{ client }}
+  enabled: true
+  protocol: openid-connect
+  publicClient: false
+  standardFlowEnabled: true
+  implicitFlowEnabled: false
+  directAccessGrantsEnabled: false
+  serviceAccountsEnabled: false
+  fullScopeAllowed: false
+  redirectUris: ['https://{{ public_domain }}{{ callback }}']
+  webOrigins: ['https://{{ public_domain }}']
+  attributes:
+    pkce.code.challenge.method: S256
+  defaultClientScopes: [profile, email, roles]
+  protocolMappers:
+  - name: {{ claim }}
+    protocol: openid-connect
+    protocolMapper: oidc-usermodel-client-role-mapper
+    config:
+      usermodel.clientRoleMapping.clientId: {{ client }}
+      claim.name: {{ claim }}
+      jsonType.label: String
+      multivalued: 'true'
+      access.token.claim: 'true'
+      id.token.claim: 'true'
+      userinfo.token.claim: 'true'
+  - name: audience
+    protocol: openid-connect
+    protocolMapper: oidc-audience-mapper
+    config:
+      included.client.audience: {{ client }}
+      id.token.claim: 'true'
+      access.token.claim: 'true'
+{% endfor %}

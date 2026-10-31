@@ -53,8 +53,17 @@ def unpack(data, sha):
             if size > MAX_EXPANDED:
                 raise ValueError("Expanded bundle too large")
             files[name] = archive.extractfile(member).read()
-    if not {"index.html", "flutter_bootstrap.js", "main.dart.js"} <= files.keys():
-        raise ValueError("Incomplete Flutter build")
+    flutter = {"index.html", "flutter_bootstrap.js", "main.dart.js"} <= files.keys()
+    planet = {
+        "index.html",
+        "client/main.js",
+        "client/api.js",
+        "client/generated/api.js",
+        "assets/world.json",
+        "vendor/babylon.js",
+    } <= files.keys()
+    if not (flutter or planet):
+        raise ValueError("Incomplete static application build")
     if f"/web/releases/{sha}/".encode() not in files["index.html"]:
         raise ValueError("Bundle base href disagrees with revision")
     manifest = {

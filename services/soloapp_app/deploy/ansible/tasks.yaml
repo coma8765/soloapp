@@ -1,0 +1,14 @@
+- name: Deploy whoami Service and isolation
+  ansible.builtin.include_tasks: "{{ project_root }}/infra/kubernetes/tasks/apply.yaml"
+  vars:
+    manifest_source: "{{ project_root }}/services/soloapp_app/deploy/k8s/service.yaml.j2"
+    manifest_name: whoami-service
+- name: Deploy whoami containers
+  ansible.builtin.include_tasks: "{{ project_root }}/infra/kubernetes/tasks/apply.yaml"
+  vars:
+    manifest_source: "{{ project_root }}/services/soloapp_app/deploy/k8s/deployment.yaml.j2"
+    manifest_name: whoami-deployment
+- name: Wait for whoami rolling update
+  ansible.builtin.command: k3s kubectl -n soloapp rollout status deployment/whoami --timeout=300s
+  changed_when: false
+  when: not ansible_check_mode

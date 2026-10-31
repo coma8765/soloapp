@@ -1,0 +1,24 @@
+# Update the already-authorized, root-owned gate; no new SSH/sudo/RBAC permissions.
+- name: Register Keycloak with the existing constrained deployment gate
+  hosts: app_sites
+  serial: 1
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Update validated deployment operation allowlist
+    ansible.builtin.copy:
+      src: '{{ project_root }}/infra/cd/{{ item.source }}'
+      dest: '{{ item.target }}'
+      owner: root
+      group: root
+      mode: '0755'
+    loop:
+    - {source: entry.py, target: /usr/local/libexec/soloapp-cd-entry}
+    - {source: deploy.py, target: /usr/local/libexec/soloapp-cd}
+  - name: Refresh resource identifiers for the pre-provisioned workload identity
+    ansible.builtin.copy:
+      src: '{{ project_root }}/infra/cloud/resources.json'
+      dest: /etc/soloapp-cd/resources.json
+      owner: root
+      group: root
+      mode: '0600'

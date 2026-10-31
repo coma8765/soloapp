@@ -3,7 +3,7 @@
 import json
 import os
 
-EXPECTED = {"source", "quality", "services", "app-api", "web", "gateway"}
+EXPECTED = {"source", "quality", "services", "app-api", "web", "gateway", "keycloak", "soloapp"}
 
 
 def check_results(needs):

@@ -1,0 +1,18 @@
+{
+  "apiVersion": "v1", "kind": "Config", "current-context": "yc",
+  "clusters": [
+{% for site in groups['app_sites'] %}
+    {"name": "{{ site }}", "cluster": {"server": "https://{{ hostvars[site].private_ip }}:6443", "certificate-authority-data": "{{ hostvars[site].headlamp_cluster_ca.content }}"}}{% if not loop.last %},{% endif %}
+{% endfor %}
+  ],
+  "contexts": [
+{% for site in groups['app_sites'] %}
+    {"name": "{{ site }}", "context": {"cluster": "{{ site }}", "user": "{{ site }}", "namespace": "soloapp"}}{% if not loop.last %},{% endif %}
+{% endfor %}
+  ],
+  "users": [
+{% for site in groups['app_sites'] %}
+    {"name": "{{ site }}", "user": {"auth-provider": {"name": "oidc", "config": {"client-id": "headlamp", "client-secret": "__OIDC_CLIENT_SECRET__", "idp-issuer-url": "https://{{ public_domain }}/id/realms/soloapp", "scope": "profile,email"}}}}{% if not loop.last %},{% endif %}
+{% endfor %}
+  ]
+}

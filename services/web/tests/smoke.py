@@ -14,7 +14,12 @@ with urllib.request.urlopen(base + "/", timeout=20) as r:
     html = r.read().decode()
     assert r.headers["X-Web-Revision"] == sha
 assert f"/web/releases/{sha}/" in html
-for path in ("flutter_bootstrap.js", "main.dart.js", "canvaskit/canvaskit.wasm"):
+paths = (
+    ("client/main.js", "client/generated/api.js", "assets/world.json")
+    if "client/main.js" in html
+    else ("flutter_bootstrap.js", "main.dart.js", "canvaskit/canvaskit.wasm")
+)
+for path in paths:
     with urllib.request.urlopen(base + f"/web/releases/{sha}/" + path, timeout=30) as r:
         assert r.status == 200 and len(r.read()) > 0
         assert "immutable" in r.headers["Cache-Control"]

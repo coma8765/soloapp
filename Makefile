@@ -11,11 +11,11 @@ CHECK_TARGETS := $(addprefix check-codegen-,$(SERVICES))
 
 .PHONY: all build test test-image codegen check-codegen help $(SERVICES) $(BUILD_TARGETS) $(TEST_TARGETS) $(TEST_IMAGE_TARGETS) $(CODEGEN_TARGETS) $(CHECK_TARGETS)
 all: build
-build: $(BUILD_TARGETS) build-nginx build-web
-test: test-codegen $(TEST_TARGETS)
+build: $(BUILD_TARGETS) build-nginx build-web build-keycloak build-soloapp
+test: test-codegen $(TEST_TARGETS) test-soloapp
 test-image: $(TEST_IMAGE_TARGETS)
-codegen: $(CODEGEN_TARGETS) codegen-nginx codegen-web
-check-codegen: $(CHECK_TARGETS) check-codegen-nginx check-codegen-web
+codegen: $(CODEGEN_TARGETS) codegen-nginx codegen-web codegen-soloapp
+check-codegen: $(CHECK_TARGETS) check-codegen-nginx check-codegen-web check-codegen-soloapp
 
 $(SERVICES): %: build-%
 
@@ -99,3 +99,16 @@ check-javascript:
 	services/app-api/node_modules/.bin/oxlint infra/telegram-relay/src infra/telegram-relay/tests
 check-dart:
 	$(PYTHON) infra/ci/check.py dart-format
+
+.PHONY: keycloak build-keycloak test-keycloak
+keycloak: build-keycloak
+build-keycloak test-keycloak:
+	$(MAKE) -C "$(PROJECT_ROOT)/services/keycloak" $(patsubst %-keycloak,%,$@)
+
+.PHONY: codegen-soloapp check-codegen-soloapp build-soloapp test-soloapp
+codegen-soloapp:
+	$(PYTHON) libs/api_codegen/generate_javascript.py
+check-codegen-soloapp:
+	$(PYTHON) libs/api_codegen/generate_javascript.py --check
+build-soloapp test-soloapp:
+	$(MAKE) -C services/soloapp_app $(subst -soloapp,,$@)

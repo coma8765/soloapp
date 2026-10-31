@@ -151,4 +151,4 @@ if __name__ == "__main__":
         total += len(asset(CURRENT, name))
         if total > MAX_CACHE:
             raise SystemExit("Release exceeds web cache budget")
-    Server(("0.0.0.0", 8080), Handler).serve_forever()
+    Server(("0.0.0.0", int(os.environ.get("PORT", "8080"))), Handler).serve_forever()

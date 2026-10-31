@@ -1,0 +1,41 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: keycloak, namespace: soloapp}
+spec:
+  podSelector: {matchLabels: {app: keycloak}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+  - from:
+    - podSelector: {matchLabels: {app: nginx}}
+    ports: [{protocol: TCP, port: 8080}, {protocol: TCP, port: 9000}]
+  - from:
+{% for site in groups['app_sites'] %}
+    - ipBlock: {cidr: '{{ hostvars[site].private_ip }}/32'}
+{% endfor %}
+    ports: [{protocol: TCP, port: 7800}, {protocol: TCP, port: 57800}]
+  egress:
+  - to:
+{% for site in groups['app_sites'] %}
+    - ipBlock: {cidr: '{{ hostvars[site].private_ip }}/32'}
+{% endfor %}
+    ports: [{protocol: TCP, port: 55432}, {protocol: TCP, port: 7800}, {protocol: TCP, port: 57800}]
+  - to:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+      podSelector: {matchLabels: {k8s-app: kube-dns}}
+    ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 127.0.0.0/8]
+    ports: [{protocol: TCP, port: 443}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: nginx-keycloak, namespace: soloapp}
+spec:
+  podSelector: {matchLabels: {app: nginx}}
+  policyTypes: [Egress]
+  egress:
+  - to:
+    - podSelector: {matchLabels: {app: keycloak}}
+    ports: [{protocol: TCP, port: 8080}, {protocol: TCP, port: 9000}]

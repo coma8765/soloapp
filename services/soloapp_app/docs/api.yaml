@@ -1,0 +1,82 @@
+openapi: 3.0.3
+info:
+  title: Soloapp shared world
+  version: 1.0.0
+paths:
+  /healthz:
+    get:
+      operationId: healthz
+      security: []
+      x-route:
+        exposure: internal
+        auth: none
+        max_body_bytes: 32768
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 10
+        rate_limit: null
+      responses:
+        '200':
+          description: Success
+  /health/ready:
+    get:
+      operationId: health_ready
+      security: []
+      x-route:
+        exposure: internal
+        auth: none
+        max_body_bytes: 32768
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 10
+        rate_limit: null
+      responses:
+        '200':
+          description: Success
+  /api/v1/soloapp_app/v1/user-id:
+    get:
+      operationId: user_id
+      security:
+      - bearerAuth: []
+      x-route:
+        exposure: public
+        auth: signed-user
+        max_body_bytes: 32768
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 10
+        rate_limit:
+          group: planet
+          requests_per_second: 10
+          burst: 20
+      responses:
+        '200':
+          description: Success
+  /api/v1/soloapp_app/v1/signal:
+    get:
+      operationId: signal
+      security: []
+      x-route:
+        exposure: public
+        auth: none
+        max_body_bytes: 32768
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 45
+        rate_limit:
+          group: planet
+          requests_per_second: 10
+          burst: 20
+      responses:
+        '101':
+          description: Authenticated game stream
+      x-websocket: true
+      description: First frame authenticates with a Soloapp token; strict Origin check.
+        Shared PG world with one fenced simulator, WSS snapshots and peer SDP/ICE
+        relay.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas: {}

@@ -1,0 +1,29 @@
+cmake_minimum_required(VERSION 3.20)
+project(soloapp_app LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+find_package(Drogon CONFIG REQUIRED)
+find_package(OpenSSL REQUIRED)
+find_program(ODB_COMPILER odb REQUIRED)
+find_library(ODB_LIBRARY odb REQUIRED)
+find_library(ODB_PGSQL_LIBRARY odb-pgsql REQUIRED)
+find_library(SODIUM_LIBRARY sodium REQUIRED)
+set(ODB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/generated/odb)
+add_custom_command(OUTPUT ${ODB_DIR}/world-odb.cxx ${ODB_DIR}/world-odb.hxx ${ODB_DIR}/world-odb.ixx
+ COMMAND ${CMAKE_COMMAND} -E make_directory ${ODB_DIR}
+ COMMAND ${ODB_COMPILER} --std c++11 --database pgsql --generate-query --output-dir ${ODB_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src/models/world.hpp
+ DEPENDS src/models/world.hpp VERBATIM)
+add_library(world_store src/logic/world_store.cpp src/logic/simulation.cpp ${ODB_DIR}/world-odb.cxx)
+target_include_directories(world_store PUBLIC src src/models src/logic ../../libs /usr/include/postgresql)
+target_link_libraries(world_store PUBLIC Drogon::Drogon OpenSSL::Crypto ${ODB_LIBRARY} ${ODB_PGSQL_LIBRARY})
+add_executable(soloapp-app src/main.cpp src/views/api.cpp src/logic/game.cpp)
+target_link_libraries(soloapp-app PRIVATE world_store ${SODIUM_LIBRARY})
+install(TARGETS soloapp-app RUNTIME DESTINATION bin)
+enable_testing()
+add_executable(simulation_test tests/simulation_test.cpp src/logic/simulation.cpp)
+target_include_directories(simulation_test PRIVATE src/logic)
+target_link_libraries(simulation_test PRIVATE Drogon::Drogon)
+add_test(NAME simulation COMMAND simulation_test ${CMAKE_CURRENT_SOURCE_DIR}/src/data/lakes.json)
+
+# Explicit integration binary: run against a disposable database with schema.sql.
+add_executable(world_store_test tests/world_store_test.cpp)
+target_link_libraries(world_store_test PRIVATE world_store)

@@ -3,11 +3,11 @@ on:
   workflow_dispatch:
     inputs:
       service:
-        description: 'Recommended: one service. app-api = NestJS; all = coordinated release'
+        description: 'Recommended: one service. app-api = soloapp_app; all = coordinated release'
         required: true
         type: choice
         default: app-api
-        options: [app-api, client-notify, client-gateway, auth, web, nginx, all]
+        options: [app-api, client-notify, client-gateway, auth, web, nginx, keycloak, all]
       rollback_revision:
         description: Previously deployed v0.1.P or full commit SHA; empty for a new release
         required: false
@@ -65,7 +65,8 @@ jobs:
             nginx) images='' ;;
             client-notify) images=client-notify ;;
             client-gateway) images=client-gateway ;;
-            all) images='auth whoami web client-notify client-gateway' ;;
+            keycloak) images=keycloak ;;
+            all) images='auth whoami web client-notify client-gateway keycloak' ;;
             *) exit 2 ;;
           esac
           echo "service=$SERVICE" >> "$GITHUB_OUTPUT"
@@ -113,21 +114,11 @@ jobs:
           printf '%s\n' "$YC_KEY" > "$RUNNER_TEMP/cd/yc"
           printf '%s\n' "$HOME_KEY" > "$RUNNER_TEMP/cd/home"
           printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/cd/known_hosts"
-      - if: inputs.rollback_revision == '' && (needs.prepare.outputs.service == 'web' || needs.prepare.outputs.service == 'all')
-        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
-        with:
-          flutter-version: '3.44.8'
-          channel: stable
-      - name: Build exact web revision
+      - name: Package exact web revision
         if: inputs.rollback_revision == '' && (needs.prepare.outputs.service == 'web' || needs.prepare.outputs.service == 'all')
-        working-directory: services/web
         env:
           SHA: ${{ needs.prepare.outputs.sha }}
-          VERSION: ${{ needs.prepare.outputs.version }}
-        run: |
-          flutter pub get --enforce-lockfile
-          flutter build web --release --no-web-resources-cdn --base-href "/web/releases/$SHA/" --dart-define="APP_VERSION=$VERSION" --build-name="${VERSION#v}" --build-number="${VERSION##*.}"
-          python3 deploy/package.py "$SHA" "$RUNNER_TEMP/web.tar.gz"
+        run: python3 services/soloapp_app/deploy/package.py "$SHA" "$RUNNER_TEMP/web.tar.gz"
       - name: Publish and verify both S3 replicas before activation
         if: inputs.rollback_revision == '' && (needs.prepare.outputs.service == 'web' || needs.prepare.outputs.service == 'all')
         env:

@@ -33,6 +33,9 @@ frontend https
   http-response set-header Strict-Transport-Security "max-age=31536000"
   use_backend grafana_sites if { path_beg /grafana }
   use_backend headlamp_sites if { path /k8s } or { path_beg /k8s/ }
+{% if keycloak_enabled | default(false) %}
+  use_backend keycloak_sites if { path /id } or { path_beg /id/ }
+{% endif %}
   default_backend auth_sites
 backend auth_sites
   balance roundrobin
@@ -76,11 +79,24 @@ frontend metrics
 # UI availability is independent of application/database readiness.
 backend headlamp_sites
   balance roundrobin
+  cookie HEADLAMP_SITE insert indirect nocache httponly secure
   timeout tunnel 1h
   option httpchk
   http-check send meth GET uri /k8s/ ver HTTP/1.1 hdr Host {{ public_domain }}
   http-check expect status 200
   default-server inter 1s fall 2 rise 1
 {% for site in groups['app_sites'] %}
+  server {{ site }} {{ hostvars[site].private_ip }}:{{ hostvars[site].nginx_config.node_port }} ssl verify required ca-file /run/soloapp-ingress/ca.crt crt /run/soloapp-ingress/client.pem verifyhost nginx-{{ site }} check cookie {{ site }}
+{% endfor %}
+
+{% if keycloak_enabled | default(false) %}
+backend keycloak_sites
+  balance source
+  option httpchk
+  http-check send meth GET uri /id/healthz ver HTTP/1.1 hdr Host {{ public_domain }}
+  http-check expect status 200
+  default-server inter 2s fall 2 rise 1
+{% for site in groups['app_sites'] %}
   server {{ site }} {{ hostvars[site].private_ip }}:{{ hostvars[site].nginx_config.node_port }} ssl verify required ca-file /run/soloapp-ingress/ca.crt crt /run/soloapp-ingress/client.pem verifyhost nginx-{{ site }} check
 {% endfor %}
+{% endif %}

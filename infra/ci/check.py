@@ -45,6 +45,8 @@ def main():
                 "services/client-notify/tests",
                 "services/whoami/src",
                 "services/whoami/tests",
+                "services/soloapp_app/src",
+                "services/soloapp_app/tests",
             ],
         )
         if args.check == "cpp-format":

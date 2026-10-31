@@ -1,0 +1,16 @@
+- name: Update OIDC gateway buffers one site at a time
+  hosts: app_sites
+  serial: 1
+  any_errors_fatal: true
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Apply only gateway resources
+    ansible.builtin.include_tasks: '{{ project_root }}/infra/kubernetes/tasks/apply.yaml'
+    vars:
+      manifest_source: '{{ project_root }}/infra/headlamp/k8s/gateway-oidc.yaml.j2'
+      manifest_name: gateway-oidc
+  - name: Wait for gateway readiness
+    ansible.builtin.command: k3s kubectl -n observability rollout status deployment/gateway --timeout=300s
+    changed_when: false
+    when: not ansible_check_mode

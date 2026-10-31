@@ -1,0 +1,14 @@
+profile: soloapp-local
+namespace: soloapp
+vm:
+  cpu: 8
+  memory_gib: 12
+  disk_gib: 48
+lan:
+  ip: 192.168.1.10
+  https_port: 443
+images:
+  postgres: postgres:16-bookworm@sha256:e8a07d2c7579b038938cdba6c539e580e5001caf9ea203d397b5cc83e76bd938
+  rabbitmq: rabbitmq:4-management@sha256:af6f50d38098d8bd52fef7f3fa85015dd8b2bf6def58e995bf584ae9ba0f6407
+  seaweedfs: chrislusf/seaweedfs:3.85@sha256:49312939c00c01e5ee6afbd7d728b18027821d3764c35a797a72acd4fdf3296a
+  nginx: nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236

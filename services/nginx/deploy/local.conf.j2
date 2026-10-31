@@ -1,0 +1,25 @@
+worker_processes 2;
+pid /tmp/nginx.pid;
+events { worker_connections 1024; }
+http {
+  client_body_temp_path /tmp/client;
+  proxy_temp_path /tmp/proxy;
+  map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+{{ maps }}
+  server {
+    listen 8443 ssl;
+    ssl_certificate /run/credentials/tls.crt;
+    ssl_certificate_key /run/credentials/tls.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    add_header X-Solo-Site macos-local always;
+    client_max_body_size 8k;
+    limit_req_status 429;
+    location = /healthz { return 200 'ok'; }
+{{ routes }}
+    location / {
+      proxy_set_header Authorization '';
+      proxy_set_header Cookie '';
+      proxy_pass http://web.soloapp.svc.cluster.local:80;
+    }
+  }
+}

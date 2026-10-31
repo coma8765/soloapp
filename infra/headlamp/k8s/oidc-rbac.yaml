@@ -1,0 +1,14 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: soloapp-headlamp-oidc-discovery}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: soloapp-headlamp-discovery}
+subjects:
+- {kind: Group, apiGroup: rbac.authorization.k8s.io, name: 'keycloak:headlamp:viewer'}
+- {kind: Group, apiGroup: rbac.authorization.k8s.io, name: 'keycloak:headlamp:operator'}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: headlamp-oidc-operator, namespace: soloapp}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: headlamp-operator}
+subjects:
+- {kind: Group, apiGroup: rbac.authorization.k8s.io, name: 'keycloak:headlamp:operator'}

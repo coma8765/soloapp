@@ -1,0 +1,75 @@
+- name: Deploy the independent macOS infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    local_root: '{{ playbook_dir }}'
+    project_root: '{{ playbook_dir }}/../..'
+    python: '{{ project_root }}/.venv-codegen/bin/python'
+    context: colima-soloapp-local
+  tasks:
+  - name: Require the dedicated context
+    ansible.builtin.command:
+      argv: [kubectl, --context, '{{ context }}', get, nodes, -o, name]
+    register: local_nodes
+    changed_when: false
+  - name: Validate node identity
+    ansible.builtin.assert:
+      that: "'colima-soloapp-local' in local_nodes.stdout"
+  - name: Install local credentials without writing plaintext manifests
+    ansible.builtin.command:
+      argv: ['{{ python }}', '{{ local_root }}/credentials.py']
+    no_log: true
+    changed_when: true
+  - name: Render non-secret infrastructure
+    ansible.builtin.command:
+      argv: ['{{ python }}', '{{ local_root }}/render.py']
+    register: local_manifest
+    changed_when: false
+  - name: Apply infrastructure only to the dedicated context
+    ansible.builtin.command:
+      argv: [kubectl, --context, '{{ context }}', apply, -f, '-']
+      stdin: '{{ local_manifest.stdout }}'
+    changed_when: true
+  - name: Wait for local persistent services
+    ansible.builtin.command:
+      argv: [kubectl, --context, '{{ context }}', -n, soloapp, rollout, status, 'statefulset/{{ item }}', --timeout=300s]
+    loop: [postgres, rabbitmq, seaweedfs]
+    changed_when: false
+  - name: Create dedicated RabbitMQ vhost
+    ansible.builtin.command:
+      argv: [kubectl, --context, '{{ context }}', -n, soloapp, exec, rabbitmq-0, --, rabbitmqctl, add_vhost, /soloapp]
+    changed_when: true
+  - name: Grant local publisher access only inside its vhost
+    ansible.builtin.command:
+      argv: [kubectl, --context, '{{ context }}', -n, soloapp, exec, rabbitmq-0, --, rabbitmqctl, set_permissions, -p, /soloapp, soloapp, '^$', '^amq\.default$', '^client-notify$']
+    changed_when: true
+  - name: Remove management administrator tag from the application user
+    ansible.builtin.command:
+      argv: [kubectl, --context, '{{ context }}', -n, soloapp, exec, rabbitmq-0, --, rabbitmqctl, set_user_tags, soloapp]
+    changed_when: true
+  - name: Declare durable local delivery queue
+    ansible.builtin.command:
+      argv: [kubectl, --context, '{{ context }}', -n, soloapp, exec, -i, rabbitmq-0, --, sh, -c, 'cat > /tmp/local-definitions.json && rabbitmqctl import_definitions /tmp/local-definitions.json']
+      stdin: '{{ lookup("file", local_root ~ "/rabbitmq-definitions.json") }}'
+    changed_when: true
+  - name: Initialize separate local app databases and identities
+    ansible.builtin.command:
+      argv: ['{{ python }}', '{{ local_root }}/apps.py', bootstrap]
+    no_log: true
+    changed_when: true
+  - name: Render local app manifests
+    ansible.builtin.command:
+      argv: ['{{ python }}', '{{ local_root }}/apps.py']
+    register: local_apps
+    changed_when: false
+  - name: Apply local app workloads
+    ansible.builtin.command:
+      argv: [kubectl, --context, '{{ context }}', apply, -f, '-']
+      stdin: '{{ local_apps.stdout }}'
+    changed_when: true
+  - name: Wait for local applications
+    ansible.builtin.command:
+      argv: [kubectl, --context, '{{ context }}', -n, soloapp, rollout, status, 'deployment/{{ item }}', --timeout=300s]
+    loop: [auth, whoami, client-gateway, client-notify, web, nginx]
+    changed_when: false

@@ -1,0 +1,8 @@
+#pragma once
+// Generated from services/soloapp_app/docs/api.yaml.
+namespace planet::routes {
+inline constexpr const char *healthz = "/healthz";
+inline constexpr const char *health_ready = "/health/ready";
+inline constexpr const char *user_id = "/api/v1/soloapp_app/v1/user-id";
+inline constexpr const char *signal = "/api/v1/soloapp_app/v1/signal";
+}

@@ -51,6 +51,30 @@ class ReleaseTests(unittest.TestCase):
         files, _ = unpack(buf.getvalue(), SHA)
         self.assertIn("manifest.json", files)
 
+    def test_planet_bundle_requires_generated_client(self):
+        entries = {
+            "index.html": f'<base href="/web/releases/{SHA}/">'.encode(),
+            "client/main.js": b"main",
+            "client/api.js": b"api",
+            "client/generated/api.js": b"generated",
+            "assets/world.json": b"{}",
+            "vendor/babylon.js": b"engine",
+        }
+
+        def archive():
+            buf = io.BytesIO()
+            with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+                for name, data in entries.items():
+                    info = tarfile.TarInfo(name)
+                    info.size = len(data)
+                    tf.addfile(info, io.BytesIO(data))
+            return buf.getvalue()
+
+        self.assertIn("client/generated/api.js", unpack(archive(), SHA)[0])
+        del entries["client/generated/api.js"]
+        with self.assertRaises(ValueError):
+            unpack(archive(), SHA)
+
     def test_paths_and_links(self):
         for path in ("../secret", "/etc/passwd", "a/../b", "a\\b", "a//b"):
             with self.assertRaises(ValueError):

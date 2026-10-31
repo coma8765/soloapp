@@ -1,0 +1,5 @@
+FROM nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236
+# Build context contains compiled public assets only.
+COPY . /usr/share/nginx/html/
+# Cached release builds can contain a production S3 release prefix.
+RUN sed -i 's|<base href="[^"]*">|<base href="/">|' /usr/share/nginx/html/index.html
