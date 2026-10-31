@@ -22,6 +22,12 @@ REVIEWED_LARGE_ASSETS = {
     "services/soloapp_app/public/assets/marine/clownfish.glb": "1ead5982ec41bffac00a80ab6f3d3b532eadc159d929b6156074b17ed0a46830",
     "services/soloapp_app/public/assets/marine/lobster.glb": "46953edfd7a46a966de71b42db0e58aa419d7b6ee89e072f7e0804c4dc25963a",
     "services/soloapp_app/public/assets/professor/professor-einstein.glb": "ee0b1674d60d5dc464206108caa89d4f333c296e206b2670ac9ce27a9e3b3367",
+    "services/soloapp_app/public/assets/reactor/ignalina-control-room-b-3200.jpg": "4fbd59351b261c8d20fb3f89eec9569e87a7175a5dd072b2d53c55588a9c32ce",
+    "services/soloapp_app/public/assets/reactor/ignalina-control-room-d-3200.jpg": "eb0f6e89f33fa061f969c1ea627469afa72a9acc315c0db2518ef5883ec90475",
+    "services/soloapp_app/public/assets/reactor/ignalina-control-room-f-3200.jpg": "f0dab9359cb2b00c8acfc6df742a16c37734948d88b729cb230e4b001b6ace73",
+    "services/soloapp_app/public/assets/reactor/ignalina-control-room-l-3200.jpg": "a43b05af654e483f7dda4687d142f9a1c3aa438f4ef9fd37c384883028dbc632",
+    "services/soloapp_app/public/assets/reactor/ignalina-control-room-r-3200.jpg": "c45cba663ebb6e9d658559b25a55a1a85503f15809242a671b390e106f6bc31d",
+    "services/soloapp_app/public/assets/reactor/ignalina-control-room-u-3200.jpg": "5f657f3237a9167dbec7dbd6e9b5bea50ae40b334186c8a16e383680af7bed54",
     "services/soloapp_app/public/vendor/babylon.js": "37c77bf920c0d7a3912c28a6120479f3d08fccd87a75e1f7558f76bd124cc6c4",
     "services/soloapp_app/public/assets/world.json": "4e67af509df70d92e86548897cca7113d61cbc7b8b105ad284f9c3a8e2b8c773",
 }

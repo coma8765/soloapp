@@ -573,11 +573,147 @@ nav > span {
 .in-vr #gamepad-status {
   display: none;
 }
+
+#reactor-hints[aria-pressed='true'] {
+  background: #d4e39c;
+  color: #203b31;
+}
+#reactor-telemetry {
+  position: fixed;
+  z-index: 3;
+  left: 32px;
+  bottom: 78px;
+  min-width: 310px;
+  padding: 12px 15px;
+  border: 1px solid #68d8dc66;
+  border-radius: 8px;
+  background: #08191ee6;
+  color: #d9eeee;
+  font:
+    11px/1.55 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  white-space: pre-line;
+  pointer-events: none;
+}
+#reactor-dialog {
+  position: fixed;
+  z-index: 6;
+  left: 32px;
+  top: 118px;
+  width: min(440px, calc(100vw - 64px));
+  max-height: calc(100dvh - 164px);
+  margin: 0;
+  padding: 24px;
+  overflow: auto;
+  border: 1px solid #68d8dc77;
+  border-radius: 12px;
+  background: #08191ef2;
+  color: #f0f5e7;
+  box-shadow: 0 18px 70px #02090cbf;
+}
+#reactor-dialog h2 {
+  margin: 14px 0 8px;
+  font-size: 22px;
+  line-height: 1.2;
+}
+#reactor-dialog p {
+  margin: 8px 0 16px;
+  line-height: 1.55;
+}
+#reactor-fields label,
+#reactor-fields .rbmk-switch {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 12px;
+  align-items: center;
+  margin: 14px 0;
+  color: #dce9e4;
+  font-size: 12px;
+}
+#reactor-fields input[type='range'] {
+  grid-column: 1 / -1;
+  width: 100%;
+  accent-color: #66d7db;
+}
+.rbmk-range-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+#reactor-fields input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  accent-color: #d4e39c;
+}
+#reactor-fields output {
+  color: #d4e39c;
+  font:
+    12px ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+#reactor-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 15px 0;
+}
+#reactor-actions button {
+  width: 100%;
+}
+#reactor-actions .danger {
+  background: #8f2929;
+  border-color: #ff8e7e;
+}
+#reactor-summary {
+  margin: 16px 0;
+  padding: 12px;
+  border-radius: 7px;
+  background: #102c32;
+  color: #d9eeee;
+  font:
+    11px/1.55 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  white-space: pre-wrap;
+}
+#reactor-source {
+  color: #9db4b1;
+  font-size: 11px;
+}
+#reactor-close {
+  width: 100%;
+}
+.in-reactor #marine-status,
+.in-vr #reactor-dialog,
+.in-vr #reactor-telemetry {
+  display: none !important;
+}
 @media (max-width: 750px) {
   #gamepad-status {
     bottom: 104px;
     font-size: 10px;
     width: max-content;
+  }
+  #reactor-telemetry {
+    left: 18px;
+    bottom: 135px;
+    min-width: 0;
+    max-width: calc(100vw - 36px);
+    font-size: 9px;
+  }
+  #reactor-dialog {
+    left: 16px;
+    top: 112px;
+    width: calc(100vw - 32px);
+    max-height: calc(100dvh - 132px);
+    padding: 18px;
   }
 }
 
