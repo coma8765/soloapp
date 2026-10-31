@@ -19,7 +19,7 @@ esac
 for service in "${services[@]}"; do
   dockerfile="services/$service/deploy/Dockerfile"
   # Keep the deployed image identity for digest-based rollback compatibility.
-  if [ "$service" = whoami ]; then dockerfile=services/app-api/deploy/Dockerfile; fi
+  if [ "$service" = whoami ]; then dockerfile=services/soloapp_app/deploy/Dockerfile; fi
   docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
     --target runtime --label "org.opencontainers.image.revision=$sha" --label "org.opencontainers.image.version=${RELEASE_VERSION:-$sha}" \
     -f "$dockerfile" \

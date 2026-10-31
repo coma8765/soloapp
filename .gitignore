@@ -32,3 +32,9 @@ __pycache__/
 
 # Node services and shared runtime dependencies
 **/node_modules/
+
+# Local contour settings and reproducible upstream compression caches
+/infra/local-macos/config.yaml
+/services/soloapp_app/public/**/*.gz
+
+/infra/local-macos/import-cached.sh

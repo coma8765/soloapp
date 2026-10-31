@@ -72,6 +72,10 @@ jobs:
         run: |
           services/app-api/node_modules/.bin/prettier --check infra/telegram-relay/src infra/telegram-relay/tests libs/chat_runtime/src libs/chat_runtime/tests services/client-gateway/src/logic services/client-gateway/src/views services/client-gateway/src/main.mjs services/client-gateway/tests
           services/app-api/node_modules/.bin/oxlint infra/telegram-relay/src infra/telegram-relay/tests libs/chat_runtime/src libs/chat_runtime/tests services/client-gateway/src/logic services/client-gateway/src/views services/client-gateway/src/main.mjs services/client-gateway/tests
+      - name: Game browser style and analysis
+        run: |
+          services/app-api/node_modules/.bin/prettier --check 'services/soloapp_app/public/client/*.{js,css}' services/soloapp_app/public/shared/world.js services/soloapp_app/tests/smoke.mjs
+          services/app-api/node_modules/.bin/oxlint --deny-warnings services/soloapp_app/public/client services/soloapp_app/public/shared services/soloapp_app/tests/smoke.mjs
       - name: Validate GitHub Actions and embedded shell
         run: actionlint .github/workflows/ci.yaml .github/workflows/deploy.yaml
   services:
@@ -181,7 +185,7 @@ jobs:
   required:
     name: Required checks
     if: always()
-    needs: [source, quality, services, app-api, web, gateway, keycloak]
+    needs: [source, quality, services, app-api, web, gateway, keycloak, soloapp]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -209,4 +213,23 @@ jobs:
         with:
           name: keycloak-image
           path: ${{ runner.temp }}/images/keycloak.oci.tar
+          retention-days: 3
+
+  soloapp:
+    name: soloapp_app (C++ and browser)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: {persist-credentials: false}
+      - name: Build C++ and test checkpoint recovery
+        run: docker build --target build -t soloapp-test -f services/soloapp_app/deploy/Dockerfile .
+      - name: Test database election and old leader fencing
+        run: bash services/soloapp_app/tests/integration.sh
+      - name: Validate versioned browser bundle
+        run: python3 services/soloapp_app/deploy/package.py "$GITHUB_SHA" "$RUNNER_TEMP/soloapp-web.tar.gz"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: soloapp-web-bundle
+          path: ${{ runner.temp }}/soloapp-web.tar.gz
           retention-days: 3

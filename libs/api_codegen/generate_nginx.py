@@ -7,7 +7,7 @@ from pathlib import Path
 from route_policy import load, operations, require
 
 ROOT = Path(__file__).resolve().parents[2]
-SERVICES = ("auth", "whoami", "app-api")
+SERVICES = ("auth", "whoami", "app-api", "soloapp_app")
 
 
 def render(root=ROOT):
@@ -15,9 +15,11 @@ def render(root=ROOT):
     rates = {}
     verify = None
     for service in SERVICES:
-        backend = "whoami" if service == "app-api" else service
+        backend = "whoami" if service in ("app-api", "soloapp_app") else service
         for path, method, op in operations(load(root / "services" / service)):
-            backend = op.get("x-upstream", "whoami" if service == "app-api" else service)
+            backend = op.get(
+                "x-upstream", "whoami" if service in ("app-api", "soloapp_app") else service
+            )
             policy = dict(op["x-route"])
             policy["websocket"] = op.get("x-websocket", False)
             if service == "auth" and op["operationId"] == "internal_verify":

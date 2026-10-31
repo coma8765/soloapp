@@ -18,7 +18,7 @@ class PolicyTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.specs = {}
-        for name in ("auth", "whoami", "app-api"):
+        for name in ("auth", "whoami", "app-api", "soloapp_app"):
             self.specs[name] = load(ROOT / "services" / name)
         self.save()
 

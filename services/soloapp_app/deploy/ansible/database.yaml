@@ -1,0 +1,19 @@
+# Operator migration: additive tables only; never run on a standby.
+- name: Prepare the shared game database
+  hosts: app_sites
+  serial: 1
+  gather_facts: false
+  become: true
+  tasks:
+  - name: Detect writable primary
+    ansible.builtin.command:
+      argv: [docker, exec, -u, postgres, solo-postgres, psql, -p, '55432', -d, chatdb, -Atc, 'SELECT NOT pg_is_in_recovery()']
+    register: writable
+    changed_when: false
+    check_mode: false
+  - name: Apply additive world schema on primary
+    ansible.builtin.command:
+      argv: [docker, exec, -i, -u, postgres, solo-postgres, psql, -p, '55432', -d, chatdb, -v, ON_ERROR_STOP=1]
+      stdin: '{{ lookup("file", playbook_dir ~ "/../schema.sql") }}'
+    when: writable.stdout | trim == 't' and not ansible_check_mode
+    changed_when: true

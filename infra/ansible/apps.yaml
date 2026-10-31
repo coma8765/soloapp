@@ -41,7 +41,7 @@
     ansible.builtin.import_tasks: ../../services/client-notify/deploy/ansible/tasks.yaml
     tags: [client-notify]
   - name: Deploy whoami
-    ansible.builtin.import_tasks: ../../services/whoami/deploy/ansible/tasks.yaml
+    ansible.builtin.import_tasks: ../../services/soloapp_app/deploy/ansible/tasks.yaml
     tags:
     - whoami
   - name: Deploy auth

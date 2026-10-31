@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Scan publishable worktree, exact index, and existing history without uploading data."""
 
+import hashlib
 import shutil
 import subprocess
 import tempfile
@@ -11,6 +12,12 @@ FORBIDDEN = {
     "infra/cloud/resources.json",
     "infra/ansible/inventory.yaml",
     "infra/ha/deployment-history.md",
+}
+
+
+REVIEWED_LARGE_ASSETS = {
+    "services/soloapp_app/public/vendor/babylon.js": "37c77bf920c0d7a3912c28a6120479f3d08fccd87a75e1f7558f76bd124cc6c4",
+    "services/soloapp_app/public/assets/world.json": "4e67af509df70d92e86548897cca7113d61cbc7b8b105ad284f9c3a8e2b8c773",
 }
 
 
@@ -58,7 +65,10 @@ def scan_snapshot(names, staged=False):
                 if not source.exists():
                     continue
                 data = source.read_bytes()
-            if len(data) > 2 * 1024 * 1024:
+            if (
+                len(data) > 2 * 1024 * 1024
+                and REVIEWED_LARGE_ASSETS.get(name) != hashlib.sha256(data).hexdigest()
+            ):
                 raise SystemExit("Unexpected large publication file: " + name)
             destination = snapshot / name
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -72,6 +82,7 @@ def scan_snapshot(names, staged=False):
                 "--config",
                 str(ROOT / ".gitleaks.toml"),
                 "--redact=100",
+                "--verbose",
                 "--no-banner",
             ],
             check=True,
@@ -104,6 +115,7 @@ def main():
                 "--config",
                 str(ROOT / ".gitleaks.toml"),
                 "--redact=100",
+                "--verbose",
                 "--no-banner",
             ],
             check=True,
