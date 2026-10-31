@@ -1,101 +1,10 @@
 import { orientation, vec } from './scene.js';
-import { RbmkModel, RBMK_CONTROLS } from './rbmk-model.js';
+import { REACTOR_MAP } from '../shared/room.js';
+import { RbmkModel } from './rbmk-model.js';
+import { RBMK_CONTROLS, RBMK_PANEL_PARTS } from './rbmk-data.js';
 
 const B = window.BABYLON;
-export const REACTOR_MAP = 'rbmk-training-room';
-
-const PARTS = [
-  {
-    id: 'annunciators',
-    title: 'Табло сигнализации и первопричина события',
-    description:
-      'Ряды световых ячеек показывают отклонения параметров и срабатывание защит. В упражнении важно сначала назвать первопричину, затем подтвердить связанные сигналы и распределить действия в смене.',
-    source:
-      'R10, R11 и SpaceIta M03/M04. Фото — БЩУ Игналинской АЭС, РБМК-1500.',
-    wall: 'back',
-    area: [-8, 4.8, 8, 4.6],
-  },
-  {
-    id: 'core-map',
-    title: 'СКАЛА и карта активной зоны',
-    description:
-      'Информационно-вычислительная система собирает канальные измерения, рассчитывает распределение мощности и помогает оператору контролировать энерговыделение. Это обзорная учебная зона, а не копия алгоритмов конкретного блока.',
-    source: 'R01, R02, R04 и R15.',
-    wall: 'left',
-    area: [-8, 5, 8, 5],
-    controls: ['targetPower'],
-  },
-  {
-    id: 'cps',
-    title: 'Система управления и защиты, стержни и ОЗР',
-    description:
-      'Положение стержней влияет на реактивность и мощность. Оперативный запас реактивности в модели рассчитывается из положения стержней и ксенонового отравления; он не является сертифицированным расчётом СКАЛА.',
-    source: 'R01, с. 33–51; R04; INSAG-7.',
-    wall: 'left',
-    area: [0, 5, 8, 5],
-    controls: ['rodInsertion'],
-  },
-  {
-    id: 'coolant',
-    title: 'КМПЦ и главные циркуляционные насосы',
-    description:
-      'Контур многократной принудительной циркуляции отводит тепло от технологических каналов. Снижение числа работающих ГЦН уменьшает расход, меняет паросодержание и вызывает защитные сигналы.',
-    source: 'R03; R04; IAEA Safety Reports Series No. 43.',
-    wall: 'left',
-    area: [-8, 0.2, 8, 4.8],
-    controls: ['coolantFlow', 'pumpsPerLoop'],
-  },
-  {
-    id: 'drums',
-    title: 'Барабаны-сепараторы и питательная вода',
-    description:
-      'В барабанах пар отделяется от воды. Баланс парообразования и подачи питательной воды определяет уровень; его значительное снижение формирует предупредительные и аварийные сигналы.',
-    source: 'R03; R06; SpaceIta M09 и M20.',
-    wall: 'left',
-    area: [0, 0.2, 8, 4.8],
-    controls: ['feedwaterFlow'],
-  },
-  {
-    id: 'turbine',
-    title: 'Турбогенератор и паровая нагрузка',
-    description:
-      'Нагрузка турбины задаёт отбор пара. Несоответствие мощности реактора и турбинной нагрузки отражается на давлении КМПЦ и требует согласованных действий реакторного и турбинного персонала.',
-    source: 'R03; R06; SpaceIta M10, M11, M17 и M22.',
-    wall: 'back',
-    area: [-8, 0.2, 8, 4.6],
-    controls: ['turbineLoad'],
-  },
-  {
-    id: 'eccs',
-    title: 'САОР — система аварийного охлаждения реактора',
-    description:
-      'САОР подаёт воду при потере теплоносителя. Переключатель здесь нужен для учебных сценариев; выведение системы немедленно формирует сигнал и изменяет доступные действия при разрыве.',
-    source: 'R03; IAEA SRS-43; SpaceIta M04, M16 и M23.',
-    wall: 'back',
-    area: [0, 0.2, 8, 4.6],
-    controls: ['eccsEnabled'],
-  },
-  {
-    id: 'az5',
-    title: 'АЗ-5 — аварийная остановка реактора',
-    description:
-      'Команда аварийной защиты вводит стержни и быстро снижает мощность. Повторный пуск разрешается в модели только после снижения мощности ниже 3%; реальная процедура зависит от блока, причины и регламента.',
-    source: 'R01; R04; INSAG-7; SpaceIta M04.',
-    wall: 'back',
-    area: [0, 4.8, 8, 4.6],
-    actions: ['scram', 'clear'],
-  },
-];
-
-const CONTROL_LABELS = {
-  targetPower: 'Задание мощности',
-  rodInsertion: 'Ввод стержней',
-  coolantFlow: 'Задание расхода КМПЦ',
-  feedwaterFlow: 'Питательная вода',
-  turbineLoad: 'Нагрузка турбогенератора',
-  pumpsPerLoop: 'Работающие ГЦН в петле',
-  eccsEnabled: 'САОР готова',
-};
+export { REACTOR_MAP } from '../shared/room.js';
 
 export class ReactorRoom {
   constructor(scene, terrain, planet, player, canvas, elements) {
@@ -114,6 +23,8 @@ export class ReactorRoom {
     this.hotspots = [];
     this.cooldown = 0;
     this.lastStatusDraw = 0;
+    this.lastSharedState = 0;
+    this.teamLog = [];
     this.materials = new Map();
     this.buildRoom();
     this.buildPlanetPortal();
@@ -339,43 +250,41 @@ export class ReactorRoom {
   }
 
   buildHotspots() {
-    for (const part of PARTS) {
+    for (const part of RBMK_PANEL_PARTS) {
       const [offset, bottom, width, height] = part.area;
-      const walls = [part.wall, part.wall === 'left' ? 'right' : 'front'];
-      for (const wall of walls) {
-        const mesh = B.MeshBuilder.CreatePlane(
-          `RBMK hotspot ${part.id} ${wall}`,
-          { width, height },
-          this.scene,
+      const wall = part.wall;
+      const mesh = B.MeshBuilder.CreatePlane(
+        `RBMK hotspot ${part.id} ${wall}`,
+        { width, height },
+        this.scene,
+      );
+      mesh.parent = this.root;
+      if (wall === 'left' || wall === 'right') {
+        mesh.position.set(
+          wall === 'left' ? -11.88 : 11.88,
+          bottom + height / 2,
+          offset + width / 2,
         );
-        mesh.parent = this.root;
-        if (wall === 'left' || wall === 'right') {
-          mesh.position.set(
-            wall === 'left' ? -11.88 : 11.88,
-            bottom + height / 2,
-            offset + width / 2,
-          );
-          mesh.rotation.y = wall === 'left' ? Math.PI / 2 : -Math.PI / 2;
-        } else {
-          mesh.position.set(
-            offset + width / 2,
-            bottom + height / 2,
-            wall === 'back' ? 11.88 : -11.88,
-          );
-          mesh.rotation.y = wall === 'back' ? Math.PI : 0;
-        }
-        const material = this.material(
-          `RBMK hotspot material ${part.id} ${wall}`,
-          part.id === 'az5' ? '#ff684d' : '#59d6de',
-          true,
-          0.025,
+        mesh.rotation.y = wall === 'left' ? Math.PI / 2 : -Math.PI / 2;
+      } else {
+        mesh.position.set(
+          offset + width / 2,
+          bottom + height / 2,
+          wall === 'back' ? 11.88 : -11.88,
         );
-        material.backFaceCulling = false;
-        mesh.material = material;
-        mesh.metadata = { rbmkPart: part };
-        mesh.isPickable = false;
-        this.hotspots.push(mesh);
+        mesh.rotation.y = wall === 'back' ? Math.PI : 0;
       }
+      const material = this.material(
+        `RBMK hotspot material ${part.id} ${wall}`,
+        part.id === 'az5' ? '#ff684d' : '#59d6de',
+        true,
+        0.025,
+      );
+      material.backFaceCulling = false;
+      mesh.material = material;
+      mesh.metadata = { rbmkPart: part };
+      mesh.isPickable = false;
+      this.hotspots.push(mesh);
     }
   }
 
@@ -413,6 +322,135 @@ export class ReactorRoom {
     this.drawStatus(true);
   }
 
+  connectNetwork(network) {
+    this.network = network;
+    network.onReactorMessage = (peerId, message) =>
+      this.receiveNetworkMessage(peerId, message);
+  }
+
+  share(kind, payload = {}) {
+    this.network?.broadcastControl({
+      type: 'reactor',
+      map: REACTOR_MAP,
+      kind,
+      ...payload,
+    });
+  }
+
+  actorLabel(peerId = this.network?.id) {
+    return peerId ? `участник #${peerId}` : 'локальный участник';
+  }
+
+  record(text, peerId = this.network?.id) {
+    const elapsed = Math.max(0, Math.round(this.model.elapsed));
+    this.teamLog.unshift(
+      `${String(Math.floor(elapsed / 60)).padStart(2, '0')}:${String(
+        elapsed % 60,
+      ).padStart(2, '0')} · ${this.actorLabel(peerId)} · ${text}`,
+    );
+    this.teamLog.length = Math.min(this.teamLog.length, 12);
+    this.syncTeamPanel();
+  }
+
+  syncTeamPanel() {
+    if (!this.elements.team) return;
+    const participants = [
+      ...(this.network?.id ? [this.network.id] : []),
+      ...[...(this.network?.remotes || [])]
+        .filter(([, remote]) => remote.state?.map === REACTOR_MAP)
+        .map(([id]) => id),
+    ].sort((a, b) => a - b);
+    const heading = participants.length
+      ? `Команда в БЩУ: ${participants.map((id) => `#${id}`).join(', ')}`
+      : 'Локальный режим · войдите для командной синхронизации';
+    const value = `${heading}\n${
+      this.teamLog.join('\n') || 'Журнал действий пока пуст'
+    }`;
+    if (this.elements.team.textContent !== value)
+      this.elements.team.textContent = value;
+  }
+
+  applyAction(action) {
+    if (action === 'scram') {
+      this.model.scram();
+      return true;
+    }
+    if (action === 'clear') return this.model.clearScram();
+    if (action === 'reset') {
+      this.model.reset();
+      return true;
+    }
+    return false;
+  }
+
+  receiveNetworkMessage(peerId, message) {
+    if (!this.active || message?.map !== REACTOR_MAP) return;
+    if (message.kind === 'state-request') {
+      this.network?.sendControl(peerId, {
+        type: 'reactor',
+        map: REACTOR_MAP,
+        kind: 'state',
+        state: this.model.snapshot(),
+      });
+      return;
+    }
+    if (message.kind === 'state') {
+      if (this.model.restore(message.state)) {
+        this.drawStatus(true);
+        this.syncDialog();
+      }
+      return;
+    }
+    if (message.kind === 'control') {
+      const value = this.model.setControl(message.name, message.value);
+      if (value === undefined) return;
+      const schema = RBMK_CONTROLS[message.name];
+      this.record(
+        `${schema.label}: ${this.formatControl(message.name, value)}`,
+        peerId,
+      );
+    } else if (message.kind === 'action') {
+      if (!this.applyAction(message.action)) return;
+      this.record(this.actionLabel(message.action), peerId);
+    } else return;
+    this.syncDialog();
+    this.drawStatus(true);
+  }
+
+  teamLeader() {
+    const candidates = [
+      ...(this.network?.id ? [this.network.id] : []),
+      ...[...(this.network?.remotes || [])]
+        .filter(([, remote]) => remote.state?.map === REACTOR_MAP)
+        .map(([id]) => id),
+    ];
+    return candidates.length ? Math.min(...candidates) : 0;
+  }
+
+  teamSize() {
+    if (!this.active) return 0;
+    return (
+      1 +
+      [...(this.network?.remotes || [])].filter(
+        ([, remote]) => remote.state?.map === REACTOR_MAP,
+      ).length
+    );
+  }
+
+  formatControl(name, value) {
+    const schema = RBMK_CONTROLS[name];
+    if (schema.type === 'checkbox') return value ? 'да' : 'нет';
+    if (schema.type === 'select') return schema.options[value];
+    const rounded = Math.round(value / schema.step) * schema.step;
+    return `${rounded} ${schema.unit}`;
+  }
+
+  actionLabel(action) {
+    if (action === 'scram') return 'АЗ-5';
+    if (action === 'clear') return 'снятие останова';
+    return 'возврат к исходному режиму';
+  }
+
   bindUI() {
     const { hints, exit, dialog, close, fields, actions } = this.elements;
     hints.onclick = () => this.setHints(!this.hints);
@@ -422,9 +460,18 @@ export class ReactorRoom {
       const input = event.target.closest('[data-rbmk-control]');
       if (!input) return;
       const name = input.dataset.rbmkControl;
-      this.model.setControl(
+      const value = this.model.setControl(
         name,
-        input.type === 'checkbox' ? input.checked : Number(input.value),
+        input.type === 'checkbox'
+          ? input.checked
+          : input.type === 'range'
+            ? Number(input.value)
+            : input.value,
+      );
+      if (value === undefined) return;
+      this.share('control', { name, value });
+      this.record(
+        `${RBMK_CONTROLS[name].label}: ${this.formatControl(name, value)}`,
       );
       this.syncDialog();
       this.drawStatus(true);
@@ -432,9 +479,9 @@ export class ReactorRoom {
     actions.addEventListener('click', (event) => {
       const action =
         event.target.closest('[data-rbmk-action]')?.dataset.rbmkAction;
-      if (action === 'scram') this.model.scram();
-      if (action === 'clear') this.model.clearScram();
-      if (action === 'reset') this.model.reset();
+      if (!this.applyAction(action)) return;
+      this.share('action', { action });
+      this.record(this.actionLabel(action));
       this.syncDialog();
       this.drawStatus(true);
     });
@@ -481,7 +528,7 @@ export class ReactorRoom {
     if (this.hints) {
       document.exitPointerLock?.();
       this.player.keys.clear();
-      this.openPart(PARTS[0]);
+      this.openPart(RBMK_PANEL_PARTS[0]);
     } else {
       this.canvas.style.cursor = '';
       if (this.elements.dialog.open) this.elements.dialog.close();
@@ -502,19 +549,32 @@ export class ReactorRoom {
   renderControls(part) {
     const fields = [];
     for (const name of part.controls || []) {
-      if (name === 'eccsEnabled') {
+      const schema = RBMK_CONTROLS[name];
+      if (schema.type === 'checkbox') {
         const label = document.createElement('label');
         label.className = 'rbmk-switch';
         const input = document.createElement('input');
         input.type = 'checkbox';
         input.dataset.rbmkControl = name;
-        label.append(input, document.createTextNode(CONTROL_LABELS[name]));
+        label.append(input, document.createTextNode(schema.label));
         fields.push(label);
         continue;
       }
-      const schema = RBMK_CONTROLS[name];
       const label = document.createElement('label');
-      label.textContent = CONTROL_LABELS[name];
+      label.textContent = schema.label;
+      if (schema.type === 'select') {
+        const select = document.createElement('select');
+        select.dataset.rbmkControl = name;
+        for (const [value, text] of Object.entries(schema.options)) {
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = text;
+          select.append(option);
+        }
+        label.append(select);
+        fields.push(label);
+        continue;
+      }
       const row = document.createElement('span');
       row.className = 'rbmk-range-row';
       const input = document.createElement('input');
@@ -563,12 +623,16 @@ export class ReactorRoom {
       '[data-rbmk-value]',
     )) {
       const name = output.dataset.rbmkValue;
-      output.value = `${state.controls[name]} ${RBMK_CONTROLS[name].unit}`;
+      output.value = this.formatControl(name, state.controls[name]);
     }
     const clear = this.elements.actions.querySelector(
       '[data-rbmk-action="clear"]',
     );
-    if (clear) clear.disabled = !state.scrammed || state.power > 3;
+    if (clear)
+      clear.disabled =
+        !state.scrammed ||
+        state.power > 3 ||
+        state.controls.scenario !== 'normal';
     this.elements.summary.textContent = this.statusText();
   }
 
@@ -591,7 +655,11 @@ export class ReactorRoom {
     this.elements.hints.hidden = false;
     this.elements.exit.hidden = false;
     this.elements.telemetry.hidden = false;
+    if (this.elements.team) this.elements.team.hidden = false;
     document.body.classList.add('in-reactor');
+    this.record('вход через портал');
+    this.share('state-request');
+    this.syncTeamPanel();
     this.drawStatus(true);
   }
 
@@ -612,7 +680,9 @@ export class ReactorRoom {
     this.elements.hints.hidden = true;
     this.elements.exit.hidden = true;
     this.elements.telemetry.hidden = true;
+    if (this.elements.team) this.elements.team.hidden = true;
     document.body.classList.remove('in-reactor');
+    this.syncTeamPanel();
   }
 
   get uiOpen() {
@@ -631,6 +701,15 @@ export class ReactorRoom {
       return;
     }
     this.model.step(dt);
+    const now = performance.now();
+    if (
+      this.network?.id &&
+      this.teamLeader() === this.network.id &&
+      now - this.lastSharedState > 1000
+    ) {
+      this.lastSharedState = now;
+      this.share('state', { state: this.model.snapshot() });
+    }
     if (
       this.cooldown === 0 &&
       Math.hypot(
@@ -644,12 +723,13 @@ export class ReactorRoom {
     this.drawStatus();
     if (this.elements.dialog.open) this.syncDialog();
     this.elements.telemetry.textContent = this.statusText();
+    this.syncTeamPanel();
   }
 
   statusText() {
     const s = this.model.snapshot();
     const alarms = s.alarms.length ? s.alarms.join('\n') : 'Сигналов нет';
-    return `РБМК · УЧЕБНАЯ МОДЕЛЬ\nМощность ${s.power.toFixed(1)} %\nДавление ${s.pressure.toFixed(2)} МПа\nУровень БС ${Math.round(s.drumLevel)} мм\nРасход ${Math.round(s.controls.coolantFlow * (s.controls.pumpsPerLoop / 4))} %\nОЗР ${s.orm.toFixed(1)} ст.\nПаросодержание ${(s.voidFraction * 100).toFixed(1)} %\nТемпература ${s.coreTemperature.toFixed(1)} °C\n${alarms}`;
+    return `РБМК · УЧЕБНАЯ МОДЕЛЬ v${s.modelVersion}\nСценарий: ${s.scenario.label}\nМощность ${s.power.toFixed(1)} % · ${s.electricalPower.toFixed(0)} МВт\nДавление ${s.pressure.toFixed(2)} МПа\nУровни БС Л/П ${Math.round(s.drumLevelLeft)} / ${Math.round(s.drumLevelRight)} мм\nРасходы физ. Л/П ${s.flowLeft.toFixed(0)} / ${s.flowRight.toFixed(0)} %\nПоказания Л/П ${s.measuredFlowLeft.toFixed(0)} / ${s.measuredFlowRight.toFixed(0)} %\nОЗР ${s.orm.toFixed(1)} ст. · ρ ${s.reactivity.toFixed(2)} усл.\nПаросодержание ${(s.voidFraction * 100).toFixed(1)} % · запас ${s.coolantInventory.toFixed(1)} %\nT теплоносителя/топлива ${s.coolantTemperature.toFixed(1)} / ${s.fuelTemperature.toFixed(0)} °C\n${alarms}`;
   }
 
   drawStatus(force = false) {
@@ -670,10 +750,16 @@ export class ReactorRoom {
     const rows = [
       [`N, %`, s.power.toFixed(1)],
       [`P КМПЦ, МПа`, s.pressure.toFixed(2)],
-      [`H БС, мм`, Math.round(s.drumLevel)],
+      [
+        `H БС Л/П, мм`,
+        `${Math.round(s.drumLevelLeft)}/${Math.round(s.drumLevelRight)}`,
+      ],
       [`ОЗР, ст.`, s.orm.toFixed(1)],
-      [`α пар, %`, (s.voidFraction * 100).toFixed(1)],
-      [`t активной зоны, °C`, s.coreTemperature.toFixed(1)],
+      [
+        `G КМПЦ Л/П, %`,
+        `${s.measuredFlowLeft.toFixed(0)}/${s.measuredFlowRight.toFixed(0)}`,
+      ],
+      [`Nэл, МВт`, s.electricalPower.toFixed(0)],
     ];
     rows.forEach(([label, value], index) => {
       const x = index < 3 ? 40 : 530;

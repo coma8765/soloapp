@@ -62,6 +62,7 @@ async function start() {
     fields: $('reactor-fields'),
     actions: $('reactor-actions'),
     summary: $('reactor-summary'),
+    team: $('reactor-team'),
   });
   if (
     location.hostname === '127.0.0.1' &&
@@ -147,6 +148,7 @@ async function start() {
     },
     voice,
   );
+  reactor.connectNetwork(network);
   lobby = new Lobby(
     auth,
     network,
@@ -482,7 +484,7 @@ async function start() {
           `${Math.round(fps)} FPS · белая комната\n${network.peers.size + 1} / 8 игроков · RTT ${network.ping ?? '—'} мс\n${network.worldTransport} · tick ${network.worldTick}`;
       if (reactor.active)
         $('stats').textContent =
-          `${Math.round(fps)} FPS · учебный БЩУ РБМК\nЛокальная детерминированная модель\nСеть позиций приостановлена`;
+          `${Math.round(fps)} FPS · учебный БЩУ РБМК\nОбщая детерминированная модель\nКоманда · ${reactor.teamSize()} участ.`;
       $('players').textContent = reactor.active
         ? ''
         : [...network.remotes]

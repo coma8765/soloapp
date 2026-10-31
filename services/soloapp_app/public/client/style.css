@@ -597,6 +597,27 @@ nav > span {
   white-space: pre-line;
   pointer-events: none;
 }
+#reactor-team {
+  position: fixed;
+  z-index: 3;
+  right: 28px;
+  bottom: 78px;
+  width: min(390px, calc(100vw - 64px));
+  max-height: 190px;
+  overflow: hidden;
+  padding: 12px 15px;
+  border: 1px solid #d4e39c55;
+  border-radius: 8px;
+  background: #08191ee6;
+  color: #d9eeee;
+  font:
+    10px/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  white-space: pre-line;
+  pointer-events: none;
+}
 #reactor-dialog {
   position: fixed;
   z-index: 6;
@@ -649,6 +670,16 @@ nav > span {
   height: 20px;
   accent-color: #d4e39c;
 }
+#reactor-fields select {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px 10px;
+  border: 1px solid #68d8dc55;
+  border-radius: 6px;
+  background: #102c32;
+  color: #f0f5e7;
+}
 #reactor-fields output {
   color: #d4e39c;
   font:
@@ -692,7 +723,8 @@ nav > span {
 }
 .in-reactor #marine-status,
 .in-vr #reactor-dialog,
-.in-vr #reactor-telemetry {
+.in-vr #reactor-telemetry,
+.in-vr #reactor-team {
   display: none !important;
 }
 @media (max-width: 750px) {
@@ -707,6 +739,9 @@ nav > span {
     min-width: 0;
     max-width: calc(100vw - 36px);
     font-size: 9px;
+  }
+  #reactor-team {
+    display: none;
   }
   #reactor-dialog {
     left: 16px;
