@@ -231,6 +231,7 @@ const DEPLOY_SERVICES = [
   'client-notify',
   'client-gateway',
   'keycloak',
+  'whisper',
 ];
 export function deploymentMessage(payload) {
   const states = {

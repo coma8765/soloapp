@@ -140,7 +140,13 @@ def bootstrap():
 
 
 def manifests():
-    docs = []
+    docs = list(
+        yaml.safe_load_all(
+            jinja2.Template(
+                (PROJECT / "services/whisper/deploy/k8s/deployment.yaml.j2").read_text()
+            ).render(whisper_image="soloapp-local/whisper:dev")
+        )
+    )
     ports = {"auth": 19082, "whoami": 8080, "client-gateway": 8080, "client-notify": 8080}
     images = {"whoami": "soloapp_app"}
     for app, port in ports.items():

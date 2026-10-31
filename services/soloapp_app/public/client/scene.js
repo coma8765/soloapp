@@ -90,6 +90,8 @@ export class PlanetScene {
       scene,
     );
     sun.intensity = 0.9;
+    this.lights = [hemi, sun];
+    this.visible = true;
     this.terrain = meshData('Original planet terrain', sphereData(data), scene);
     this.terrain.material = this.material(0);
     this.terrain.isPickable = true;
@@ -179,6 +181,7 @@ export class PlanetScene {
     this.rippleCount++;
   }
   updateActor(id, position, dt) {
+    if (!this.visible) return;
     const wet = position.length() < WATER_RADIUS + 0.03,
       old = this.actors.get(id) || {
         position: position.clone(),
@@ -199,13 +202,29 @@ export class PlanetScene {
     }
     this.actors.set(id, { position: position.clone(), wet, cooldown });
   }
+  setVisible(visible) {
+    this.visible = visible;
+    for (const mesh of [
+      this.terrain,
+      this.bark,
+      this.leaves,
+      this.grass,
+      this.water,
+    ])
+      mesh.setEnabled(visible);
+    for (const light of this.lights) light.setEnabled(visible);
+    this.actors.clear();
+    this.setXRQuality(this.xrQuality);
+  }
   setXRQuality(active) {
-    this.shadows = !active;
-    this.shadowMap.renderList = active ? [] : this.shadowCasters;
+    this.xrQuality = active;
+    this.shadows = !active && this.visible;
+    this.shadowMap.renderList = this.shadows ? this.shadowCasters : [];
     for (const material of this.materials.slice(0, 4))
-      material.setFloat('shadowsEnabled', active ? 0 : 1);
+      material.setFloat('shadowsEnabled', this.shadows ? 1 : 0);
   }
   update(dt, camera) {
+    if (!this.visible) return;
     this.time += dt;
     const focus = camera.globalPosition.normalizeToNew().scale(38);
     this.shadowCamera.position = focus.add(
@@ -264,40 +283,41 @@ export function avatar(scene, id, local = false) {
   marker.position.set(0, 1.5, -0.45);
   marker.material = body.material;
   marker.isPickable = false;
-  if (!local) {
-    const plane = B.MeshBuilder.CreatePlane(
-      'id-label',
-      { width: 1.4, height: 0.45 },
-      scene,
-    );
-    plane.parent = root;
-    plane.position.y = 2.2;
-    plane.billboardMode = B.Mesh.BILLBOARDMODE_ALL;
-    const tex = new B.DynamicTexture(
-      'label',
-      { width: 256, height: 64 },
-      scene,
-      false,
-    );
-    tex.hasAlpha = true;
-    tex.drawText(
-      'Игрок ' + id,
-      null,
-      43,
-      'bold 30px sans-serif',
-      '#ffffff',
-      '#173038cc',
-      true,
-    );
-    const mat = new B.StandardMaterial('label', scene);
-    mat.diffuseTexture = tex;
-    mat.emissiveColor = B.Color3.White();
-    mat.disableLighting = true;
-    mat.backFaceCulling = false;
-    plane.material = mat;
-    plane.isPickable = false;
-  }
+  if (!local) avatarLabel(scene, id).parent = root;
   return root;
+}
+export function avatarLabel(scene, id) {
+  const plane = B.MeshBuilder.CreatePlane(
+    'id-label',
+    { width: 1.4, height: 0.45 },
+    scene,
+  );
+  plane.position.y = 2.2;
+  plane.billboardMode = B.Mesh.BILLBOARDMODE_ALL;
+  const tex = new B.DynamicTexture(
+    'label',
+    { width: 256, height: 64 },
+    scene,
+    false,
+  );
+  tex.hasAlpha = true;
+  tex.drawText(
+    'Игрок ' + id,
+    null,
+    43,
+    'bold 30px sans-serif',
+    '#ffffff',
+    '#173038cc',
+    true,
+  );
+  const mat = new B.StandardMaterial('label', scene);
+  mat.diffuseTexture = tex;
+  mat.emissiveColor = B.Color3.White();
+  mat.disableLighting = true;
+  mat.backFaceCulling = false;
+  plane.material = mat;
+  plane.isPickable = false;
+  return plane;
 }
 export class FishView {
   constructor(scene, profiles = []) {

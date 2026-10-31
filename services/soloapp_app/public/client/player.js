@@ -1,9 +1,15 @@
-import { avatar, orientation, vec } from './scene.js';
+import { orientation, vec } from './scene.js';
+import { LocalAvatar } from './local-avatar.js';
+import { DEFAULT_AVATAR } from './avatar-catalog.js';
 import { WATER_RADIUS, clamp } from '../shared/world.js';
+import { ROOM_MAP, ROOM_PLAYER_LIMIT, roomSpawn } from '../shared/room.js';
 const B = window.BABYLON;
 export class Player {
-  constructor(scene, terrain, planet, canvas) {
+  constructor(scene, terrain, planet, canvas, avatarId) {
     this.inputEnabled = true;
+    this.worldMap = 'planet';
+    this.roomColliders = [];
+    this.structures = [];
     this.scene = scene;
     this.terrain = terrain;
     this.planet = planet;
@@ -35,12 +41,12 @@ export class Player {
     this.overviewCamera.minZ = 0.1;
     this.overviewCamera.maxZ = 400;
     this.overviewCamera.fov = (55 * Math.PI) / 180;
-    this.body = avatar(scene, 0, true);
-    this.body.setEnabled(false);
+    this.avatar = new LocalAvatar(scene, avatarId);
+    this.body = this.avatar.root;
     scene.activeCamera = this.camera;
     canvas.addEventListener('click', () => {
-      if (this.inputEnabled && !this.overview && !this.xr)
-        canvas.requestPointerLock()?.catch(() => {});
+      if (this.inputEnabled && !this.overview && !this.xr && !this.touchEnabled)
+        canvas.requestPointerLock?.()?.catch(() => {});
     });
     window.addEventListener('keydown', (e) => {
       if (
@@ -59,7 +65,7 @@ export class Player {
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => {
       this.keys.clear();
-      document.exitPointerLock();
+      document.exitPointerLock?.();
     });
     document.addEventListener('pointerlockchange', () => {
       if (document.pointerLockElement !== canvas) this.keys.clear();
@@ -81,89 +87,156 @@ export class Player {
     });
     this.update(0);
   }
+  up() {
+    return this.worldMap === ROOM_MAP
+      ? B.Vector3.Up()
+      : this.position.normalizeToNew();
+  }
   turn(angle) {
     this.forward.rotateByQuaternionToRef(
-      B.Quaternion.RotationAxis(this.position.normalizeToNew(), angle),
+      B.Quaternion.RotationAxis(this.up(), angle),
       this.forward,
     );
   }
+  setMap(map, position) {
+    this.worldMap = map;
+    this.position = vec(position);
+    this.forward.set(0, 0, -1);
+    this.pitch = -0.12;
+    this.radialSpeed = 0;
+    this.speed = 0;
+    this.overview = false;
+    this.keys.clear();
+    this.gamepadMove = null;
+    this.touchMove = null;
+    this.inputEnabled = true;
+    if (!this.xr) this.scene.activeCamera = this.camera;
+    this.update(0);
+  }
   toggleOverview() {
     this.overview = !this.overview;
-    document.exitPointerLock();
+    document.exitPointerLock?.();
     this.scene.activeCamera = this.overview ? this.overviewCamera : this.camera;
   }
   spawn(id) {
-    this.position = vec(this.terrain.spawn((id - 1) % 8));
+    this.position = vec(
+      this.worldMap === ROOM_MAP
+        ? roomSpawn((id - 1) % 8)
+        : this.terrain.spawn((id - 1) % 8),
+    );
     this.radialSpeed = 0;
   }
   state(sequence) {
     return {
       type: 'state',
+      map: this.worldMap,
       sequence,
       position: this.position.asArray(),
       rotation: this.rotation.asArray(),
       pitch: this.pitch,
+      avatarId: this.avatar.id || DEFAULT_AVATAR,
+      speed: this.inputEnabled ? Math.min(20, Math.max(0, this.speed)) : 0,
     };
   }
   update(dt, vrInput = null) {
     if (!this.inputEnabled) return;
-    const before = this.position.clone(),
-      up = this.position.normalizeToNew();
+    const flat = this.worldMap === ROOM_MAP,
+      before = this.position.clone(),
+      up = this.up();
     this.forward
       .subtractInPlace(up.scale(B.Vector3.Dot(this.forward, up)))
       .normalize();
     if (this.forward.lengthSquared() < 0.1)
       this.forward = B.Vector3.Cross(up, B.Vector3.Right()).normalize();
     let direction = B.Vector3.Zero();
-    if (this.xr && vrInput) direction = vrInput;
-    else if (!this.overview && document.pointerLockElement === this.canvas) {
-      const x = Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')),
-        y = Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS'));
-      direction = this.forward
-        .scale(y)
-        .add(B.Vector3.Cross(this.forward, up).scale(x));
+    if (this.xr && vrInput?.lengthSquared() > 0.0001) direction = vrInput;
+    else if (!this.overview) {
+      const keyboard = document.pointerLockElement === this.canvas;
+      const x =
+          (keyboard
+            ? Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA'))
+            : 0) +
+          (this.gamepadMove?.x || 0) +
+          (this.touchMove?.x || 0),
+        y =
+          (keyboard
+            ? Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS'))
+            : 0) +
+          (this.gamepadMove?.y || 0) +
+          (this.touchMove?.y || 0);
+      let forward = this.forward;
+      if (this.xr) {
+        forward = B.Vector3.TransformNormal(
+          new B.Vector3(0, 0, -1),
+          this.scene.activeCamera.getWorldMatrix(),
+        );
+        forward
+          .subtractInPlace(up.scale(B.Vector3.Dot(forward, up)))
+          .normalize();
+        if (forward.lengthSquared() < 0.01) forward = this.forward;
+      }
+      direction = forward.scale(y).add(B.Vector3.Cross(forward, up).scale(x));
       if (direction.length() > 1) direction.normalize();
     }
-    const depth = Math.max(0, WATER_RADIUS - this.position.length()),
+    const depth = flat ? 0 : Math.max(0, WATER_RADIUS - this.position.length()),
       speed = (this.xr ? 2.5 : 5.5) * (depth > 0.35 ? 0.58 : 1);
     let next = this.position.add(direction.scale(speed * dt));
-    // Tree trunks use the same 0.18 m collider and 0.35 m player radius.
-    for (const tree of this.planet.trees) {
-      const axis = tree.normalizeToNew(),
-        offset = next.subtract(tree),
-        height = B.Vector3.Dot(offset, axis);
-      if (height < -1.8 || height > 6) continue;
-      const tangent = offset.subtract(axis.scale(height)),
-        d = tangent.length();
-      if (d < 0.53) {
-        const outward =
-          d > 0.001
-            ? tangent.scale(1 / d)
-            : B.Vector3.Cross(axis, B.Vector3.Right()).normalize();
-        next.addInPlace(outward.scale(0.53 - d));
-      }
-    }
-    const u = next.normalizeToNew(),
-      floor = this.terrain.radius(u.asArray()) + 0.06;
-    let radius = next.length();
-    this.radialSpeed -= (depth > 0.5 ? 8 : 18) * dt;
-    radius += this.radialSpeed * dt;
-    if (radius <= floor) {
-      radius = floor;
+    let u = up;
+    if (flat) {
+      next.set(
+        clamp(next.x, -ROOM_PLAYER_LIMIT, ROOM_PLAYER_LIMIT),
+        0,
+        clamp(next.z, -ROOM_PLAYER_LIMIT, ROOM_PLAYER_LIMIT),
+      );
+      this.position = next;
       this.radialSpeed = 0;
+    } else {
+      // Tree trunks use the same 0.18 m collider and 0.35 m player radius.
+      for (const tree of this.planet.trees) {
+        const axis = tree.normalizeToNew(),
+          offset = next.subtract(tree),
+          height = B.Vector3.Dot(offset, axis);
+        if (height < -1.8 || height > 6) continue;
+        const tangent = offset.subtract(axis.scale(height)),
+          d = tangent.length();
+        if (d < 0.53) {
+          const outward =
+            d > 0.001
+              ? tangent.scale(1 / d)
+              : B.Vector3.Cross(axis, B.Vector3.Right()).normalize();
+          next.addInPlace(outward.scale(0.53 - d));
+        }
+      }
+      for (const structure of this.structures)
+        next = structure.resolveMovement(next);
+      u = next.normalizeToNew();
+      let floor = this.terrain.radius(u.asArray()) + 0.06;
+      for (const structure of this.structures) {
+        const surface = structure.groundRadius(u);
+        if (surface !== null) floor = Math.max(floor, surface + 0.06);
+      }
+      let radius = next.length();
+      this.radialSpeed -= (depth > 0.5 ? 8 : 18) * dt;
+      radius += this.radialSpeed * dt;
+      if (radius <= floor) {
+        radius = floor;
+        this.radialSpeed = 0;
+      }
+      this.position = u.scale(radius);
     }
-    this.position = u.scale(radius);
     this.forward
       .subtractInPlace(u.scale(B.Vector3.Dot(this.forward, u)))
       .normalize();
     this.rotation = orientation(this.forward, u);
-    this.body
-      .getChildMeshes()
-      .find((mesh) => mesh.name === 'look-direction').rotation.x = this.pitch;
     this.body.position.copyFrom(this.position);
     this.body.rotationQuaternion.copyFrom(this.rotation);
-    this.body.setEnabled(!this.xr && (this.third || this.overview));
     this.speed = dt ? B.Vector3.Distance(before, this.position) / dt : 0;
+    this.avatar.update(
+      dt,
+      this.speed,
+      this.pitch,
+      !this.xr && (this.third || this.overview),
+    );
     const eye = this.position.add(u.scale(1.65)),
       look = this.forward
         .scale(Math.cos(this.pitch))
@@ -173,15 +246,27 @@ export class Player {
       if (this.third) {
         const back = look.negate(),
           ray = new B.Ray(eye, back, 4),
-          hit = this.scene.pickWithRay(
-            ray,
-            (m) => m === this.planet.terrain || m === this.planet.bark,
+          hit = this.scene.pickWithRay(ray, (m) =>
+            flat
+              ? this.roomColliders.includes(m)
+              : m === this.planet.terrain ||
+                m === this.planet.bark ||
+                this.structures.some(
+                  (s) => s.visible && s.colliders.includes(m),
+                ),
           );
         let distance = hit?.hit ? Math.max(0.15, hit.distance - 0.2) : 4;
         // Sample the camera arm as a small sphere to keep the near plane out of slopes.
         for (let d = 0.15; d < distance; d += 0.1) {
           const p = eye.add(back.scale(d));
-          if (p.length() < this.terrain.radius(p.asArray()) + 0.2) {
+          if (
+            flat
+              ? p.y < 0.2 ||
+                p.y > 5.8 ||
+                Math.abs(p.x) > 11.8 ||
+                Math.abs(p.z) > 11.8
+              : p.length() < this.terrain.radius(p.asArray()) + 0.2
+          ) {
             distance = Math.max(0.15, d - 0.1);
             break;
           }
@@ -195,11 +280,13 @@ export class Player {
       );
       if (this.overview) {
         this.angle += dt * 0.04;
-        this.overviewCamera.position.set(
-          Math.sin(this.angle) * 83,
-          65,
-          Math.cos(this.angle) * 83,
-        );
+        if (flat) this.overviewCamera.position.set(0, 5.6, 10);
+        else
+          this.overviewCamera.position.set(
+            Math.sin(this.angle) * 83,
+            65,
+            Math.cos(this.angle) * 83,
+          );
         this.overviewCamera.setTarget(B.Vector3.Zero());
       }
     }

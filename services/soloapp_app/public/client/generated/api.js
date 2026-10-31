@@ -60,5 +60,23 @@ export const operations = {
     "timeout": 45000,
     "success": [],
     "websocket": true
+  },
+  "speech_health": {
+    "path": "/api/v1/soloapp_app/v1/speech/health",
+    "method": "GET",
+    "timeout": 95000,
+    "success": [
+      200
+    ],
+    "websocket": false
+  },
+  "speech_transcribe": {
+    "path": "/api/v1/soloapp_app/v1/speech/transcribe",
+    "method": "POST",
+    "timeout": 95000,
+    "success": [
+      200
+    ],
+    "websocket": false
   }
 };

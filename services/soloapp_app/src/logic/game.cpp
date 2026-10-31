@@ -21,6 +21,13 @@ bool validState(const Json::Value &v) {
     if (!std::all_of(v["position"].begin(), v["position"].end(), finite) ||
         !std::all_of(v["rotation"].begin(), v["rotation"].end(), finite))
         return false;
+    if ((v.isMember("avatarId") &&
+         (!v["avatarId"].isString() ||
+          (v["avatarId"] != "male" && v["avatarId"] != "female" && v["avatarId"] != "uraraka"))) ||
+        (v.isMember("speed") &&
+         (!finite(v["speed"]) || v["speed"].asDouble() < 0 || v["speed"].asDouble() > 20)) ||
+        (v.isMember("map") && v["map"] != "planet"))
+        return false;
     Vec3 p{v["position"][0].asDouble(), v["position"][1].asDouble(), v["position"][2].asDouble()};
     return p.length() >= 20 && p.length() <= 50 && std::isfinite(v["pitch"].asDouble());
 }

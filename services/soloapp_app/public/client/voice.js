@@ -5,6 +5,7 @@ export class VoiceChat {
     this.onChange = onChange;
     this.peers = new Map();
     this.online = false;
+    this.localAllowed = false;
     this.muted = false;
     this.pending = false;
     this.generation = 0;
@@ -14,12 +15,19 @@ export class VoiceChat {
   get enabled() {
     return !!this.stream;
   }
+  get available() {
+    return this.online || this.localAllowed;
+  }
   get status() {
-    if (!this.online) return 'Голос · войдите в общий мир';
+    if (!this.available) return 'Голос · войдите в общий мир';
     if (this.error) return this.error;
     if (this.pending) return 'Разрешите доступ к микрофону…';
     if (this.stream?.getAudioTracks().some((track) => track.muted))
       return 'Браузер приостановил микрофон · проверьте другую вкладку или устройство';
+    if (!this.online)
+      return this.enabled
+        ? 'Микрофон включён · у профессора речь расшифровывается автоматически'
+        : 'Микрофон выключен · включите для разговора с профессором';
     const connected = [...this.peers.values()].filter(
       (p) => p.pc.connectionState === 'connected',
     ).length;
@@ -123,7 +131,7 @@ export class VoiceChat {
       this.stop();
       return;
     }
-    if (!this.online) return;
+    if (!this.available) return;
     this.error = '';
     if (!globalThis.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
       this.error = 'Для микрофона нужен HTTPS или localhost';
@@ -143,7 +151,7 @@ export class VoiceChat {
         },
         video: false,
       });
-      if (generation !== this.generation || !this.online) {
+      if (generation !== this.generation || !this.available) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }

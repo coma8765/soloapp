@@ -145,6 +145,40 @@ location = /api/v1/soloapp_app/v1/signal {
   proxy_read_timeout 45s;
   proxy_pass http://whoami.soloapp.svc.cluster.local:{{ whoami_config.port }};
 }
+location = /api/v1/soloapp_app/v1/speech/health {
+  if ($request_method !~ ^(GET)$) { return 405; }
+  client_max_body_size 256044;
+  limit_req zone=api_speech burst=4 nodelay;
+  proxy_set_header X-User-Id "";
+  auth_request /_verify;
+  auth_request_set $verified_id $upstream_http_x_verified_user_id;
+  auth_request_set $user_signature $upstream_http_x_user_signature;
+  auth_request_set $user_timestamp $upstream_http_x_user_timestamp;
+  proxy_set_header X-Verified-User-Id $verified_id;
+  proxy_set_header X-User-Signature $user_signature;
+  proxy_set_header X-User-Timestamp $user_timestamp;
+  proxy_set_header Authorization "";
+  proxy_connect_timeout 2s;
+  proxy_read_timeout 95s;
+  proxy_pass http://whoami.soloapp.svc.cluster.local:{{ whoami_config.port }};
+}
+location = /api/v1/soloapp_app/v1/speech/transcribe {
+  if ($request_method !~ ^(POST)$) { return 405; }
+  client_max_body_size 256044;
+  limit_req zone=api_speech burst=4 nodelay;
+  proxy_set_header X-User-Id "";
+  auth_request /_verify;
+  auth_request_set $verified_id $upstream_http_x_verified_user_id;
+  auth_request_set $user_signature $upstream_http_x_user_signature;
+  auth_request_set $user_timestamp $upstream_http_x_user_timestamp;
+  proxy_set_header X-Verified-User-Id $verified_id;
+  proxy_set_header X-User-Signature $user_signature;
+  proxy_set_header X-User-Timestamp $user_timestamp;
+  proxy_set_header Authorization "";
+  proxy_connect_timeout 2s;
+  proxy_read_timeout 95s;
+  proxy_pass http://whoami.soloapp.svc.cluster.local:{{ whoami_config.port }};
+}
 location = /api/v1/soloapp_app/v1/user-id {
   if ($request_method !~ ^(GET)$) { return 405; }
   client_max_body_size 32768;

@@ -7,7 +7,7 @@ on:
         required: true
         type: choice
         default: app-api
-        options: [app-api, client-notify, client-gateway, auth, web, nginx, keycloak, all]
+        options: [app-api, client-notify, client-gateway, auth, web, nginx, keycloak, whisper, all]
       rollback_revision:
         description: Previously deployed v0.1.P or full commit SHA; empty for a new release
         required: false
@@ -66,7 +66,8 @@ jobs:
             client-notify) images=client-notify ;;
             client-gateway) images=client-gateway ;;
             keycloak) images=keycloak ;;
-            all) images='auth whoami web client-notify client-gateway keycloak' ;;
+            whisper) images=whisper ;;
+            all) images='auth whoami web client-notify client-gateway keycloak whisper' ;;
             *) exit 2 ;;
           esac
           echo "service=$SERVICE" >> "$GITHUB_OUTPUT"

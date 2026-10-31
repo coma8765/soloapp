@@ -1,7 +1,13 @@
 import { Terrain } from '../shared/world.js';
 import { PlanetScene, FishView } from './scene.js';
 import { Player } from './player.js';
-import { verifyInstancePlacements, verifyCameraFrame } from './regression.js';
+import {
+  verifyInstancePlacements,
+  verifyCameraFrame,
+  verifyWhiteRoom,
+  verifyLocalAvatar,
+} from './regression.js';
+import { WhiteRoom } from './white-room.js';
 const B = window.BABYLON;
 const output = document.getElementById('results');
 const log = (message) => {
@@ -12,9 +18,9 @@ function check(condition, description) {
   log('PASS · ' + description);
 }
 try {
-  const data = await fetch(
-    new URL('../assets/world.json', import.meta.url),
-  ).then((response) => response.json());
+  const data = await fetch('/assets/world.json').then((response) =>
+    response.json(),
+  );
   const terrain = new Terrain(data);
   const engine = new B.Engine(document.getElementById('canvas'), true);
   const scene = new B.Scene(engine);
@@ -39,6 +45,9 @@ try {
   );
   verifyInstancePlacements(data, check);
   verifyCameraFrame(player, check);
+  await verifyLocalAvatar(player, check);
+  const room = new WhiteRoom(scene, player, planet, fish);
+  verifyWhiteRoom(player, room, check);
   for (const mesh of [
     planet.terrain,
     planet.bark,
@@ -98,7 +107,6 @@ try {
   );
   planet.updateActor('check', new B.Vector3(0.2, 35, 0), 0.1);
   check(planet.rippleCount === count + 1, 'Волны при движении');
-  player.toggleOverview();
   engine.runRenderLoop(() => {
     player.update(0.016);
     planet.update(0.016, scene.activeCamera);
@@ -106,7 +114,7 @@ try {
   });
   window.addEventListener('resize', () => engine.resize());
   log(
-    '\nВсе браузерные проверки пройдены. Визуально проверьте воду, берёзы и траву.',
+    '\nВсе браузерные проверки пройдены. V — смена камеры, Tab — обзор планеты.',
   );
 } catch (error) {
   log('FAIL · ' + (error?.message || String(error)));

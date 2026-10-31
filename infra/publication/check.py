@@ -16,6 +16,12 @@ FORBIDDEN = {
 
 
 REVIEWED_LARGE_ASSETS = {
+    "services/soloapp_app/public/assets/avatar/player.glb": "8711d8ac735cf0418384fec1ebabb75d1d11fe8cb7edd2710924f1fdd991cf1b",
+    "services/soloapp_app/public/assets/avatar/player-female.glb": "a1925ef139cd2c2a6d5af591b5ea9b7df14ef40cbe666cda2f587a5610c4ad18",
+    "services/soloapp_app/public/assets/avatar/uraraka-ochako.glb": "260ea1d80e24c3b97d732aa8247a4bc47cddd158b964251da2b6a605c1252b23",
+    "services/soloapp_app/public/assets/marine/clownfish.glb": "1ead5982ec41bffac00a80ab6f3d3b532eadc159d929b6156074b17ed0a46830",
+    "services/soloapp_app/public/assets/marine/lobster.glb": "46953edfd7a46a966de71b42db0e58aa419d7b6ee89e072f7e0804c4dc25963a",
+    "services/soloapp_app/public/assets/professor/professor-einstein.glb": "ee0b1674d60d5dc464206108caa89d4f333c296e206b2670ac9ce27a9e3b3367",
     "services/soloapp_app/public/vendor/babylon.js": "37c77bf920c0d7a3912c28a6120479f3d08fccd87a75e1f7558f76bd124cc6c4",
     "services/soloapp_app/public/assets/world.json": "4e67af509df70d92e86548897cca7113d61cbc7b8b105ad284f9c3a8e2b8c773",
 }

@@ -13,7 +13,16 @@ import tempfile
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 
-SERVICES = ("auth", "whoami", "web", "client-notify", "client-gateway", "keycloak", "headlamp")
+SERVICES = (
+    "auth",
+    "whoami",
+    "web",
+    "client-notify",
+    "client-gateway",
+    "keycloak",
+    "whisper",
+    "headlamp",
+)
 MAX_ARCHIVE = 2 * 1024**3
 ACCEPT = "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json"
 

@@ -1,6 +1,8 @@
 import { signalPath } from './api.js';
 import { validState } from '../shared/world.js';
-import { avatar, vec } from './scene.js';
+import { vec } from './scene.js';
+import { LocalAvatar } from './local-avatar.js';
+import { DEFAULT_AVATAR, findAvatar } from './avatar-catalog.js';
 const B = window.BABYLON;
 
 export class Network {
@@ -27,7 +29,7 @@ export class Network {
     this.lastPing = 0;
     this.worldAttempt = 0;
     this.generation = 0;
-    if (auth.token) this.connect();
+    this.worldTick = -1;
   }
 
   send(message) {
@@ -153,6 +155,7 @@ export class Network {
     }
     if (type === 'fish') {
       this.fish.snapshot(message);
+      this.worldTick = message.sequence;
       this.worldTransport = 'WSS · общий мир';
     }
     if (type === 'player_state') {
@@ -359,6 +362,7 @@ export class Network {
         if (message.type !== 'fish') return;
         this.worldTransport = 'WebRTC';
         this.fish.snapshot(message);
+        this.worldTick = message.sequence;
         if (Number.isFinite(message.echo)) {
           this.ping = Math.max(0, Math.round(performance.now() - message.echo));
           this.pingAt = performance.now();
@@ -381,27 +385,34 @@ export class Network {
   }
 
   apply(id, state) {
-    if (!validState(state)) return;
+    if (!validState(state, this.player.worldMap)) return;
     let remote = this.remotes.get(id);
+    // Server world snapshots carry pose only; retain peer appearance metadata.
+    const avatarId =
+      state.avatarId === undefined
+        ? remote?.avatarId || DEFAULT_AVATAR
+        : findAvatar(state.avatarId)?.id || DEFAULT_AVATAR;
     if (!remote) {
-      remote = { node: avatar(this.scene, id), sequence: -1, last: 0 };
+      const avatar = new LocalAvatar(this.scene, avatarId, id);
+      remote = { avatar, avatarId, node: avatar.root, sequence: -1, last: 0 };
       this.remotes.set(id, remote);
     }
     if (state.sequence <= remote.sequence) return;
+    if (remote.avatarId !== avatarId) {
+      remote.avatarId = avatarId;
+      void remote.avatar.select(avatarId);
+    }
     const first = remote.sequence < 0;
     remote.sequence = state.sequence;
     remote.last = performance.now();
-    remote.state = state;
+    remote.state = { ...state, speed: state.speed ?? remote.state?.speed ?? 0 };
     remote.target = vec(state.position);
     remote.rotation = B.Quaternion.FromArray(state.rotation);
-    const marker = remote.node
-      .getChildMeshes()
-      .find((mesh) => mesh.name === 'look-direction');
-    if (marker) marker.rotation.x = state.pitch;
     if (first) {
       remote.node.position.copyFrom(remote.target);
       remote.node.rotationQuaternion.copyFrom(remote.rotation);
     }
+    remote.avatar.update(0, remote.state.speed, state.pitch, true);
   }
 
   update(dt) {
@@ -459,6 +470,12 @@ export class Network {
         remote.node.rotationQuaternion,
         remote.rotation,
         1 - Math.exp(-dt * 12),
+      );
+      remote.avatar.update(
+        dt,
+        now - remote.last < 1000 ? remote.state.speed || 0 : 0,
+        remote.state.pitch,
+        true,
       );
       this.planet.updateActor(id, remote.node.position, dt);
     }

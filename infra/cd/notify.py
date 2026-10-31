@@ -9,7 +9,16 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-SERVICES = ("auth", "app-api", "nginx", "web", "client-notify", "client-gateway", "keycloak")
+SERVICES = (
+    "auth",
+    "app-api",
+    "nginx",
+    "web",
+    "client-notify",
+    "client-gateway",
+    "keycloak",
+    "whisper",
+)
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):

@@ -14,6 +14,8 @@ map $uri $observed_route {
   /api/v1/auth/v1/me /api/v1/auth/v1/me;
   /api/v1/auth/v1/register /api/v1/auth/v1/register;
   /api/v1/soloapp_app/v1/signal /api/v1/soloapp_app/v1/signal;
+  /api/v1/soloapp_app/v1/speech/health /api/v1/soloapp_app/v1/speech/health;
+  /api/v1/soloapp_app/v1/speech/transcribe /api/v1/soloapp_app/v1/speech/transcribe;
   /api/v1/soloapp_app/v1/user-id /api/v1/soloapp_app/v1/user-id;
   /api/v1/whoami/v1/user-id /api/v1/whoami/v1/user-id;
   /ready /ready;
@@ -31,9 +33,12 @@ map $uri $observed_service {
   /api/v1/auth/v1/me auth;
   /api/v1/auth/v1/register auth;
   /api/v1/soloapp_app/v1/signal whoami;
+  /api/v1/soloapp_app/v1/speech/health whoami;
+  /api/v1/soloapp_app/v1/speech/transcribe whoami;
   /api/v1/soloapp_app/v1/user-id whoami;
   /api/v1/whoami/v1/user-id whoami;
 }
 limit_req_zone $binary_remote_addr zone=api_auth:10m rate=5r/s;
 limit_req_zone $binary_remote_addr zone=api_chat:10m rate=10r/s;
 limit_req_zone $binary_remote_addr zone=api_planet:10m rate=10r/s;
+limit_req_zone $binary_remote_addr zone=api_speech:10m rate=1r/s;

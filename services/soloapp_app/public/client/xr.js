@@ -39,13 +39,18 @@ export class XRView {
           ),
         );
       });
-      this.helper.sessionManager.onXRFrameObservable.add((frame) =>
+      this.helper.sessionManager.onXRFrameObservable.add((frame) => {
         this.authPanel?.updateXR(
           frame,
           this.helper.sessionManager.referenceSpace,
           this.origin,
-        ),
-      );
+        );
+        this.marine?.updateXR(
+          frame,
+          this.helper.sessionManager.referenceSpace,
+          this.origin,
+        );
+      });
       this.helper.onStateChangedObservable.add((state) => {
         if (state === B.WebXRState.IN_XR) this.enter();
         if (state === B.WebXRState.NOT_IN_XR) this.exit();
@@ -54,7 +59,7 @@ export class XRView {
       this.button.disabled = false;
       this.button.onclick = async () => {
         if (!this.player.inputEnabled) return;
-        document.exitPointerLock();
+        document.exitPointerLock?.();
         this.savedOverview = this.player.overview;
         this.scene.activeCamera = this.helper.camera;
         this.helper.camera.position.set(0, 0, 0);
@@ -130,6 +135,7 @@ export class XRView {
       this.authPanel.xr = true;
       this.authPanel.recenter = true;
       if (!this.authPanel.auth.token) this.authPanel.auth.require();
+      else this.authPanel.lobby?.show();
     }
   }
   exit() {
@@ -149,10 +155,11 @@ export class XRView {
       this.authPanel.xr = false;
       this.authPanel.recenter = true;
       this.authPanel.hideRays();
+      this.authPanel.sync();
     }
   }
   input() {
-    if (!this.active || !this.player.inputEnabled) return null;
+    if (!this.active) return null;
     const session = this.helper.sessionManager.session;
     if (session.visibilityState !== 'visible') {
       this.armed = true;
@@ -187,31 +194,19 @@ export class XRView {
       this.hud.setEnabled(this.visible);
     }
     this.aDown = pressed;
-    if (menu && !this.bDown && this.authPanel && !this.authPanel.auth.token) {
-      const dialog = document.getElementById('auth-dialog');
-      if (dialog.open) dialog.close();
-      else {
-        this.authPanel.auth.require();
-        this.authPanel.recenter = true;
-      }
-    }
+    if (menu && !this.bDown) this.authPanel?.toggleMenu();
     this.bDown = menu;
+    // Menu buttons remain usable while settings suspend locomotion.
+    if (!this.player.inputEnabled) return B.Vector3.Zero();
     if (Math.abs(turn) < 0.3) this.armed = true;
     if (Math.abs(turn) > 0.7 && this.armed) {
       this.armed = false;
       // Keep the headset fixed when rotating an off-centre, room-scale user.
-      const before = this.helper.camera.globalPosition.clone();
-      this.player.turn((-Math.sign(turn) * Math.PI) / 6);
-      this.player.update(0);
-      this.sync();
-      this.helper.camera.computeWorldMatrix();
-      const after = this.helper.camera.globalPosition;
-      this.origin.position.addInPlace(before.subtract(after));
-      this.player.position.addInPlace(before.subtract(after));
+      this.turn((-Math.sign(turn) * Math.PI) / 6);
     }
     const magnitude = Math.min(1, Math.hypot(x, y));
     if (magnitude <= 0.2) return B.Vector3.Zero();
-    const up = this.player.position.normalizeToNew(),
+    const up = this.player.up(),
       world = this.helper.camera.getWorldMatrix();
     let forward = B.Vector3.TransformNormal(new B.Vector3(0, 0, -1), world);
     forward.subtractInPlace(up.scale(B.Vector3.Dot(forward, up))).normalize();
@@ -221,6 +216,16 @@ export class XRView {
       .add(forward.scale(-y))
       .normalize()
       .scale((magnitude - 0.2) / 0.8);
+  }
+  turn(angle) {
+    const before = this.helper.camera.globalPosition.clone();
+    this.player.turn(angle);
+    this.player.update(0);
+    this.sync();
+    this.helper.camera.computeWorldMatrix();
+    const after = this.helper.camera.globalPosition;
+    this.origin.position.addInPlace(before.subtract(after));
+    this.player.position.addInPlace(before.subtract(after));
   }
   sync() {
     if (!this.active) return;
