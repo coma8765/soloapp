@@ -88,7 +88,7 @@ export class Player {
     this.update(0);
   }
   up() {
-    return this.worldMap === ROOM_MAP
+    return this.worldMap !== 'planet'
       ? B.Vector3.Up()
       : this.position.normalizeToNew();
   }
@@ -122,7 +122,9 @@ export class Player {
     this.position = vec(
       this.worldMap === ROOM_MAP
         ? roomSpawn((id - 1) % 8)
-        : this.terrain.spawn((id - 1) % 8),
+        : this.worldMap !== 'planet'
+          ? [0, 0, 7.4]
+          : this.terrain.spawn((id - 1) % 8),
     );
     this.radialSpeed = 0;
   }
@@ -140,7 +142,7 @@ export class Player {
   }
   update(dt, vrInput = null) {
     if (!this.inputEnabled) return;
-    const flat = this.worldMap === ROOM_MAP,
+    const flat = this.worldMap !== 'planet',
       before = this.position.clone(),
       up = this.up();
     this.forward

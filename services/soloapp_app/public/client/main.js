@@ -17,6 +17,7 @@ import { LakeProfessors } from './lake-professors.js';
 import { MarineLife } from './marine.js';
 import { ProfessorRecorder } from './professor-recorder.js';
 import { Laboratory } from './laboratory.js';
+import { ReactorRoom } from './reactor-room.js';
 import { setupFullscreen } from './fullscreen.js';
 const $ = (id) => document.getElementById(id);
 async function start() {
@@ -49,6 +50,24 @@ async function start() {
     sound = new NatureAudio(terrain);
   const quality = new VisualQuality(engine, scene, player, $('quality'));
   const room = new WhiteRoom(scene, player, planet, fish);
+  const reactor = new ReactorRoom(scene, terrain, planet, player, $('world'), {
+    hints: $('reactor-hints'),
+    exit: $('reactor-exit'),
+    telemetry: $('reactor-telemetry'),
+    dialog: $('reactor-dialog'),
+    close: $('reactor-close'),
+    title: $('reactor-dialog-title'),
+    description: $('reactor-dialog-description'),
+    source: $('reactor-source'),
+    fields: $('reactor-fields'),
+    actions: $('reactor-actions'),
+    summary: $('reactor-summary'),
+  });
+  if (
+    location.hostname === '127.0.0.1' &&
+    new URL(location.href).searchParams.has('reactor-test')
+  )
+    reactor.enter();
   const professorRecorder = new ProfessorRecorder(
     () => {
       $('professor-status').textContent =
@@ -106,7 +125,9 @@ async function start() {
   });
   function syncProfessorVoice() {
     void professorRecorder.setVoiceStream(
-      auth.token && !room.serverId && !document.hidden ? voice.stream : null,
+      auth.token && !room.serverId && !reactor.active && !document.hidden
+        ? voice.stream
+        : null,
     );
   }
   voice.localAllowed = true;
@@ -188,6 +209,7 @@ async function start() {
   };
   let fps = 0;
   function info() {
+    if (reactor.active) return reactor.statusText();
     if (room.serverId)
       return `БЕЛАЯ КОМНАТА\n${Math.round(fps)} FPS\n${network.status} · ID ${network.id || '—'}\nИгроки ${network.peers.size + 1} / 8\n${network.worldTransport} · RTT ${network.ping ?? '—'} мс\ntick ${network.worldTick}\nГолос · ${voice.enabled ? 'микрофон вкл' : 'микрофон выкл'} · X`;
     const depth = Math.max(0, WATER_RADIUS - player.position.length());
@@ -227,6 +249,10 @@ async function start() {
   };
   if (!auth.token) void signIn();
   else lobby.activate();
+  if (reactor.active) {
+    $('auth-dialog').close();
+    lobby.visible = false;
+  }
   $('explore').disabled = false;
   $('explore').textContent = 'Начать исследование ↗';
   const unlock = () => {
@@ -289,7 +315,7 @@ async function start() {
     if (document.pointerLockElement === $('world')) {
       $('auth-dialog').close();
       lobby.visible = false;
-    } else if (!xr.active && !authPanel.settingsOpen) {
+    } else if (!xr.active && !authPanel.settingsOpen && !reactor.active) {
       if (auth.token) lobby.show();
       else auth.require();
       authPanel.recenter = true;
@@ -302,7 +328,7 @@ async function start() {
     } else void signIn();
   };
   $('overview').onclick = () => {
-    if (!xr.active) player.toggleOverview();
+    if (!xr.active && !reactor.active) player.toggleOverview();
   };
   $('view').onclick = () => {
     if (!xr.active && !player.overview) player.third = !player.third;
@@ -332,124 +358,6 @@ async function start() {
       void voice.toggle();
   });
   window.addEventListener('resize', () => engine.resize());
-  let previous = performance.now(),
-    hudAt = 0;
-  engine.runRenderLoop(() => {
-    const now = performance.now(),
-      dt = Math.min((now - previous) / 1000, 0.05);
-    previous = now;
-    player.inputEnabled = !lobby.countdown && !authPanel.settingsOpen;
-    if (lobby.countdown) {
-      player.keys.clear();
-      player.speed = 0;
-      if (document.pointerLockElement) document.exitPointerLock?.();
-    }
-    authPanel.sync();
-    gamepad.update(dt);
-    touch.update();
-    player.update(dt, xr.input());
-    xr.sync();
-    network.update(dt);
-    if (!room.serverId) fish.update(dt);
-    planet.updateActor('local', player.position, dt);
-    authPanel.sync();
-    document.body.classList.toggle('in-room', !!room.serverId);
-    document.body.classList.toggle('counting-down', lobby.countdown);
-    document.body.classList.toggle(
-      'lobby-open',
-      !!auth.token && authPanel.visible,
-    );
-    $('servers').hidden = !auth.token;
-    const camera = scene.activeCamera;
-    camera.computeWorldMatrix();
-    planet.update(dt, camera);
-    professors.update(dt, player, camera, !room.serverId);
-    marine.update(dt);
-    laboratory.update(player.position);
-    const underwater =
-      !room.serverId &&
-      !player.overview &&
-      camera.globalPosition.length() < WATER_RADIUS;
-    sound.update(player, underwater);
-    $('underwater').style.display = underwater ? 'block' : 'none';
-    document.body.classList.toggle(
-      'playing',
-      (document.pointerLockElement === $('world') ||
-        (gamepad.active && !authPanel.visible) ||
-        touch.active) &&
-        !player.overview,
-    );
-    document.body.classList.toggle('overview', player.overview);
-    if (now > hudAt) {
-      hudAt = now + 250;
-      fps = engine.getFps();
-      $('connection').textContent =
-        network.status + (network.id ? ' · #' + network.id : '');
-      $('overview').querySelector('span').textContent = room.serverId
-        ? 'Обзор комнаты'
-        : 'Вся планета';
-      $('world').setAttribute(
-        'aria-label',
-        room.serverId ? 'Белая комната' : 'Трёхмерная микропланета',
-      );
-      if (auth.token && lobby.current?.state !== 'running')
-        $('connection').textContent = lobby.countdown
-          ? 'Переход через ' + lobby.secondsLeft + ' с'
-          : network.status + ' · общая планета';
-      $('stats').textContent = !auth.token
-        ? `${Math.round(fps)} FPS · только вы\nСинхронизация выключена\nВойдите, чтобы встретить других игроков`
-        : `${Math.round(fps)} FPS · ${network.peers.size + 1} / 8 игроков\nPing (RTT) · ${now - network.pingAt < 5000 ? (network.ping ?? '—') : '—'} мс\nWebRTC RX · ${network.rx}\nРыбы · ${network.worldTransport}${fish.sequence >= 0 ? ' · 48' : ' · ожидание'}\n${fish.sequence >= 0 ? 'Снимок ' + fish.sequence : ''}`;
-      $('reconnect').textContent = auth.token
-        ? 'Переподключиться ↗'
-        : 'Войти в общий мир ↗';
-      if (auth.token && lobby.current?.state !== 'running')
-        $('stats').textContent =
-          `${Math.round(fps)} FPS · общая планета\n${network.peers.size + 1} / 8 игроков · RTT ${network.ping ?? '—'} мс\n${network.worldTransport} · tick ${network.worldTick}${lobby.current ? '\nКомната: ' + lobby.current.member_count + ' / 8 участников' : ''}`;
-      if (room.serverId)
-        $('stats').textContent =
-          `${Math.round(fps)} FPS · белая комната\n${network.peers.size + 1} / 8 игроков · RTT ${network.ping ?? '—'} мс\n${network.worldTransport} · tick ${network.worldTick}`;
-      $('players').textContent = [...network.remotes]
-        .map(([id, r]) => {
-          const dot = B.Vector3.Dot(
-              player.position.normalizeToNew(),
-              r.node.position.normalizeToNew(),
-            ),
-            angle = Math.acos(clamp(dot, -1, 1)),
-            distance = angle * 38,
-            peer = network.peers.get(id),
-            notes = [];
-          if (!room.serverId && angle > 0.32) notes.push('за горизонтом');
-          if (!room.serverId && r.node.position.length() < WATER_RADIUS)
-            notes.push('в воде');
-          if (
-            B.Vector3.Dot(
-              r.node.position.subtract(player.position),
-              player.forward,
-            ) < 0
-          )
-            notes.push('сзади');
-          if (now - r.last > 3000) notes.push('нет свежей позиции');
-          return `#${id} · ${(room.serverId ? B.Vector3.Distance(player.position, r.node.position) : distance).toFixed(1)} м · ${now - peer?.pingAt < 5000 ? (peer?.ping ?? '—') : '—'} мс${notes.length ? '\n' + notes.join(' · ') : ''}`;
-        })
-        .concat(
-          [...network.peers.keys()]
-            .filter((id) => !network.remotes.has(id))
-            .map((id) => '#' + id + ' · ожидание позиции'),
-        )
-        .join('\n');
-      const depth = Math.max(0, WATER_RADIUS - player.position.length());
-      $('location').textContent = player.overview
-        ? 'Вся планета · Tab — вернуться'
-        : depth > 0.05
-          ? `${underwater ? 'Под водой' : 'В воде'} · глубина ${depth.toFixed(1)} м`
-          : `${player.third ? 'Третье лицо' : 'Первое лицо'} · озеро впереди`;
-      if (room.serverId)
-        $('location').textContent = player.overview
-          ? 'Обзор комнаты · Tab — вернуться'
-          : `Белая комната · ${player.third ? 'третье' : 'первое'} лицо`;
-    }
-    scene.render();
-  });
   // Deliberate read-only diagnostics for local smoke tests and troubleshooting.
   window.planetApp = {
     engine,
@@ -468,11 +376,160 @@ async function start() {
     gamepad,
     touch,
     room,
+    reactor,
     professors,
     marine,
     professorRecorder,
     laboratory,
   };
+  let previous = performance.now(),
+    hudAt = 0,
+    reactorWasActive = false;
+  engine.runRenderLoop(() => {
+    const now = performance.now(),
+      dt = Math.min((now - previous) / 1000, 0.05);
+    previous = now;
+    player.inputEnabled =
+      !lobby.countdown && !authPanel.settingsOpen && !reactor.uiOpen;
+    if (lobby.countdown) {
+      player.keys.clear();
+      player.speed = 0;
+      if (document.pointerLockElement) document.exitPointerLock?.();
+    }
+    authPanel.sync();
+    gamepad.update(dt);
+    touch.update();
+    player.update(dt, xr.input());
+    reactor.update(dt);
+    if (reactor.active !== reactorWasActive) {
+      reactorWasActive = reactor.active;
+      professorRecorder.clear();
+      syncProfessorVoice();
+      authPanel.recenter = true;
+    }
+    xr.sync();
+    network.update(dt);
+    if (!room.serverId && !reactor.active) fish.update(dt);
+    if (!reactor.active) planet.updateActor('local', player.position, dt);
+    authPanel.sync();
+    document.body.classList.toggle(
+      'in-room',
+      !!room.serverId || reactor.active,
+    );
+    document.body.classList.toggle('counting-down', lobby.countdown);
+    document.body.classList.toggle(
+      'lobby-open',
+      !!auth.token && authPanel.visible,
+    );
+    $('servers').hidden = !auth.token;
+    const camera = scene.activeCamera;
+    camera.computeWorldMatrix();
+    planet.update(dt, camera);
+    professors.update(dt, player, camera, !room.serverId && !reactor.active);
+    if (!reactor.active) {
+      marine.update(dt);
+      laboratory.update(player.position);
+    }
+    const underwater =
+      !room.serverId &&
+      !reactor.active &&
+      !player.overview &&
+      camera.globalPosition.length() < WATER_RADIUS;
+    if (!reactor.active) sound.update(player, underwater);
+    $('underwater').style.display = underwater ? 'block' : 'none';
+    document.body.classList.toggle(
+      'playing',
+      (document.pointerLockElement === $('world') ||
+        (gamepad.active && !authPanel.visible) ||
+        touch.active) &&
+        !player.overview,
+    );
+    document.body.classList.toggle('overview', player.overview);
+    if (now > hudAt) {
+      hudAt = now + 250;
+      fps = engine.getFps();
+      $('connection').textContent =
+        network.status + (network.id ? ' · #' + network.id : '');
+      $('overview').disabled = reactor.active;
+      $('overview').querySelector('span').textContent = reactor.active
+        ? 'Учебный БЩУ'
+        : room.serverId
+          ? 'Обзор комнаты'
+          : 'Вся планета';
+      $('world').setAttribute(
+        'aria-label',
+        reactor.active
+          ? 'Учебный блочный щит управления РБМК'
+          : room.serverId
+            ? 'Белая комната'
+            : 'Трёхмерная микропланета',
+      );
+      if (auth.token && lobby.current?.state !== 'running')
+        $('connection').textContent = lobby.countdown
+          ? 'Переход через ' + lobby.secondsLeft + ' с'
+          : network.status + ' · общая планета';
+      $('stats').textContent = !auth.token
+        ? `${Math.round(fps)} FPS · только вы\nСинхронизация выключена\nВойдите, чтобы встретить других игроков`
+        : `${Math.round(fps)} FPS · ${network.peers.size + 1} / 8 игроков\nPing (RTT) · ${now - network.pingAt < 5000 ? (network.ping ?? '—') : '—'} мс\nWebRTC RX · ${network.rx}\nРыбы · ${network.worldTransport}${fish.sequence >= 0 ? ' · 48' : ' · ожидание'}\n${fish.sequence >= 0 ? 'Снимок ' + fish.sequence : ''}`;
+      $('reconnect').textContent = auth.token
+        ? 'Переподключиться ↗'
+        : 'Войти в общий мир ↗';
+      if (auth.token && lobby.current?.state !== 'running')
+        $('stats').textContent =
+          `${Math.round(fps)} FPS · общая планета\n${network.peers.size + 1} / 8 игроков · RTT ${network.ping ?? '—'} мс\n${network.worldTransport} · tick ${network.worldTick}${lobby.current ? '\nКомната: ' + lobby.current.member_count + ' / 8 участников' : ''}`;
+      if (room.serverId)
+        $('stats').textContent =
+          `${Math.round(fps)} FPS · белая комната\n${network.peers.size + 1} / 8 игроков · RTT ${network.ping ?? '—'} мс\n${network.worldTransport} · tick ${network.worldTick}`;
+      if (reactor.active)
+        $('stats').textContent =
+          `${Math.round(fps)} FPS · учебный БЩУ РБМК\nЛокальная детерминированная модель\nСеть позиций приостановлена`;
+      $('players').textContent = reactor.active
+        ? ''
+        : [...network.remotes]
+            .map(([id, r]) => {
+              const dot = B.Vector3.Dot(
+                  player.position.normalizeToNew(),
+                  r.node.position.normalizeToNew(),
+                ),
+                angle = Math.acos(clamp(dot, -1, 1)),
+                distance = angle * 38,
+                peer = network.peers.get(id),
+                notes = [];
+              if (!room.serverId && angle > 0.32) notes.push('за горизонтом');
+              if (!room.serverId && r.node.position.length() < WATER_RADIUS)
+                notes.push('в воде');
+              if (
+                B.Vector3.Dot(
+                  r.node.position.subtract(player.position),
+                  player.forward,
+                ) < 0
+              )
+                notes.push('сзади');
+              if (now - r.last > 3000) notes.push('нет свежей позиции');
+              return `#${id} · ${(room.serverId ? B.Vector3.Distance(player.position, r.node.position) : distance).toFixed(1)} м · ${now - peer?.pingAt < 5000 ? (peer?.ping ?? '—') : '—'} мс${notes.length ? '\n' + notes.join(' · ') : ''}`;
+            })
+            .concat(
+              [...network.peers.keys()]
+                .filter((id) => !network.remotes.has(id))
+                .map((id) => '#' + id + ' · ожидание позиции'),
+            )
+            .join('\n');
+      const depth = Math.max(0, WATER_RADIUS - player.position.length());
+      $('location').textContent = player.overview
+        ? 'Вся планета · Tab — вернуться'
+        : depth > 0.05
+          ? `${underwater ? 'Под водой' : 'В воде'} · глубина ${depth.toFixed(1)} м`
+          : `${player.third ? 'Третье лицо' : 'Первое лицо'} · озеро впереди`;
+      if (room.serverId)
+        $('location').textContent = player.overview
+          ? 'Обзор комнаты · Tab — вернуться'
+          : `Белая комната · ${player.third ? 'третье' : 'первое'} лицо`;
+      if (reactor.active)
+        $('location').textContent =
+          'Учебный БЩУ · включите подсказки и наведите курсор на панель';
+    }
+    scene.render();
+  });
 }
 start().catch((error) => {
   console.error(error);

@@ -274,8 +274,10 @@ export class Network {
       channel.close();
       return;
     }
-    channel.onopen = () =>
-      channel.send(JSON.stringify(this.player.state(++this.sequence)));
+    channel.onopen = () => {
+      if (this.player.worldMap === 'planet')
+        channel.send(JSON.stringify(this.player.state(++this.sequence)));
+    };
     channel.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
@@ -422,7 +424,7 @@ export class Network {
     }
     const now = performance.now();
     if (this.id && this.socket?.readyState === WebSocket.OPEN) {
-      if (now - this.lastSend >= 50) {
+      if (this.player.worldMap === 'planet' && now - this.lastSend >= 50) {
         this.lastSend = now;
         const state = this.player.state(++this.sequence);
         if (this.worldProtocol === 2) this.send(state);
@@ -432,6 +434,7 @@ export class Network {
             peer.dc.send(raw);
       }
       if (
+        this.player.worldMap === 'planet' &&
         now - this.lastWorldSend >= 100 &&
         this.worldChannel?.readyState === 'open'
       ) {
