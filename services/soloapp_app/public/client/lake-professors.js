@@ -170,7 +170,7 @@ export class LakeProfessors {
         (recorder.pending
           ? 'Подключаю голосовой чат…'
           : recorder.enabled
-            ? '● Слушаю голосовой чат · локальный Whisper'
+            ? '● Слушаю голосовой чат · Whisper сервиса'
             : 'Включите микрофон голосового чата — я запишу ваши слова.')
       : 'Подойдите, чтобы поговорить';
     const state = JSON.stringify([

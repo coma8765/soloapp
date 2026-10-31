@@ -58,7 +58,7 @@ async function start() {
             ? 'Микрофон включён · вне зоны профессоров аудио не обрабатывается'
             : '● Запись у озера ' +
               (professorRecorder.target + 1) +
-              ' · локальный Whisper'
+              ' · Whisper сервиса'
           : '');
     },
     () => auth.token,
