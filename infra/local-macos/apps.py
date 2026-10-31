@@ -192,6 +192,12 @@ def manifests():
             "fsGroup": 10001,
             "runAsNonRoot": True,
         }
+        if app == "whoami":
+            # Match the production read-only runtime, including no upload directory.
+            pod["volumes"] = [v for v in pod["volumes"] if v["name"] == "credentials"]
+            pod["containers"][0]["volumeMounts"] = [
+                v for v in pod["containers"][0]["volumeMounts"] if v["name"] == "credentials"
+            ]
         c = pod["containers"][0]
         c["imagePullPolicy"] = "Never"
         c["securityContext"] = {

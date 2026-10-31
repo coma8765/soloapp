@@ -13,6 +13,8 @@ int main() {
         drogon::app()
             .setLogLevel(trantor::Logger::kWarn)
             .setThreadNum(1)
+            .setClientMaxBodySize(256044)
+            .setClientMaxMemoryBodySize(256044)
             .setClientMaxWebSocketMessageSize(32768)
             .addListener(planet::env("LISTEN_ADDRESS", "0.0.0.0"),
                          std::stoi(planet::env("PORT", "8080")));
