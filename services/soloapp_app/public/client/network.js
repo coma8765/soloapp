@@ -275,8 +275,7 @@ export class Network {
       return;
     }
     channel.onopen = () => {
-      if (this.player.worldMap === 'planet')
-        channel.send(JSON.stringify(this.player.state(++this.sequence)));
+      channel.send(JSON.stringify(this.player.state(++this.sequence)));
     };
     channel.onmessage = (event) => {
       try {
@@ -291,10 +290,27 @@ export class Network {
           peer.ping = Math.round(performance.now() - message.sent);
           peer.pingAt = performance.now();
         }
+        if (message.type === 'reactor' && channel.label === 'control-v1')
+          this.onReactorMessage?.(id, message);
       } catch {
         /* Discard malformed remote data. */
       }
     };
+  }
+
+  sendControl(id, message) {
+    const channel = this.peers.get(id)?.control;
+    if (channel?.readyState !== 'open' || channel.bufferedAmount >= 65536)
+      return false;
+    channel.send(JSON.stringify(message));
+    return true;
+  }
+
+  broadcastControl(message) {
+    let sent = 0;
+    for (const id of this.peers.keys())
+      sent += Number(this.sendControl(id, message));
+    return sent;
   }
 
   async peerSignal(message) {
@@ -424,10 +440,11 @@ export class Network {
     }
     const now = performance.now();
     if (this.id && this.socket?.readyState === WebSocket.OPEN) {
-      if (this.player.worldMap === 'planet' && now - this.lastSend >= 50) {
+      if (now - this.lastSend >= 50) {
         this.lastSend = now;
         const state = this.player.state(++this.sequence);
-        if (this.worldProtocol === 2) this.send(state);
+        if (this.player.worldMap === 'planet' && this.worldProtocol === 2)
+          this.send(state);
         const raw = JSON.stringify(state);
         for (const peer of this.peers.values())
           if (peer.dc?.readyState === 'open' && peer.dc.bufferedAmount < 65536)
@@ -464,6 +481,13 @@ export class Network {
         this.worldTransport = 'ожидание сервера…';
     }
     for (const [id, remote] of this.remotes) {
+      const remoteMap = remote.state.map || 'planet';
+      const sameMap = remoteMap === this.player.worldMap;
+      remote.node.setEnabled(sameMap);
+      if (!sameMap) {
+        this.planet.actors.delete(id);
+        continue;
+      }
       remote.node.position = B.Vector3.Lerp(
         remote.node.position,
         remote.target,
@@ -480,7 +504,9 @@ export class Network {
         remote.state.pitch,
         true,
       );
-      this.planet.updateActor(id, remote.node.position, dt);
+      if (this.player.worldMap === 'planet')
+        this.planet.updateActor(id, remote.node.position, dt);
+      else this.planet.actors.delete(id);
     }
   }
 }

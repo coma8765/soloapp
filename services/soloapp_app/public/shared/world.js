@@ -1,4 +1,4 @@
-import { ROOM_MAP, validRoomPosition } from './room.js';
+import { REACTOR_MAP, ROOM_MAP, validRoomPosition } from './room.js';
 export const WATER_RADIUS = 36.8;
 export const BASE_RADIUS = 36;
 export const MAX_PLAYERS = 8;
@@ -81,8 +81,8 @@ export function validState(s, map = 'planet') {
     Array.isArray(s.position) &&
     s.position.length === 3 &&
     s.position.every(Number.isFinite) &&
-    (map === ROOM_MAP
-      ? s.map === ROOM_MAP && validRoomPosition(s.position)
+    (map === ROOM_MAP || map === REACTOR_MAP
+      ? s.map === map && validRoomPosition(s.position)
       : (!s.map || s.map === 'planet') &&
         length(s.position) >= 25 &&
         length(s.position) <= 50) &&
