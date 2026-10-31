@@ -11,7 +11,9 @@ try {
   const engine = new B.Engine(document.getElementById('canvas'), true),
     scene = new B.Scene(engine);
   scene.useRightHandedSystem = true;
-  const data = await fetch('/assets/world.json').then((r) => r.json());
+  const data = await fetch(
+    new URL('../assets/world.json', import.meta.url),
+  ).then((r) => r.json());
   const terrain = new Terrain(data),
     planet = new PlanetScene(scene, data),
     professors = new LakeProfessors(scene, terrain, planet);

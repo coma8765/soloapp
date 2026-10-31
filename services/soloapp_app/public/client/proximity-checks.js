@@ -9,7 +9,9 @@ function check(ok, message) {
   output.textContent += '\nPASS · ' + message;
 }
 try {
-  const data = await fetch('/assets/world.json').then((r) => r.json()),
+  const data = await fetch(
+      new URL('../assets/world.json', import.meta.url),
+    ).then((r) => r.json()),
     terrain = new Terrain(data);
   const canvas = document.getElementById('canvas'),
     engine = new B.Engine(canvas, true),

@@ -18,9 +18,9 @@ function check(condition, description) {
   log('PASS · ' + description);
 }
 try {
-  const data = await fetch('/assets/world.json').then((response) =>
-    response.json(),
-  );
+  const data = await fetch(
+    new URL('../assets/world.json', import.meta.url),
+  ).then((response) => response.json());
   const terrain = new Terrain(data);
   const engine = new B.Engine(document.getElementById('canvas'), true);
   const scene = new B.Scene(engine);

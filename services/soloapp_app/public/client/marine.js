@@ -61,7 +61,9 @@ export class MarineLife {
 
   async load() {
     try {
-      const response = await fetch('/assets/lakes.json');
+      const response = await fetch(
+        new URL('../assets/lakes.json', import.meta.url),
+      );
       if (!response.ok) throw Error('Карты озёр недоступны');
       const data = await response.json();
       this.lakes = data.lakes.map((lake, index) => ({
