@@ -52,6 +52,8 @@ try {
     const engine = player.scene.getEngine();
     engine.stopRenderLoop();
     room.instructor.stop();
+    // Test furniture independently of randomly positioned workers.
+    player.roomPeople = () => [];
     player.inputEnabled = true;
     const cabinets = room.physicalConsole.colliders.filter((m) =>
       /(?:desk|auxiliary|wall) cabinet/.test(m.name),
@@ -104,9 +106,74 @@ try {
         }
       }
     }
+    const tableChecks = [];
+    const tableMatrix = room.journal.root.computeWorldMatrix(true);
+    const tableInverse = B.Matrix.Invert(tableMatrix);
+    for (const mode of ['gamepad', 'touch', 'xr']) {
+      for (const [axis, half] of [
+        ['x', 2.2],
+        ['z', 0.85],
+      ]) {
+        for (const sign of [-1, 1]) {
+          const start = B.Vector3.Zero();
+          start[axis] = sign * (half + 1);
+          const direction = B.Vector3.Zero();
+          direction[axis] = -sign;
+          player.position.copyFrom(
+            B.Vector3.TransformCoordinates(start, tableMatrix),
+          );
+          player.forward.copyFrom(
+            B.Vector3.TransformNormal(direction, tableMatrix).normalize(),
+          );
+          player.xr = mode === 'xr';
+          player.gamepadMove = mode === 'gamepad' ? { x: 0, y: 1 } : null;
+          player.touchMove = mode === 'touch' ? { x: 0, y: 1 } : null;
+          player.update(
+            mode === 'xr' ? 2.2 : 1,
+            mode === 'xr' ? player.forward.clone() : null,
+          );
+          const local = B.Vector3.TransformCoordinates(
+            player.position,
+            tableInverse,
+          );
+          tableChecks.push({
+            mode,
+            axis,
+            sign,
+            distance: sign * local[axis],
+            expected: half + 0.35,
+          });
+        }
+      }
+    }
     player.xr = false;
     player.gamepadMove = null;
     player.touchMove = null;
+    const passageStart = new B.Vector3(2.7, 0, 2);
+    player.position.copyFrom(
+      B.Vector3.TransformCoordinates(passageStart, tableMatrix),
+    );
+    player.forward.copyFrom(
+      B.Vector3.TransformNormal(new B.Vector3(0, 0, -1), tableMatrix),
+    );
+    player.gamepadMove = { x: 0, y: 1 };
+    player.update(4 / 5.5);
+    const passage = B.Vector3.TransformCoordinates(
+      player.position,
+      tableInverse,
+    ).z;
+    player.gamepadMove = null;
+    room.focusJournal('machine');
+    player.update(0);
+    const eye = player.camera.position;
+    const journalReachable = room.journal.keys.some((key) => {
+      const target = key.getAbsolutePosition();
+      const hit = player.scene.pickWithRay(
+        new B.Ray(eye, target.subtract(eye).normalize(), 8),
+        (mesh) => room.interactiveMesh(mesh),
+      );
+      return hit?.pickedMesh === key;
+    });
     player.position.set(0, 0, 3);
     player.update(0);
     room.togglePhysical();
@@ -122,14 +189,30 @@ try {
       colliders: room.physicalConsole.colliders.length,
       cabinets: cabinets.length,
       checks,
+      tableChecks,
+      passage,
+      journalReachable,
       separateRoom,
       restored,
     };
   });
+  for (const check of report.tableChecks)
+    assert(
+      Math.abs(check.distance - check.expected) < 0.001,
+      JSON.stringify(check),
+    );
+  assert(
+    Math.abs(report.passage + 2) < 0.001,
+    'passage beside journal table stays open',
+  );
+  assert(
+    report.journalReachable,
+    'journal keys remain reachable from the focus position',
+  );
   assert.equal(
     report.colliders,
-    25,
-    '9 wall cabinets and 8 cabinets + 8 sloped tops',
+    26,
+    '9 wall cabinets, 8 cabinets + 8 sloped tops, and journal table',
   );
   assert.equal(report.cabinets, 17);
   for (const check of report.checks) {
@@ -151,6 +234,8 @@ try {
     JSON.stringify({
       colliders: report.colliders,
       movementChecks: report.checks.length,
+      tableChecks: report.tableChecks.length,
+      journalReachable: report.journalReachable,
       modes: ['gamepad', 'touch', 'xr'],
       buttonsReachable: true,
       mapSwitch: true,

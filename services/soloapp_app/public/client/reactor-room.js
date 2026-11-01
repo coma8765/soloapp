@@ -308,8 +308,8 @@ export class ReactorRoom {
         this.commitControl(name, value, operation),
       action: (action) => this.commitAction(action),
     });
-    this.colliders.push(...this.physicalConsole.colliders);
     this.journal = new RbmkJournalStation(this);
+    this.colliders.push(...this.physicalConsole.colliders);
     this.journal.restore();
     this.drawStatus(true);
   }

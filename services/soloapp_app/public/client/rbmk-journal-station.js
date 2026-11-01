@@ -72,8 +72,15 @@ export class RbmkJournalStation {
     this.buildInput();
   }
 
-  box(name, size, at, material, parent = this.root) {
-    return this.console.box(`Журнал · ${name}`, size, at, material, parent);
+  box(name, size, at, material, parent = this.root, collider = false) {
+    return this.console.box(
+      `Журнал · ${name}`,
+      size,
+      at,
+      material,
+      parent,
+      collider,
+    );
   }
 
   plate(name, label, width, at, parent = this.root, rotation = null) {
@@ -131,7 +138,7 @@ export class RbmkJournalStation {
     const wood = c.material('Journal desk wood', '#655345');
     const paint = c.material('Typewriter olive enamel', '#60675e');
     const paper = c.material('Journal paper edges', '#d7d0b2');
-    this.box('стол', [4.4, 0.12, 1.7], [0, 0.8, 0], wood);
+    this.box('стол', [4.4, 0.12, 1.7], [0, 0.8, 0], wood, this.root, true);
     for (const x of [-2, 2])
       for (const z of [-0.65, 0.65])
         this.box('ножка', [0.09, 0.74, 0.09], [x, 0.37, z], c.darkSteel);
