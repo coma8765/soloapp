@@ -1,17 +1,19 @@
 apiVersion: apiserver.config.k8s.io/v1
 kind: AuthenticationConfiguration
+anonymous:
+  enabled: false
 jwt:
 - issuer:
     url: https://{{ public_domain }}/id/realms/soloapp
     audiences: [headlamp]
     audienceMatchPolicy: MatchAny
   claimValidationRules:
-  - expression: "has(claims.headlamp_roles) && claims.headlamp_roles.exists(r, r in ['viewer', 'operator'])"
+  - expression: "has(claims.headlamp_roles) && dyn(claims.headlamp_roles).exists(r, r in ['viewer', 'operator'])"
     message: Headlamp membership is required
   claimMappings:
     username:
       expression: "'keycloak:' + claims.sub"
     groups:
-      expression: "claims.headlamp_roles.filter(r, r in ['viewer', 'operator']).map(r, 'keycloak:headlamp:' + r)"
+      expression: "dyn(claims.headlamp_roles).filter(r, r in ['viewer', 'operator']).map(r, 'keycloak:headlamp:' + r)"
     uid:
       expression: claims.sub

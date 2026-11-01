@@ -114,3 +114,12 @@ Operator setup/rotation (credential transfer requires operator authorization):
 
 CI still fails closed if the pinned revision leaves main history, validation fails/cancels, or the 40-minute wait expires.
 The server gate independently rechecks CI/main before publication or mutation.
+
+
+Image publication also accepts fixed `mirror-<service> <sha>` operations: the
+installed gate retrieves missing verified blobs from the other configured
+registry using its existing read-only identity, then invokes the same
+unprivileged publisher. CI/main checks run before retrieval. No arbitrary URL,
+filesystem path, command or credential is accepted. The default workflow uses
+YC uploads followed by home peer copies; explicit force transfer keeps full SSH
+uploads available. Update both the gate and entry parser before rollout.

@@ -50,16 +50,16 @@ def digest(data):
     return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
-def load_archive(path):
+def load_archive(path, cached=None):
     tar = tarfile.open(path, mode="r:")
     try:
-        return parse_archive(tar)
+        return parse_archive(tar, cached)
     except BaseException:
         tar.close()
         raise
 
 
-def parse_archive(tar):
+def parse_archive(tar, cached=None):
     members = {}
     for entry in tar:
         if entry.isdir():
@@ -109,6 +109,13 @@ def parse_archive(tar):
     else:
         raise ValueError("Too many nested indexes")
     for desc in [image["config"], *image["layers"]]:
+        if (
+            desc in image["layers"]
+            and "blobs/sha256/" + desc["digest"].removeprefix("sha256:") not in members
+            and cached is not None
+            and cached(desc)
+        ):
+            continue
         member = blob(desc)
         with tar.extractfile(member) as stream:
             actual = (
@@ -153,7 +160,11 @@ def version_alias(ctx, base, config, manifest, media):
 
 
 def publish(path, service, revision, directory):
-    tar, members, image, manifest, config = load_archive(path)
+    ctx = context(directory)
+    base = "/v2/soloapp/" + service
+    tar, members, image, manifest, config = load_archive(
+        path, cached=lambda desc: cached_blob(ctx, base, desc)
+    )
     if (
         config.get("config", {}).get("Labels", {}).get("org.opencontainers.image.revision")
         != revision
@@ -245,15 +256,57 @@ def publish(path, service, revision, directory):
     return expected
 
 
+PROTOCOL = b"SOLOAPP-OCI-DELTA-1\n"
+REPLY = "SOLOAPP-OCI-CACHED "
+
+
+def cached_blob(ctx, base, desc):
+    value = desc.get("digest", "")
+    size = desc.get("size")
+    if (
+        not re.fullmatch(r"sha256:[0-9a-f]{64}", value)
+        or type(size) is not int
+        or not 0 <= size <= MAX_ARCHIVE
+    ):
+        raise ValueError("Invalid blob descriptor")
+    status, headers, _ = request(ctx, "127.0.0.1", 5044, "HEAD", base + "/blobs/" + value)
+    if status == 404:
+        return False
+    if status != 200:
+        raise RuntimeError("Blob lookup failed: " + str(status))
+    if headers.get("docker-content-digest") != value or headers.get("content-length") != str(size):
+        raise ValueError("Cached blob metadata mismatch")
+    return True
+
+
+def negotiate(stream, directory, service):
+    # Legacy tar callers remain supported. Never interpret arbitrary paths or URLs.
+    prefix = stream.read(len(PROTOCOL))
+    if prefix != PROTOCOL:
+        return prefix
+    line = stream.readline(4 * 1024**2 + 1)
+    if len(line) > 4 * 1024**2 or not line.endswith(b"\n"):
+        raise ValueError("Oversized upload inventory")
+    descriptors = json.loads(line)
+    if not isinstance(descriptors, list) or len(descriptors) > 8192:
+        raise ValueError("Invalid upload inventory")
+    ctx = context(directory)
+    cached = [d["digest"] for d in descriptors if cached_blob(ctx, "/v2/soloapp/" + service, d)]
+    print(REPLY + json.dumps(cached), flush=True)
+    return b""
+
+
 def main():
     revision, service = sys.argv[1:3]
     if not re.fullmatch(r"[0-9a-f]{40}", revision) or service not in SERVICES:
         raise SystemExit("Invalid release/service")
     directory = Path(os.environ.get("REGISTRY_SECRETS", "/run/soloapp-registry"))
+    prefix = negotiate(sys.stdin.buffer, directory, service)
     with tempfile.TemporaryDirectory(prefix="registry-push-") as tmp:
         archive = Path(tmp) / "image.oci.tar"
-        size = 0
+        size = len(prefix)
         with archive.open("wb") as output:
+            output.write(prefix)
             while True:
                 data = sys.stdin.buffer.read(1024**2)
                 if not data:

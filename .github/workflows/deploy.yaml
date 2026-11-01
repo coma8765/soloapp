@@ -8,6 +8,16 @@ on:
         type: choice
         default: app-api
         options: [app-api, client-notify, client-gateway, auth, web, nginx, keycloak, whisper, tts, llama, all]
+      refresh_whisper_base:
+        description: Rebuild Whisper model/CUDA base instead of reusing the saved base
+        required: false
+        type: boolean
+        default: false
+      force_image_transfer:
+        description: Resend cached image layers (normally only missing layers are sent)
+        required: false
+        type: boolean
+        default: false
       rollback_revision:
         description: Previously deployed v0.1.P or full commit SHA; empty for a new release
         required: false
@@ -133,15 +143,36 @@ jobs:
             -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/cd/known_hosts" \
             -o ForwardAgent=no -o ConnectTimeout=20 -o ServerAliveInterval=30 \
             "soloapp-cd@$HOST" "publish $SHA" < "$RUNNER_TEMP/web.tar.gz"
+      - name: Reserve disk space for image archives and Whisper cache
+        if: inputs.rollback_revision == '' && (needs.prepare.outputs.service == 'whisper' || needs.prepare.outputs.service == 'all')
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - name: Restore persistent Whisper base cache
+        if: inputs.rollback_revision == '' && !inputs.refresh_whisper_base && (needs.prepare.outputs.service == 'whisper' || needs.prepare.outputs.service == 'all')
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ runner.temp }}/whisper-base
+          key: whisper-base-v1-${{ hashFiles('services/whisper/deploy/Dockerfile', 'services/whisper/deploy/requirements.txt') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            whisper-base-v1-${{ hashFiles('services/whisper/deploy/Dockerfile', 'services/whisper/deploy/requirements.txt') }}-
       - name: Build runtime images on GitHub runner
         if: inputs.rollback_revision == '' && needs.prepare.outputs.service != 'nginx'
         env:
           SHA: ${{ needs.prepare.outputs.sha }}
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          WHISPER_BASE_CACHE: ${{ runner.temp }}/whisper-base
+          REFRESH_WHISPER_BASE: ${{ inputs.refresh_whisper_base }}
           SERVICE: ${{ needs.prepare.outputs.service }}
         run: |
           docker buildx create --use
           bash infra/registry/build.sh "$SHA" "$RUNNER_TEMP/images" "$SERVICE"
+      - name: Save persistent Whisper base cache
+        if: inputs.rollback_revision == '' && (needs.prepare.outputs.service == 'whisper' || needs.prepare.outputs.service == 'all')
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ runner.temp }}/whisper-base
+          key: whisper-base-v1-${{ hashFiles('services/whisper/deploy/Dockerfile', 'services/whisper/deploy/requirements.txt') }}-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Publish identical runtime images to both private registries
         if: inputs.rollback_revision == '' && needs.prepare.outputs.service != 'nginx'
         env:
@@ -151,15 +182,26 @@ jobs:
           YC_PORT: ${{ secrets.CD_YC_PORT }}
           HOME_PORT: ${{ secrets.CD_HOME_PORT }}
           IMAGES: ${{ needs.prepare.outputs.images }}
+          FORCE_IMAGE_TRANSFER: ${{ inputs.force_image_transfer }}
         run: |
           set -euo pipefail
+          transfer_options=()
+          if [ "$FORCE_IMAGE_TRANSFER" = true ]; then transfer_options+=(--force); fi
           for service in $IMAGES; do
             for site in yc home; do
               if [ "$site" = yc ]; then host=$YC_HOST; port=$YC_PORT; else host=$HOME_HOST; port=$HOME_PORT; fi
-              ssh -i "$RUNNER_TEMP/cd/$site" -p "$port" -o IdentitiesOnly=yes -o BatchMode=yes \
+              if [ "$site" = home ] && [ "$FORCE_IMAGE_TRANSFER" != true ]; then
+                ssh -i "$RUNNER_TEMP/cd/$site" -p "$port" -o IdentitiesOnly=yes -o BatchMode=yes \
+                  -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/cd/known_hosts" \
+                  -o ForwardAgent=no -o ConnectTimeout=20 -o ServerAliveInterval=30 \
+                  "soloapp-cd@$host" "mirror-$service $SHA"
+                continue
+              fi
+              python3 infra/registry/upload.py --archive "$RUNNER_TEMP/images/$service.oci.tar" --revision "$SHA" "${transfer_options[@]}" -- \
+                ssh -i "$RUNNER_TEMP/cd/$site" -p "$port" -o IdentitiesOnly=yes -o BatchMode=yes \
                 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/cd/known_hosts" \
                 -o ForwardAgent=no -o ConnectTimeout=20 -o ServerAliveInterval=30 \
-                "soloapp-cd@$host" "push-$service $SHA" < "$RUNNER_TEMP/images/$service.oci.tar"
+                "soloapp-cd@$host" "push-$service $SHA"
             done
           done
       - name: Roll YC

@@ -77,6 +77,8 @@ def deployment_operation(mode):
         prefix = action + "-"
         if mode.startswith(prefix) and mode[len(prefix) :] in SCOPES:
             return action, mode[len(prefix) :]
+    if mode.startswith("mirror-") and mode.removeprefix("mirror-") in IMAGE_SERVICES["all"]:
+        return mode, None
     if mode in (
         "publish",
         "push-auth",
@@ -146,7 +148,7 @@ def ci_passed(data, revision, repository):
     )
 
 
-def run(argv, *, cwd=None, capture=False, env=None):
+def run(argv, *, cwd=None, capture=False, env=None, stdin=None):
     if argv[0] == "git":
         argv = [
             "docker",
@@ -167,7 +169,13 @@ def run(argv, *, cwd=None, capture=False, env=None):
         ] + argv[1:]
         cwd = None
     return subprocess.run(
-        argv, cwd=cwd, check=True, text=True, stdout=subprocess.PIPE if capture else None, env=env
+        argv,
+        cwd=cwd,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE if capture else None,
+        env=env,
+        stdin=stdin,
     ).stdout
 
 
@@ -202,6 +210,144 @@ def registry_images(sha, require_both=True, services=("auth", "whoami", "web")):
     if any(copy != copies[0] for copy in copies):
         raise RuntimeError("Registry replicas disagree")
     return copies[0]
+
+
+def mirror_archive(sha, service, site, destination):
+    """Copy verified missing blobs from the fixed peer; no caller-selected URLs."""
+    import io
+    import tarfile
+    import urllib.error
+
+    hosts = {"yc": "10.77.26.11", "home": "10.77.26.12"}
+    if site not in hosts or service not in IMAGE_SERVICES["all"]:
+        raise ValueError("Unknown registry site or service")
+    validate_revision(sha)
+    directory = Path("/run/soloapp-registry")
+    ctx = ssl.create_default_context(cafile=str(directory / "ca.crt"))
+    ctx.load_cert_chain(str(directory / "pull.crt"), str(directory / "pull.key"))
+
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *args):
+            return None
+
+    client = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ctx), NoRedirect())
+    base = "/v2/soloapp/" + service
+    peer = "https://" + hosts["home" if site == "yc" else "yc"] + ":5043" + base
+    local = "https://" + hosts[site] + ":5043" + base
+    accept = "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json"
+    with client.open(
+        urllib.request.Request(peer + "/manifests/git-" + sha, headers={"Accept": accept}),
+        timeout=30,
+    ) as response:
+        manifest = response.read(4 * 1024**2 + 1)
+    if len(manifest) > 4 * 1024**2:
+        raise ValueError("Oversized peer manifest")
+    image = json.loads(manifest)
+    layers = image["layers"]
+    if not isinstance(layers, list) or len(layers) > 8192:
+        raise ValueError("Invalid peer layers")
+    descriptors = [image["config"], *layers]
+    for desc in descriptors:
+        if (
+            not re.fullmatch(r"sha256:[0-9a-f]{64}", desc.get("digest", ""))
+            or type(desc.get("size")) is not int
+            or not 0 <= desc["size"] <= 4 * 1024**3
+        ):
+            raise ValueError("Invalid peer blob descriptor")
+    if image["config"]["size"] > 4 * 1024**2 or sum(d["size"] for d in descriptors) > 4 * 1024**3:
+        raise ValueError("Oversized peer image")
+
+    def download(desc, path):
+        digest = hashlib.sha256()
+        size = 0
+        with (
+            client.open(peer + "/blobs/" + desc["digest"], timeout=60) as response,
+            path.open("wb") as output,
+        ):
+            while data := response.read(min(1024**2, desc["size"] - size + 1)):
+                size += len(data)
+                if size > desc["size"]:
+                    raise ValueError("Oversized peer blob")
+                output.write(data)
+                digest.update(data)
+        if size != desc["size"] or "sha256:" + digest.hexdigest() != desc["digest"]:
+            raise ValueError("Corrupt peer blob")
+
+    root = destination.parent
+    config_path = root / "peer-config"
+    download(image["config"], config_path)
+    config = json.loads(config_path.read_bytes())
+    if (config.get("os"), config.get("architecture")) != ("linux", "amd64") or config.get(
+        "config", {}
+    ).get("Labels", {}).get("org.opencontainers.image.revision") != sha:
+        raise ValueError("Peer runtime must match approved revision and platform")
+    manifest_digest = "sha256:" + hashlib.sha256(manifest).hexdigest()
+    copied = image["config"]["size"]
+    reused = 0
+    seen = {image["config"]["digest"]}
+    with tarfile.open(destination, "w") as tar:
+
+        def add(name, content):
+            info = tarfile.TarInfo(name)
+            info.size = len(content)
+            tar.addfile(info, io.BytesIO(content))
+
+        add("oci-layout", b'{"imageLayoutVersion":"1.0.0"}')
+        add(
+            "index.json",
+            json.dumps(
+                {
+                    "schemaVersion": 2,
+                    "manifests": [
+                        {
+                            "digest": manifest_digest,
+                            "size": len(manifest),
+                            "platform": {"os": "linux", "architecture": "amd64"},
+                        }
+                    ],
+                }
+            ).encode(),
+        )
+        add("blobs/sha256/" + manifest_digest[7:], manifest)
+        tar.add(config_path, arcname="blobs/sha256/" + image["config"]["digest"][7:])
+        config_path.unlink()
+        for desc in layers:
+            if desc["digest"] in seen:
+                continue
+            seen.add(desc["digest"])
+            try:
+                with client.open(
+                    urllib.request.Request(local + "/blobs/" + desc["digest"], method="HEAD"),
+                    timeout=15,
+                ) as response:
+                    if response.headers.get("Docker-Content-Digest") != desc[
+                        "digest"
+                    ] or response.headers.get("Content-Length") != str(desc["size"]):
+                        raise ValueError("Cached peer blob metadata mismatch")
+                reused += desc["size"]
+                continue
+            except urllib.error.HTTPError as error:
+                status = error.code
+                error.close()
+                if status != 404:
+                    raise
+            blob = root / ("peer-" + desc["digest"][7:])
+            download(desc, blob)
+            tar.add(blob, arcname="blobs/sha256/" + desc["digest"][7:])
+            blob.unlink()
+            copied += desc["size"]
+    os.chmod(destination, 0o644)  # Public image bytes only; publisher UID reads this archive.
+    print(
+        json.dumps(
+            {
+                "service": service,
+                "peer_bytes": copied,
+                "reused_bytes": reused,
+                "digest": manifest_digest,
+            }
+        ),
+        flush=True,
+    )
 
 
 def main():
@@ -300,40 +446,47 @@ def main():
         if mode == "publish":
             run(storage)
             return
-        if mode.startswith("push-"):
-            service = mode.removeprefix("push-")
+        if mode.startswith(("push-", "mirror-")):
+            service = mode.split("-", 1)[1]
             # CUDA archives exceed spare RAM. Only public image bytes go to disk;
             # credentials remain read-only in /run and are never copied here.
             with tempfile.TemporaryDirectory(prefix="upload-", dir=STATE) as staging:
                 os.chown(staging, 10006, 10006)
-                run(
-                    [
-                        "docker",
-                        "run",
-                        "--rm",
-                        "-i",
-                        "--network",
-                        "host",
-                        "--read-only",
-                        "--cap-drop=ALL",
-                        "--security-opt",
-                        "no-new-privileges",
-                        "--user",
-                        "10006:10006",
-                        "-v",
-                        staging + ":/tmp:rw",
-                        "-v",
-                        str(source) + ":/src:ro",
-                        "-v",
-                        "/run/soloapp-registry-publisher:/run/soloapp-registry:ro",
-                        "--entrypoint",
-                        "python3",
-                        "soloapp/deploy-controller:1",
-                        "/src/infra/registry/push.py",
-                        sha,
-                        service,
-                    ]
-                )
+                archive = None
+                if mode.startswith("mirror-"):
+                    archive = Path(staging) / "peer-image.oci.tar"
+                    mirror_archive(sha, service, cfg["site"], archive)
+                command = [
+                    "docker",
+                    "run",
+                    "--rm",
+                    "-i",
+                    "--network",
+                    "host",
+                    "--read-only",
+                    "--cap-drop=ALL",
+                    "--security-opt",
+                    "no-new-privileges",
+                    "--user",
+                    "10006:10006",
+                    "-v",
+                    staging + ":/tmp:rw",
+                    "-v",
+                    str(source) + ":/src:ro",
+                    "-v",
+                    "/run/soloapp-registry-publisher:/run/soloapp-registry:ro",
+                    "--entrypoint",
+                    "python3",
+                    "soloapp/deploy-controller:1",
+                    "/src/infra/registry/push.py",
+                    sha,
+                    service,
+                ]
+                if archive is not None:
+                    with archive.open("rb") as source_stream:
+                        run(command, stdin=source_stream)
+                else:
+                    run(command)
             return
         if not is_rollback and scope in ("web", "all"):
             # Only a web activation depends on the static asset release.
