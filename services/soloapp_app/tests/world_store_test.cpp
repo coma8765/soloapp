@@ -178,8 +178,8 @@ int run_test(int argc, char **argv) {
     auto answered = first.exchange(visitorOne, {}, {question});
     auto seen = second.exchange(visitorTwo, {});
     auto late = reader.exchange(empty, {});
-    for (const auto *snapshot : {&seen.professors, &late.professors}) {
-        const auto &lake = (*snapshot)["lakes"][0];
+    for (const auto *professorSnapshot : {&seen.professors, &late.professors}) {
+        const auto &lake = (*professorSnapshot)["lakes"][0];
         if (lake["answer"] != question["answer"] || lake["focus"].asUInt64() != 1 ||
             lake["startedAt"].asInt64() != answered.professors["lakes"][0]["startedAt"].asInt64())
             throw std::runtime_error(
