@@ -54,6 +54,7 @@ def test_auth_logic_with_repository_double(unit_probe):
     assert result == {
         "status": 200,
         "identity_matches": True,
+        "profile_username": "alice",
         "only_digest_stored": True,
         "password_is_argon2": True,
         "duplicate_status": 409,

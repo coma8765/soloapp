@@ -63,6 +63,7 @@ function remote(network, id) {
   const node = {
     position: new Vector([0, 36, 0]),
     rotationQuaternion: new Vector([0, 0, 0, 1]),
+    dispose() {},
     setEnabled(value) {
       this.enabled = value;
     },
@@ -189,4 +190,37 @@ test('room pose updates preserve the active voice connection and microphone', ()
     assert.equal(n.voice.peers.get(2), peer);
   }
   assert.equal(stopped, false);
+});
+
+test('only server participant messages set labels and telemetry probes report actual engine FPS', () => {
+  const n = setup(1, REACTOR_MAP);
+  n.scene.getEngine = () => ({ getFps: () => 72 });
+  const sent = [];
+  n.socket.send = (raw) => sent.push(JSON.parse(raw));
+  const seen = remote(n, 2);
+  seen.avatar.setLabel = (label) => {
+    seen.label = label;
+  };
+  n.message({
+    type: 'participants',
+    admin: true,
+    players: [
+      { id: 1, email: 'a@gmail.com', ping: 10, fps: 72 },
+      { id: 2, email: 'peer@example.test', ping: 20, fps: 60 },
+    ],
+  });
+  assert.equal(seen.label, 'peer@example.test');
+  assert.equal(n.participantName(2), 'peer@example.test');
+  n.message({ type: 'telemetry_probe', nonce: 'server-challenge' });
+  assert.deepEqual(sent.pop(), {
+    type: 'telemetry_reply',
+    nonce: 'server-challenge',
+    fps: 72,
+  });
+  n.message({ type: 'left', id: 2 });
+  assert.equal(n.participants.players.has(2), false);
+  n.fish.reset = () => {};
+  n.clearPeers();
+  assert.equal(n.participants.admin, false);
+  assert.equal(n.participants.players.size, 0);
 });

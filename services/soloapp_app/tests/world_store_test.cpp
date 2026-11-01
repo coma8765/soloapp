@@ -1,3 +1,4 @@
+#include "participants.hpp"
 #include "world_store.hpp"
 #include <chrono>
 #include <iostream>
@@ -36,7 +37,11 @@ int run_test(int argc, char **argv) {
         players.append(p);
         return players;
     };
-    const auto one = participant(1, "synthetic-user-1"), two = participant(2, "synthetic-user-2");
+    auto one = participant(1, "synthetic-user-1"), two = participant(2, "synthetic-user-2");
+    one[0]["email"] = "member@example.test";
+    one[0]["telemetry"]["fps"] = 72;
+    one[0]["telemetry"]["ping"] = 35;
+    one[0]["telemetry"]["age_ms"] = 0;
     first.exchange(one, {});
     auto joined = second.exchange(two, {});
     // PostgreSQL JSON decoding can change unsigned IDs to signed JSON integers.
@@ -71,6 +76,12 @@ int run_test(int argc, char **argv) {
     first.exchange(one, {});
     second.exchange(two, {});
     std::cout << "PASS: bidirectional cross-node and same-node SDP/ICE delivery\n";
+    auto roster = planet::participantsMessage(joined.players, true);
+    if (roster["players"][0]["email"] != "member@example.test" ||
+        roster["players"][0]["fps"] != 72 || roster["players"][0]["ping"] != 35)
+        throw std::runtime_error("Cross-node participant identity/metrics missing");
+    if (planet::participantsMessage(joined.players, false)["players"][0].isMember("fps"))
+        throw std::runtime_error("Metrics leaked to regular participant");
     Json::Value command;
     command["type"] = "reactor_command";
     command["from"] = 2;

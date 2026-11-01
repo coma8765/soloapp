@@ -26,3 +26,9 @@ are used by the integrated deployment.
 The planet and reactor control room are connected by a synchronized automatic
 door. PostgreSQL commits opening and passage before clients change rooms; both
 door views close after passage. See [door behavior and tests](docs/door.md).
+
+## Метрики участников
+
+Для аккаунта `a@gmail.com` доступна таблица почт, серверного ping и FPS всех подключённых участников, включая другие карты и серверные реплики. В WebXR она отображается в HUD. Почты из профиля auth заменяют видимые ID игроков; права на метрики проверяет игровой сервер.
+
+Протокол, обновление `auth`/`app-api`/`web` и команды проверок описаны в [docs/participants.md](docs/participants.md).

@@ -76,6 +76,13 @@ generated::UserId AuthService::Verify(const std::string &authorization) {
         throw AuthError(401, "invalid session");
     return {*id};
 }
+generated::Profile AuthService::Profile(const std::string &authorization) {
+    auto identity = Verify(authorization);
+    auto user = repository_.FindUserById(identity.user_id);
+    if (!user)
+        throw AuthError(401, "invalid session");
+    return {user->user_id, user->username};
+}
 void AuthService::Logout(const std::string &authorization) {
     repository_.DeleteSession(TokenDigest(ParseBearer(authorization)));
 }

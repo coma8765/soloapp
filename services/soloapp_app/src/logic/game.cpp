@@ -123,6 +123,10 @@ void Game::verify(const drogon::WebSocketConnectionPtr &socket, const std::strin
                 session.checking = false;
                 session.authAt = clockNow();
                 session.user = (*json)["user_id"].asString();
+                // Only auth's stored username can identify the administrator.
+                // An older auth deployment omits it: fail closed until upgraded.
+                session.email =
+                    (*json)["username"].isString() ? (*json)["username"].asString() : "";
                 session.token = token;
                 if (!session.id)
                     session.id = std::stoull(randomId().substr(0, 12), nullptr, 16) + 1;
@@ -166,6 +170,10 @@ void Game::message(const drogon::WebSocketConnectionPtr &socket, const std::stri
     }
     if (!s.joined)
         return;
+    if (v["type"] == "telemetry_reply") {
+        s.telemetry.accept(v, clockNow());
+        return;
+    }
     if (v["type"] == "reactor_join" && v["active"].isBool()) {
         s.reactor = v["active"].asBool();
         s.reactorVersion = s.journalSequence = s.commandRevision = 0;
@@ -228,6 +236,8 @@ void Game::refresh() {
         Json::Value player;
         player["id"] = Json::UInt64(s.id);
         player["user_id"] = s.user;
+        player["email"] = s.email;
+        player["telemetry"] = s.telemetry.snapshot(clockNow());
         player["state"] = s.state;
         player["reactor"] = s.reactor;
         local.append(player);
@@ -258,6 +268,7 @@ void Game::received(Frame frame) {
             welcome["type"] = "welcome";
             welcome["id"] = Json::UInt64(s.id);
             welcome["user_id"] = s.user;
+            welcome["email"] = s.email;
             welcome["world_protocol"] = 2;
             welcome["reactor_protocol"] = 1;
             welcome["door_protocol"] = 1;
@@ -284,6 +295,13 @@ void Game::received(Frame frame) {
                     send(s.socket, v);
                 }
         }
+        const auto now = clockNow();
+        if (now - s.participantsAt >= 1) {
+            send(s.socket, participantsMessage(frame.players, participantMetricsAdmin(s.email)));
+            s.participantsAt = now;
+        }
+        if (s.telemetry.due(now))
+            send(s.socket, s.telemetry.probe(randomId(), now));
         if (!frame.fish.empty())
             send(s.socket, frame.fish);
         for (const auto &p : frame.players)

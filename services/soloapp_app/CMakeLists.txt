@@ -49,3 +49,8 @@ add_test(NAME engineer COMMAND engineer_test)
 add_executable(engineer_pipeline_probe tests/engineer_pipeline_probe.cpp src/logic/professor.cpp)
 target_include_directories(engineer_pipeline_probe PRIVATE src ../../libs)
 target_link_libraries(engineer_pipeline_probe PRIVATE Drogon::Drogon OpenSSL::Crypto)
+
+add_executable(participants_test tests/participants_test.cpp)
+target_include_directories(participants_test PRIVATE src/logic)
+target_link_libraries(participants_test PRIVATE Drogon::Drogon)
+add_test(NAME participants COMMAND participants_test)

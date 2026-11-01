@@ -37,6 +37,15 @@ std::optional<UserRecord> OdbRepository::FindUser(const std::string &username) {
     tx->commit();
     return result;
 }
+std::optional<UserRecord> OdbRepository::FindUserById(const std::string &id) {
+    auto tx = Begin();
+    std::unique_ptr<model::User> user(database_.find<model::User>(id));
+    std::optional<UserRecord> result;
+    if (user)
+        result = UserRecord{user->user_id, user->username, user->password_hash};
+    tx->commit();
+    return result;
+}
 void OdbRepository::CreateSession(const std::string &token_hash, const std::string &user_id) {
     auto tx = Begin();
     model::Session session{token_hash, user_id,

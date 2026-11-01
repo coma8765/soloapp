@@ -145,8 +145,8 @@ bool ReactorAuthority::validSnapshot(const Json::Value &state) const {
                        [&](const char *field) { return state[field].isNumeric(); });
 }
 
-std::string ReactorAuthority::command(Json::Value &data, const Json::Value &message,
-                                      long long now) const {
+std::string ReactorAuthority::command(Json::Value &data, const Json::Value &message, long long now,
+                                      const std::string &actor) const {
     auto &state = data["state"];
     auto &controls = state["controls"];
     const auto &request = message["command"];
@@ -257,7 +257,6 @@ std::string ReactorAuthority::command(Json::Value &data, const Json::Value &mess
         if (std::any_of(data["journal"].begin(), data["journal"].end(),
                         [&](const auto &previous) { return previous["id"] == entry["id"]; }))
             return "journal_id_used";
-        const std::string actor = "участник #" + message["from"].asString();
         if (oneOf(entry["kind"], {"результат", "исправление", "приём смены"})) {
             const auto found = std::find_if(data["journal"].begin(), data["journal"].end(),
                                             [&](const Json::Value &original) {
@@ -384,7 +383,12 @@ Json::Value ReactorAuthority::update(Json::Value &data, const Json::Value &playe
         reply["requestId"] = message["requestId"];
         // Apply to a candidate: a rejected request must leave all state unchanged.
         auto candidate = data;
-        const auto error = command(candidate, message, now);
+        // Resolve the label from authenticated presence, never from the command.
+        // Old nodes without profile support retain their historical actor key.
+        const auto actor = (*present).get("email", "").asString();
+        const auto error =
+            command(candidate, message, now,
+                    actor.empty() ? "участник #" + message["from"].asString() : actor);
         reply["accepted"] = error.empty();
         reply["error"] = error;
         if (error.empty()) {

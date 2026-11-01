@@ -6,7 +6,12 @@ const B = window.BABYLON;
 // Rigged bases use procedural poses; explicitly static catalogue entries keep
 // their authored pose and use the same player transform and camera visibility.
 export class LocalAvatar {
-  constructor(scene, initialId = DEFAULT_AVATAR, peerId = null) {
+  constructor(
+    scene,
+    initialId = DEFAULT_AVATAR,
+    peerId = null,
+    name = 'Участник',
+  ) {
     this.scene = scene;
     this.root = new B.TransformNode(
       peerId === null ? 'local-player' : `remote-player-${peerId}`,
@@ -17,7 +22,7 @@ export class LocalAvatar {
     this.fallback = avatar(scene, peerId ?? 0, true);
     this.fallback.parent = this.root;
     if (peerId !== null) {
-      this.label = avatarLabel(scene, peerId);
+      this.label = avatarLabel(scene, name);
       this.label.parent = this.root;
     }
     this.phase = 0;
@@ -28,6 +33,10 @@ export class LocalAvatar {
       this.container?.dispose();
     });
     this.select(initialId);
+  }
+
+  setLabel(name) {
+    this.label?.metadata.setText(name);
   }
 
   select(id) {

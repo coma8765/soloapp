@@ -1,4 +1,5 @@
 #pragma once
+#include "participants.hpp"
 #include "world_store.hpp"
 #include <atomic>
 #include <drogon/HttpClient.h>
@@ -26,7 +27,9 @@ class Game {
     struct Session {
         unsigned long long id = 0;
         drogon::WebSocketConnectionPtr socket;
-        std::string token, user;
+        std::string token, user, email;
+        ParticipantTelemetry telemetry;
+        double participantsAt = -10;
         bool checking = false, joined = false;
         bool reactor = false;
         unsigned long long reactorVersion = 0, journalSequence = 0, commandRevision = 0;
