@@ -1,5 +1,6 @@
 #include "professor.hpp"
 #include "config.hpp"
+#include "engineer.hpp"
 #include <atomic>
 #include <drogon/HttpClient.h>
 #include <drogon/utils/Utilities.h>
@@ -10,7 +11,9 @@ std::atomic<int> active{0};
 struct Turn : std::enable_shared_from_this<Turn> {
     solo::Callback callback;
     Json::Value result;
-    explicit Turn(solo::Callback cb) : callback(std::move(cb)) {}
+    bool chief;
+    explicit Turn(solo::Callback cb, bool engineer = false)
+        : callback(std::move(cb)), chief(engineer) {}
     ~Turn() { --active; }
     void finish(drogon::HttpStatusCode status, const Json::Value &body) {
         auto response = solo::JsonResponse(status, body);
@@ -27,13 +30,19 @@ struct Turn : std::enable_shared_from_this<Turn> {
     }
     template <typename F>
     void send(const std::string &url, const std::string &path, const std::string &body,
-              const std::string &contentType, double timeout, F next) {
+              const std::string &contentType, double timeout, F next,
+              drogon::HttpMethod method = drogon::Post, const std::string &query = "") {
         auto client = drogon::HttpClient::newHttpClient(url);
         auto req = drogon::HttpRequest::newHttpRequest();
-        req->setMethod(drogon::Post);
+        req->setMethod(method);
         req->setPath(path);
         req->setContentTypeString(contentType);
         req->setBody(body);
+        if (method == drogon::Get) {
+            req->setParameter("q", query);
+            req->setParameter("mode", "lexical");
+            req->setParameter("limit", "100");
+        }
         client->sendRequest(
             req,
             [self = shared_from_this(), client, next](auto status, const auto &response) {
@@ -74,6 +83,8 @@ struct Turn : std::enable_shared_from_this<Turn> {
                  self->result["answer"] = "";
                  self->result["audio_base64"] = "";
                  self->result["audio_mime"] = "audio/wav";
+                 if (self->chief)
+                     self->result["sources"] = Json::Value(Json::arrayValue);
                  if (text.find_first_not_of(" \n\r\t") == std::string::npos) {
                      self->finish(drogon::k200OK, self->result);
                      return;
@@ -82,7 +93,87 @@ struct Turn : std::enable_shared_from_this<Turn> {
                      self->fail("professor_transcript_too_long");
                      return;
                  }
-                 self->generate(text);
+                 if (self->chief)
+                     self->search(text);
+                 else
+                     self->generate(text);
+             });
+    }
+    void search(const std::string &text) {
+        const auto url = env("ENGINEER_SEARCH_URL", "");
+        if (url.empty()) {
+            fail("engineer_search_unconfigured");
+            return;
+        }
+        const auto selected = env("ENGINEER_CORPUS", engineer::corpus);
+        try {
+            engineer::corpusPrefix(selected);
+        } catch (const std::exception &) {
+            fail("engineer_corpus_unconfigured");
+            return;
+        }
+        result["corpus"] = selected;
+        std::string query;
+        try {
+            query = engineer::keywords(text);
+        } catch (const std::exception &) {
+            fail("engineer_invalid_question");
+            return;
+        }
+        if (query.empty()) {
+            result["sources"] = Json::Value(Json::arrayValue);
+            result["answer"] = engineer::fallback;
+            speak(engineer::fallback);
+            return;
+        }
+        send(
+            url, "/search", "", "application/json", 5,
+            [text, selected](const auto &self, const auto &response) {
+                auto value = response ? response->getJsonObject() : nullptr;
+                if (!response || response->statusCode() != drogon::k200OK || !value) {
+                    self->fail("engineer_search_unavailable");
+                    return;
+                }
+                Json::Value sources;
+                try {
+                    sources = engineer::selectSources(*value, selected);
+                } catch (const std::exception &) {
+                    self->fail("engineer_invalid_search");
+                    return;
+                }
+                self->result["sources"] = sources;
+                if (sources.empty()) {
+                    self->result["answer"] = engineer::fallback;
+                    self->speak(engineer::fallback);
+                    return;
+                }
+                self->rewrite(text, sources);
+            },
+            drogon::Get, query);
+    }
+    void rewrite(const std::string &text, const Json::Value &sources) {
+        const auto url = env("OLLAMA_URL", ""), model = env("OLLAMA_MODEL", "");
+        if (url.empty() || model.empty()) {
+            fail("engineer_model_unconfigured");
+            return;
+        }
+        const auto request =
+            engineer::rewriteRequest(model, text, sources, result["corpus"].asString());
+        send(url, "/api/chat", json(request), "application/json", 60,
+             [](const auto &self, const auto &response) {
+                 auto value = response ? response->getJsonObject() : nullptr;
+                 if (!response || response->statusCode() != drogon::k200OK || !value ||
+                     !(*value)["message"]["content"].isString()) {
+                     self->fail("engineer_model_unavailable");
+                     return;
+                 }
+                 const auto answer = (*value)["message"]["content"].asString();
+                 if (engineer::blank(answer) || answer.size() > 4000) {
+                     self->fail("engineer_invalid_answer");
+                     return;
+                 }
+                 self->result["answer"] = answer;
+                 self->speak(answer);
              });
     }
     void generate(const std::string &text) {
@@ -145,7 +236,7 @@ struct Turn : std::enable_shared_from_this<Turn> {
     }
 };
 } // namespace
-void professorReply(const std::string &audio, solo::Callback callback) {
+void voiceReply(const std::string &audio, solo::Callback callback, bool chief) {
     if (active.fetch_add(1) >= 1) {
         --active;
         auto response = solo::Error(drogon::k429TooManyRequests, "professor_busy");
@@ -153,7 +244,13 @@ void professorReply(const std::string &audio, solo::Callback callback) {
         callback(response);
         return;
     }
-    auto turn = std::make_shared<Turn>(std::move(callback));
+    auto turn = std::make_shared<Turn>(std::move(callback), chief);
     turn->transcribe(audio);
+}
+void professorReply(const std::string &audio, solo::Callback callback) {
+    voiceReply(audio, std::move(callback), false);
+}
+void engineerReply(const std::string &audio, solo::Callback callback) {
+    voiceReply(audio, std::move(callback), true);
 }
 } // namespace planet

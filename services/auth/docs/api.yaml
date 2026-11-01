@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Soloapp auth
-  version: 5.0.0
+  version: 5.1.0
 x-cpp-namespace: solo::auth::generated
 paths:
   /healthz:
@@ -190,7 +190,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserId'
+                $ref: '#/components/schemas/Profile'
         '503':
           description: Response
           content:
@@ -310,6 +310,18 @@ components:
         user_id:
           type: string
           pattern: ^[0-9a-f]{32}$
+    Profile:
+      type: object
+      required:
+      - user_id
+      - username
+      properties:
+        user_id:
+          type: string
+          pattern: ^[0-9a-f]{32}$
+        username:
+          type: string
+          pattern: ^[a-z0-9_.@-]{3,128}$
     Status:
       type: object
       required:

@@ -17,6 +17,12 @@ class MemoryRepository : public logic::Repository {
             return {};
         return i->second;
     }
+    std::optional<logic::UserRecord> FindUserById(const std::string &id) override {
+        for (const auto &[_, user] : users)
+            if (user.user_id == id)
+                return user;
+        return {};
+    }
     void CreateSession(const std::string &hash, const std::string &id) override {
         sessions[hash] = id;
     }
@@ -63,6 +69,7 @@ int main() {
             const auto session = service.Login(credentials);
             output["identity_matches"] =
                 service.Verify("Bearer " + session.access_token).user_id == id;
+            output["profile_username"] = service.Profile("Bearer " + session.access_token).username;
             output["only_digest_stored"] =
                 repository.sessions.count(logic::TokenDigest(session.access_token)) == 1 &&
                 repository.sessions.count(session.access_token) == 0;
@@ -83,7 +90,7 @@ int main() {
             }
             service.Logout("Bearer " + session.access_token);
             try {
-                service.Verify("Bearer " + session.access_token);
+                service.Profile("Bearer " + session.access_token);
                 output["revoked_status"] = 200;
             } catch (const logic::AuthError &e) {
                 output["revoked_status"] = e.status;

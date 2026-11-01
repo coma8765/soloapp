@@ -12,6 +12,7 @@ Json::Value player(unsigned id, const char *user) {
     Json::Value result;
     result["id"] = id;
     result["user_id"] = user;
+    result["email"] = std::string(user) + "@example.test";
     result["reactor"] = true;
     return result;
 }
@@ -118,7 +119,7 @@ int main(int argc, char **argv) {
         command["entry"] = entry;
         replies = authority.update(data, remaining, {request(2, "b", "journal", command)}, 4000);
         check(replies[0]["accepted"].asBool() && data["journal"].size() == 1 &&
-                  data["journal"][0]["actor"] == "участник #2" &&
+                  data["journal"][0]["actor"] == "b@example.test" &&
                   data["journal"][0]["recordedAt"] == data["state"]["elapsed"],
               "journal author and recording time are server assigned");
         command["entry"]["id"] = "bad-ref";

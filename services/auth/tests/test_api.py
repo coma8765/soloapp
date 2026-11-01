@@ -29,7 +29,8 @@ async def test_odb_auth_lifecycle(service_client, pgsql):
         assert cur.fetchone() == (hashlib.sha256(token.encode()).hexdigest(), True, True)
     headers = {"Authorization": "Bearer " + token}
     assert (await service_client.get("/api/v1/auth/v1/me", headers=headers)).json() == {
-        "user_id": user_id
+        "user_id": user_id,
+        "username": "alice.test",
     }
     verified = await service_client.get("/api/v1/auth/v1/internal/verify", headers=headers)
     stamp = verified.headers["X-User-Timestamp"]

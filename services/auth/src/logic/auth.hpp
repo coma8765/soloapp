@@ -17,6 +17,7 @@ class AuthService {
     generated::UserId Register(generated::Credentials credentials);
     generated::Session Login(generated::Credentials credentials);
     generated::UserId Verify(const std::string &authorization);
+    generated::Profile Profile(const std::string &authorization);
     void Logout(const std::string &authorization);
     void Ready();
 

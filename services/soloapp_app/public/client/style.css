@@ -946,3 +946,54 @@ nav > span {
 .at-journal #telemetry > :not(.live, #voice-controls, #reconnect) {
   display: none;
 }
+
+/* The administrator sees every connected session, including other rooms. */
+#telemetry.admin-metrics {
+  z-index: 5;
+  width: min(380px, calc(100vw - 32px));
+  max-height: calc(100dvh - 190px);
+  overflow: auto;
+}
+#participant-metrics {
+  margin-top: 12px;
+  border-top: 1px solid #edf4de33;
+  padding-top: 10px;
+}
+#participant-metrics table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+#participant-metrics th,
+#participant-metrics td {
+  text-align: right;
+  vertical-align: top;
+  padding: 3px 4px;
+}
+#participant-metrics th:first-child,
+#participant-metrics td:first-child {
+  width: 62%;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+#participant-metrics small {
+  color: #bfcfc9;
+}
+#connection,
+#players {
+  overflow-wrap: anywhere;
+}
+.in-physical-system #telemetry > #participant-metrics:not([hidden]),
+.at-journal #telemetry > #participant-metrics:not([hidden]),
+.touch-device.playing #telemetry > #participant-metrics:not([hidden]),
+.touch-device.overview #telemetry > #participant-metrics:not([hidden]) {
+  display: block;
+}
+.touch-device.playing #telemetry.admin-metrics,
+.touch-device.overview #telemetry.admin-metrics {
+  max-width: min(340px, calc(100vw - 32px));
+  max-height: calc(100dvh - 240px);
+  background: #102c32ed;
+  padding: 8px;
+}

@@ -4,9 +4,10 @@ import { ProfessorVoiceTurn, askProfessor } from './professor-voice.js';
 // Borrows the voice chat stream. Only VoiceChat owns microphone permissions,
 // track handlers and track lifetime; stopping transcription never stops chat.
 export class ProfessorRecorder {
-  constructor(onChange = () => {}, getToken = () => null) {
+  constructor(onChange = () => {}, getToken = () => null, options = {}) {
     this.onChange = onChange;
     this.getToken = getToken;
+    this.options = options;
     this.records = new Map();
     this.tracks = new Map();
     this.speaker = crypto.randomUUID();
@@ -51,11 +52,18 @@ export class ProfessorRecorder {
     record.segments = record.segments.slice(-24);
     const track = new ProfessorVoiceTurn({
       request: (samples, signal) => {
-        const run = () => askProfessor(samples, this.getToken(), signal);
+        const run = () =>
+          (this.options.request || askProfessor)(
+            samples,
+            this.getToken(),
+            signal,
+          );
         return this.shared ? this.shared.request(lake, run, signal) : run();
       },
+      onSpeechStart: () => this.options.onSpeechStart?.() ?? true,
       onState: (status) => {
         record.status = status;
+        this.options.onState?.(status);
         this.onChange();
       },
       onResult: async (result) => {
@@ -66,13 +74,12 @@ export class ProfessorRecorder {
           ? 'Ответ готов, но озвучка временно недоступна.'
           : '';
         this.onChange();
-        if (
-          this.target !== lake ||
-          !this.enabled ||
-          track.cancelled ||
-          !result.audio_base64
-        )
+        if (this.target !== lake || !this.enabled || track.cancelled) return;
+        if (this.options.playResult) {
+          await this.options.playResult(result, track.abort?.signal);
           return;
+        }
+        if (!result.audio_base64) return;
         record.status = 'Отвечаю…';
         this.onChange();
         const bytes = Uint8Array.from(atob(result.audio_base64), (c) =>
@@ -110,6 +117,7 @@ export class ProfessorRecorder {
     this.node.port.postMessage({ route: id });
   }
   finishTrack() {
+    this.options.onCancel?.();
     this.track?.cancel();
     this.answerSource?.stop();
     this.answerSource = null;

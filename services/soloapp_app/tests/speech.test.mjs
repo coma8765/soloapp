@@ -1,3 +1,4 @@
+import './engineer.test.mjs';
 // Include shared instructor narration in the existing speech CI entry point.
 import './instructor.test.mjs';
 import './workers.test.mjs';

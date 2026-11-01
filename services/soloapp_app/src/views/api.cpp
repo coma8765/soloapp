@@ -65,21 +65,24 @@ void installApi(planet::Game &game) {
             },
             {drogon::Get});
     }
-    drogon::app().registerHandler(planet::routes::professor_respond,
-                                  [](const drogon::HttpRequestPtr &req, solo::Callback &&cb) {
-                                      if (!authenticated(req)) {
-                                          cb(solo::Error(drogon::k401Unauthorized, "unauthorized"));
-                                          return;
-                                      }
-                                      if (req->getHeader("content-type") != "audio/wav" ||
-                                          req->body().size() < 44 || req->body().size() > 256044) {
-                                          cb(solo::Error(drogon::k400BadRequest, "invalid_wav"));
-                                          return;
-                                      }
-                                      planet::professorReply(std::string(req->body()),
-                                                             std::move(cb));
-                                  },
-                                  {drogon::Post});
+    for (const bool chief : {false, true}) {
+        drogon::app().registerHandler(
+            chief ? planet::routes::engineer_respond : planet::routes::professor_respond,
+            [chief](const drogon::HttpRequestPtr &req, solo::Callback &&cb) {
+                if (!authenticated(req)) {
+                    cb(solo::Error(drogon::k401Unauthorized, "unauthorized"));
+                    return;
+                }
+                if (req->getHeader("content-type") != "audio/wav" || req->body().size() < 44 ||
+                    req->body().size() > 256044) {
+                    cb(solo::Error(drogon::k400BadRequest, "invalid_wav"));
+                    return;
+                }
+                (chief ? planet::engineerReply : planet::professorReply)(std::string(req->body()),
+                                                                         std::move(cb));
+            },
+            {drogon::Post});
+    }
     auto identity = [](const drogon::HttpRequestPtr &req, solo::Callback &&cb) {
         if (!authenticated(req)) {
             cb(solo::Error(drogon::k401Unauthorized, "unauthorized"));

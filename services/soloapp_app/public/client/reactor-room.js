@@ -581,7 +581,9 @@ export class ReactorRoom {
   }
 
   actorLabel(peerId = this.network?.id) {
-    return peerId ? `участник #${peerId}` : 'локальный участник';
+    return peerId
+      ? this.network?.participantName?.(peerId) || 'Участник'
+      : 'локальный участник';
   }
 
   record(text, peerId = this.network?.id) {
@@ -609,9 +611,9 @@ export class ReactorRoom {
         .map(([id]) => id),
     ].sort((a, b) => a - b);
     const heading = participants.length
-      ? `Команда в БЩУ: ${participants.map((id) => `#${id}`).join(', ')}`
+      ? `Команда в БЩУ: ${participants.map((id) => this.actorLabel(id)).join(', ')}`
       : 'Локальный режим · войдите для командной синхронизации';
-    const value = `${heading}\n${this.server?.status() || ''}`;
+    const value = `${heading}\n${this.server?.status((id) => this.actorLabel(id)) || ''}`;
     if (this.elements.team.textContent !== value)
       this.elements.team.textContent = value;
   }
