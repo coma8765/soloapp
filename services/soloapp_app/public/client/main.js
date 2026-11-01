@@ -590,8 +590,8 @@ async function start() {
         'aria-label',
         reactor.active
           ? reactor.physicalView
-            ? 'Комната физических процессов РБМК'
-            : 'Учебный блочный щит управления РБМК'
+            ? 'Комната физических процессов ВВЭР-1200'
+            : 'Учебный блочный щит управления ВВЭР-1200'
           : room.serverId
             ? 'Белая комната'
             : 'Трёхмерная микропланета',
@@ -614,7 +614,7 @@ async function start() {
           `${Math.round(fps)} FPS · белая комната\n${network.peers.size + 1} / 8 игроков · RTT ${network.ping ?? '—'} мс\n${network.worldTransport} · tick ${network.worldTick}`;
       if (reactor.active)
         $('stats').textContent =
-          `${Math.round(fps)} FPS · ${reactor.physicalView ? 'физическая система' : 'учебный БЩУ РБМК'}\nОбщая детерминированная модель\nКоманда · ${reactor.teamSize()} участ.`;
+          `${Math.round(fps)} FPS · ${reactor.physicalView ? 'физическая система' : 'учебный БЩУ ВВЭР-1200'}\nОбщая детерминированная модель\nКоманда · ${reactor.teamSize()} участ.`;
       $('players').textContent = reactor.active
         ? ''
         : [...network.remotes]

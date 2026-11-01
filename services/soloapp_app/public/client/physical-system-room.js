@@ -191,7 +191,7 @@ export class PhysicalSystemRoom {
     for (const x of [-12, 12])
       this.box('Laboratory side', [x, 3, 0], [0.2, 6, 24], '#172b35');
     this.label('Physical laboratory title', [0, 5.2, -3.8], 8.3, 1, () => [
-      'РБМК / ФИЗИЧЕСКАЯ СИСТЕМА',
+      'ВВЭР-1200 / ФИЗИЧЕСКАЯ СИСТЕМА',
       'Топливо → теплоноситель → пар → электричество',
       'P · БЩУ ↔ разрез   |   L1 + R1   |   VR: оба grip',
     ]);
