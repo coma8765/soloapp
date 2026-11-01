@@ -323,12 +323,7 @@ export class ReactorInstructor {
     if (visible && this.panel.hidden && this.session?.state)
       this.present(this.session.state);
     this.panel.hidden = !visible;
-    this.avatar.update(
-      dt,
-      0,
-      this.utterance ? Math.sin(performance.now() / 450) * 0.06 : 0,
-      visible,
-    );
+    this.avatar.update(dt, 0, 0, visible);
   }
 
   setAnnouncementActive(active) {
@@ -359,9 +354,9 @@ export class ReactorInstructor {
     );
   }
 
-  replyToVisitor(text) {
+  replyToVisitor(text, speaker = this.avatar) {
     if (!this.canReplyToVisitor()) return;
-    this.present({ kind: 'worker', text });
+    this.present({ kind: 'worker', text, speaker });
   }
 
   finishWorkerReply() {
@@ -409,15 +404,25 @@ export class ReactorInstructor {
     utterance.voice =
       voices.find((voice) => voice.localService) || voices[0] || null;
     this.utterance = utterance;
+    const speaker = state.kind === 'worker' ? state.speaker : this.avatar;
+    this.speechAvatar = speaker;
+    const speaking = (active) => {
+      if (this.utterance === utterance) speaker?.setSpeaking(active);
+    };
+    utterance.onpause = () => speaking(false);
+    utterance.onresume = () => speaking(true);
     utterance.onstart = () => {
       if (this.utterance !== utterance) return;
       clearTimeout(this.startTimeout);
       this.button.textContent = 'Инструктор · звук включён';
       this.playbackBlocked = false;
+      speaking(true);
     };
     utterance.onend = () => {
       if (this.utterance !== utterance) return;
       clearTimeout(this.startTimeout);
+      speaking(false);
+      this.speechAvatar = null;
       this.utterance = null;
       if (state.kind === 'worker') this.finishWorkerReply();
       else this.session.finished(state.revision);
@@ -449,6 +454,8 @@ export class ReactorInstructor {
     this.workerReply = false;
     clearTimeout(this.startTimeout);
     const utterance = this.utterance;
+    this.speechAvatar?.setSpeaking(false);
+    this.speechAvatar = null;
     this.utterance = null;
     if (utterance) window.speechSynthesis?.cancel();
   }

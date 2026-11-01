@@ -327,12 +327,25 @@ const { chromium } = require('playwright');
       r.player.position.copyFrom(r.workers.workers[0].avatar.root.position);
       r.workers.proximity.reset();
       r.workers.update(0.016);
+      r.workers.workers[0].avatar.update(0.05, 0, 0, true);
       return {
+        speaking: r.workers.workers[0].avatar.speaking,
+        mouthOpen: r.workers.workers[0].avatar.mouthTargets.some(
+          (t) => t.influence > 0.5,
+        ),
+        chiefSilent: !r.instructor.avatar.speaking,
+        othersSilent: r.workers.workers
+          .slice(1)
+          .every((w) => !w.avatar.speaking),
         speech: currentSpeech?.text,
         bubble: r.workers.workers[0].bubble.isEnabled(),
       };
     });
     assert.deepEqual(approach, {
+      speaking: true,
+      mouthOpen: true,
+      chiefSilent: true,
+      othersSilent: true,
       speech: 'Извините, сейчас я занят',
       bubble: true,
     });
@@ -394,7 +407,11 @@ const { chromium } = require('playwright');
         if (mode === 'announcement') i.setAnnouncementActive(true);
         if (mode === 'listening')
           i.present({ kind: 'listening', text: 'Слушаю участника.' });
-        const stopped = currentSpeech === null && !i.workerReply;
+        const stopped =
+          currentSpeech === null &&
+          !i.workerReply &&
+          !i.avatar.speaking &&
+          i.avatar.mouthTargets.every((t) => t.influence === 0);
         i.enabled = true;
         i.setAnnouncementActive(false);
         return { started, stopped };
@@ -405,6 +422,60 @@ const { chromium } = require('playwright');
         mode,
       );
     }
+    // Lifecycle events, including late callbacks after cancellation, must only
+    // animate the actual speaker and must not resurrect a closed mouth.
+    const speechLifecycle = await a.evaluate(() => {
+      const r = planetApp.reactor,
+        i = r.instructor;
+      const worker = r.workers.workers[0].avatar;
+      const originalSpeak = speechSynthesis.speak;
+      speechSynthesis.speak = (u) => {
+        window.currentSpeech = u;
+      };
+      i.stop();
+      i.present({ kind: 'worker', text: 'Проверка.', speaker: worker });
+      const u = currentSpeech;
+      const queuedClosed = !worker.speaking;
+      u.onstart();
+      worker.update(0.05, 0, 0, true);
+      const started = worker.speaking && worker.mouthTargets[0].influence > 0.5;
+      u.onpause();
+      const paused =
+        !worker.speaking && worker.mouthTargets.every((t) => t.influence === 0);
+      u.onresume();
+      const resumed = worker.speaking;
+      u.onend();
+      const ended =
+        !worker.speaking && worker.mouthTargets.every((t) => t.influence === 0);
+      currentSpeech.onstart();
+      const chiefResumed = i.avatar.speaking && !worker.speaking;
+      i.stop();
+      u.onresume();
+      u.onstart();
+      u.onend();
+      const staleIgnored = !worker.speaking && !i.avatar.speaking;
+      i.present({ kind: 'worker', text: 'Ошибка.', speaker: worker });
+      currentSpeech.onstart();
+      currentSpeech.onerror();
+      const errorClosed =
+        !worker.speaking && worker.mouthTargets.every((t) => t.influence === 0);
+      i.playbackBlocked = false;
+      speechSynthesis.speak = originalSpeak;
+      return {
+        queuedClosed,
+        started,
+        paused,
+        resumed,
+        ended,
+        chiefResumed,
+        staleIgnored,
+        errorClosed,
+      };
+    });
+    assert(
+      Object.values(speechLifecycle).every(Boolean),
+      JSON.stringify(speechLifecycle),
+    );
     // A local reply does not affect the other participant's narration.
     assert.equal(
       await b.evaluate(() => spoken.includes('Извините, сейчас я занят')),

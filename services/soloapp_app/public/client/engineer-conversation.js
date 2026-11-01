@@ -91,6 +91,7 @@ export class EngineerConversation {
     this.publish('idle');
     this.localTurn = null;
     this.voice.npc.stop();
+    this.room.instructor.avatar.setSpeaking(false);
   }
   update() {
     if (this.disposed) return;
@@ -130,9 +131,28 @@ export class EngineerConversation {
     void this.recorder.setVoiceStream(enabled ? this.voice.stream : null);
     this.owner = this.session.owner(this.members);
     this.voice.npc.setAudience(hearing, nearby, this.owner, this.id);
-    this.room.instructor.setConversationActive(
-      hearing && (this.owner !== null || (enabled && this.recorder.enabled)),
-    );
+    const active =
+      hearing && (this.owner !== null || (enabled && this.recorder.enabled));
+    if (active || this.room.instructor.conversationActive) {
+      const npc = this.voice.npc;
+      const receiver = npc.receivers.get(this.owner);
+      const audible =
+        this.owner === this.id
+          ? npc.source && npc.context?.state === 'running'
+          : receiver &&
+            !receiver.blocked &&
+            !receiver.audio.paused &&
+            !receiver.audio.muted;
+      this.room.instructor.avatar.setSpeaking(
+        Boolean(
+          active &&
+          !this.voice.muted &&
+          audible &&
+          this.session.turns.get(this.owner)?.stage === 'answer',
+        ),
+      );
+    }
+    this.room.instructor.setConversationActive(active);
     this.draw();
   }
   draw() {

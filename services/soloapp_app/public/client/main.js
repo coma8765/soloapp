@@ -538,6 +538,7 @@ async function start() {
     touch.update();
     player.update(dt, xr.input());
     reactor.update(dt);
+    engineer.update();
     shiftClock.update(
       Date.now(),
       !document.hidden &&

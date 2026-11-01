@@ -7,6 +7,9 @@ export const AVATARS = Object.freeze([
     height: 5.824408214585046,
     floor: 0.06538959324388105,
     armRestAngle: 0.6,
+    // Verified jaw-open shape in scientist.glb's unnamed MorphBake targets.
+    // Apply to the face AND mouth meshes to keep teeth and lips together.
+    mouthMorph: 26,
     bones: {
       upperarm_l: 'ValveBiped.Bip01_L_UpperArm_59',
       upperarm_r: 'ValveBiped.Bip01_R_UpperArm_87',
@@ -15,6 +18,17 @@ export const AVATARS = Object.freeze([
       calf_l: 'ValveBiped.Bip01_L_Calf_21',
       calf_r: 'ValveBiped.Bip01_R_Calf_26',
       Head: 'ValveBiped.Bip01_Head1_31',
+      pelvis: 'ValveBiped.Bip01_Pelvis_96',
+      spine_01: 'ValveBiped.Bip01_Spine_95',
+      spine_02: 'ValveBiped.Bip01_Spine1_94',
+      lowerarm_l: 'ValveBiped.Bip01_L_Forearm_58',
+      lowerarm_r: 'ValveBiped.Bip01_R_Forearm_86',
+      hand_l: 'ValveBiped.Bip01_L_Hand_55',
+      hand_r: 'ValveBiped.Bip01_R_Hand_83',
+      foot_l: 'ValveBiped.Bip01_L_Foot_20',
+      foot_r: 'ValveBiped.Bip01_R_Foot_25',
+      ball_l: 'ValveBiped.Bip01_L_Toe0_19',
+      ball_r: 'ValveBiped.Bip01_R_Toe0_24',
     },
   },
   {

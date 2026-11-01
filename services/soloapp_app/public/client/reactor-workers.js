@@ -178,6 +178,7 @@ export class ReactorWorkers {
     if (!visible) {
       for (const worker of this.workers) {
         worker.avatar.root.setEnabled(false);
+        worker.avatar.setSpeaking(false);
         worker.replyUntil = 0;
       }
       this.initialized = false;
@@ -215,7 +216,7 @@ export class ReactorWorkers {
     if (index !== null) {
       this.workers[index].replyUntil = now + 4500;
       this.workers[index].bubble.setEnabled(true);
-      chief.replyToVisitor(WORKER_REPLY);
+      chief.replyToVisitor(WORKER_REPLY, this.workers[index].avatar);
     }
   }
 }
