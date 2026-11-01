@@ -354,8 +354,10 @@ async function start() {
   if (
     location.hostname === '127.0.0.1' &&
     new URL(location.href).searchParams.has('physical-test')
-  )
+  ) {
+    reactor.enter();
     togglePhysical();
+  }
   const marine = new MarineLife(
     scene,
     terrain,
@@ -483,6 +485,13 @@ async function start() {
   let previous = performance.now(),
     hudAt = 0,
     reactorWasActive = false;
+  if (
+    location.hostname === '127.0.0.1' &&
+    new URL(location.href).searchParams.has('door-audit')
+  ) {
+    const { runDoorChecks } = await import('./door-checks.js');
+    window.doorChecks = runDoorChecks(window.planetApp);
+  }
   engine.runRenderLoop(() => {
     const now = performance.now(),
       dt = Math.min((now - previous) / 1000, 0.05);

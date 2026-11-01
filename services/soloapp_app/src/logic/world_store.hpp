@@ -10,6 +10,7 @@ namespace planet {
 struct Frame {
     Json::Value players, fish, signals;
     Json::Value reactor, reactorReplies, reactorJournal, reactorCommands;
+    Json::Value door, doorReplies;
     bool leader = false;
     unsigned long long epoch = 0;
 };
