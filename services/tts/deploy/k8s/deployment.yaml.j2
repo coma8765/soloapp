@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: tts, namespace: soloapp}
+spec:
+  replicas: {{ (tts_overrides | default({})).replicas | default(1) }}
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  progressDeadlineSeconds: 600
+  selector: {matchLabels: {app: tts}}
+  template:
+    metadata: {labels: {app: tts}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+      - name: tts
+        image: '{{ tts_image }}'
+        ports: [{name: http, containerPort: 8179}]
+        env:
+        - {name: TTS_THREADS, value: '{{ (tts_overrides | default({})).threads | default(2) }}'}
+        - {name: TTS_MAX_CHARS, value: '{{ (tts_overrides | default({})).max_chars | default(1000) }}'}
+        resources:
+          requests: {cpu: 100m, memory: 256Mi}
+          limits: {cpu: '2', memory: 768Mi}
+        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+        startupProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 5, failureThreshold: 60}
+        readinessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 5, timeoutSeconds: 2}
+        livenessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 15, timeoutSeconds: 3, failureThreshold: 4}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: tts, namespace: soloapp}
+spec:
+  selector: {app: tts}
+  ports: [{port: 8179, targetPort: http}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: tts-isolation, namespace: soloapp}
+spec:
+  podSelector: {matchLabels: {app: tts}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+  - from: [{podSelector: {matchLabels: {app: whoami}}}]
+    ports: [{protocol: TCP, port: 8179}]
+  egress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: whoami-to-tts, namespace: soloapp}
+spec:
+  podSelector: {matchLabels: {app: whoami}}
+  policyTypes: [Egress]
+  egress:
+  - to: [{podSelector: {matchLabels: {app: tts}}}]
+    ports: [{protocol: TCP, port: 8179}]

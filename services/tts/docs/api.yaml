@@ -1,0 +1,32 @@
+openapi: 3.0.3
+info: {title: Private TTS, version: 1.0.0}
+servers: [{url: 'http://tts.soloapp.svc.cluster.local:8179'}]
+paths:
+  /healthz:
+    get:
+      operationId: health
+      responses:
+        '200': {description: Model loaded and warmed up}
+  /synthesize:
+    post:
+      operationId: synthesize
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [text]
+              properties:
+                text: {type: string, minLength: 1, maxLength: 1000}
+      responses:
+        '200':
+          description: Synthesized speech
+          content:
+            audio/wav:
+              schema: {type: string, format: binary}
+        '400': {description: Invalid or oversized text}
+        '403': {description: Browser access forbidden}
+        '429': {description: Worker busy; retry later}
+        '503': {description: Inference failed}
