@@ -77,7 +77,9 @@ export class AssetCache {
     if (
       response.status !== 200 ||
       response.redirected ||
-      /(?:no-store|private)/i.test(response.headers.get('cache-control') || '') ||
+      /(?:no-store|private)/i.test(
+        response.headers.get('cache-control') || '',
+      ) ||
       /text\/html/i.test(response.headers.get('content-type') || '')
     ) {
       await cache.delete(url);
@@ -99,7 +101,12 @@ export class AssetCache {
     for (const key of await cache.keys()) {
       const entry = await cache.match(key);
       const size = Number(entry?.headers.get(SIZE_HEADER));
-      if (!entry || !Number.isFinite(size) || size < 0 || !entry.headers.has(SIZE_HEADER)) {
+      if (
+        !entry ||
+        !Number.isFinite(size) ||
+        size < 0 ||
+        !entry.headers.has(SIZE_HEADER)
+      ) {
         await cache.delete(key);
         continue;
       }
@@ -122,7 +129,8 @@ export const fetchAsset = (url) => assets.fetch(url);
 
 export async function loadAssetContainer(url, scene) {
   const response = await fetchAsset(url);
-  if (!response.ok) throw Error(`Asset unavailable (${response.status}): ${url}`);
+  if (!response.ok)
+    throw Error(`Asset unavailable (${response.status}): ${url}`);
   // Each scene owns its Babylon objects; only the downloaded bytes are shared.
   // The explicit root preserves relative resources in GLB files.
   return globalThis.BABYLON.LoadAssetContainerAsync(

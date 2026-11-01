@@ -88,18 +88,16 @@ export class MarineLife {
         if (!this.models.has(species.id))
           this.models.set(
             species.id,
-            loadAssetContainer(species.model, this.scene).then(
-              (container) => {
-                this.containers.push(container);
-                for (const material of container.materials)
-                  if (material instanceof B.PBRMaterial) {
-                    material.metallic = 0;
-                    material.roughness = 0.68;
-                    material.environmentIntensity = 0.7;
-                  }
-                return container;
-              },
-            ),
+            loadAssetContainer(species.model, this.scene).then((container) => {
+              this.containers.push(container);
+              for (const material of container.materials)
+                if (material instanceof B.PBRMaterial) {
+                  material.metallic = 0;
+                  material.roughness = 0.68;
+                  material.environmentIntensity = 0.7;
+                }
+              return container;
+            }),
           );
         const container = await this.models.get(species.id);
         for (let slot = 0; slot < species.count; slot++)

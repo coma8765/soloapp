@@ -2,14 +2,17 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AssetCache } from '../public/client/asset-cache.js';
 
-const release = (id) => `https://planet.test/web/releases/${id.repeat(40)}/assets/`;
+const release = (id) =>
+  `https://planet.test/web/releases/${id.repeat(40)}/assets/`;
 const root = release('a');
 const body = (value, headers = {}) => new Response(value, { headers });
 function storage() {
   const entries = new Map();
   const cache = {
     match: async (key) => entries.get(String(key))?.clone(),
-    put: async (key, value) => { entries.set(String(key), value.clone()); },
+    put: async (key, value) => {
+      entries.set(String(key), value.clone());
+    },
     delete: async (key) => entries.delete(String(key)),
     keys: async () => [...entries.keys()],
   };
@@ -21,7 +24,10 @@ function setup(options = {}) {
   const config = {
     root,
     storage: () => store,
-    fetcher: async (url, init) => { calls.push({ url, init }); return body('asset'); },
+    fetcher: async (url, init) => {
+      calls.push({ url, init });
+      return body('asset');
+    },
     ...options,
   };
   return { client: new AssetCache(config), config, store, calls };
@@ -31,15 +37,23 @@ test('immutable assets survive a new loader instance and retain independent bodi
   const { client, config, calls } = setup();
   assert.equal(await (await client.fetch(root + 'world.json')).text(), 'asset');
   const nextPage = new AssetCache(config);
-  assert.equal(await (await nextPage.fetch(root + 'world.json')).text(), 'asset');
+  assert.equal(
+    await (await nextPage.fetch(root + 'world.json')).text(),
+    'asset',
+  );
   assert.equal(calls.length, 1);
   assert.equal(calls[0].init.credentials, 'omit');
 });
 
 test('concurrent consumers download once and can all consume the response', async () => {
   const { client, calls } = setup();
-  const responses = await Promise.all(Array.from({ length: 8 }, () => client.fetch(root + 'avatar.glb')));
-  assert.deepEqual(await Promise.all(responses.map((r) => r.text())), Array(8).fill('asset'));
+  const responses = await Promise.all(
+    Array.from({ length: 8 }, () => client.fetch(root + 'avatar.glb')),
+  );
+  assert.deepEqual(
+    await Promise.all(responses.map((r) => r.text())),
+    Array(8).fill('asset'),
+  );
   assert.equal(calls.length, 1);
 });
 
@@ -81,7 +95,10 @@ test('unversioned development assets revalidate and update; offline can use the 
 
 test('API and foreign-origin requests bypass cache', async () => {
   const { client, store, calls } = setup();
-  for (const url of ['https://planet.test/api/me', 'https://other.test/assets/a.glb']) {
+  for (const url of [
+    'https://planet.test/api/me',
+    'https://other.test/assets/a.glb',
+  ]) {
     await client.fetch(url);
     await client.fetch(url);
   }
@@ -91,24 +108,35 @@ test('API and foreign-origin requests bypass cache', async () => {
 });
 
 test('denied CacheStorage does not prevent network loading', async () => {
-  const { client, calls } = setup({ storage: () => { throw Error('denied'); } });
+  const { client, calls } = setup({
+    storage: () => {
+      throw Error('denied');
+    },
+  });
   assert.equal(await (await client.fetch('world.json')).text(), 'asset');
   assert.equal(calls.length, 1);
 });
 
 test('quota failures do not discard a successful download', async () => {
   const { client, store } = setup();
-  store.cache.put = async () => { throw Error('quota'); };
+  store.cache.put = async () => {
+    throw Error('quota');
+  };
   assert.equal(await (await client.fetch('world.json')).text(), 'asset');
 });
 
 test('network failures are retryable and do not poison concurrent loads', async () => {
   let calls = 0;
-  const { client } = setup({ fetcher: async () => {
-    if (++calls === 1) throw Error('offline');
-    return body('recovered');
-  } });
-  const first = await Promise.allSettled([client.fetch('a.glb'), client.fetch('a.glb')]);
+  const { client } = setup({
+    fetcher: async () => {
+      if (++calls === 1) throw Error('offline');
+      return body('recovered');
+    },
+  });
+  const first = await Promise.allSettled([
+    client.fetch('a.glb'),
+    client.fetch('a.glb'),
+  ]);
   assert(first.every((r) => r.status === 'rejected'));
   assert.equal(await (await client.fetch('a.glb')).text(), 'recovered');
   assert.equal(calls, 2);
@@ -132,7 +160,8 @@ test('HTTP errors, partial responses, HTML and private responses are not persist
 test('fresh development no-store removes an older cache entry', async () => {
   let response = body('old');
   const { client, store } = setup({
-    root: 'http://localhost/assets/', fetcher: async () => response.clone(),
+    root: 'http://localhost/assets/',
+    fetcher: async () => response.clone(),
   });
   await client.fetch('a.json');
   assert.equal(store.entries.size, 1);
@@ -143,10 +172,17 @@ test('fresh development no-store removes an older cache entry', async () => {
 
 test('concurrent writes enforce byte and entry budgets with FIFO eviction', async () => {
   const { client, store } = setup({ maxBytes: 10, maxEntries: 2 });
-  await Promise.all(['a.glb', 'b.glb', 'c.glb'].map((url) => client.fetch(url)));
+  await Promise.all(
+    ['a.glb', 'b.glb', 'c.glb'].map((url) => client.fetch(url)),
+  );
   assert.deepEqual([...store.entries.keys()], [root + 'b.glb', root + 'c.glb']);
-  const sizes = [...store.entries.values()].map((r) => Number(r.headers.get('x-microplanet-cache-bytes')));
-  assert.equal(sizes.reduce((a, b) => a + b, 0), 10);
+  const sizes = [...store.entries.values()].map((r) =>
+    Number(r.headers.get('x-microplanet-cache-bytes')),
+  );
+  assert.equal(
+    sizes.reduce((a, b) => a + b, 0),
+    10,
+  );
 });
 
 test('oversized assets load but are not persisted', async () => {
@@ -158,7 +194,8 @@ test('oversized assets load but are not persisted', async () => {
 test('an oversized development replacement cannot leave stale offline bytes', async () => {
   let value = 'old';
   const { client, store } = setup({
-    root: 'http://localhost/assets/', maxBytes: 4,
+    root: 'http://localhost/assets/',
+    maxBytes: 4,
     fetcher: async () => body(value),
   });
   await client.fetch('a.json');
