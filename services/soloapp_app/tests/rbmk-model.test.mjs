@@ -167,7 +167,15 @@ const partById = (id) => RBMK_PANEL_PARTS.find((part) => part.id === id);
   cooled.setControl('emergencyInjection', true);
   const withInjection = advance(cooled, 20);
   assert(withInjection.coolantInventory > withoutInjection.coolantInventory);
-  assert(withInjection.fuelTemperature < withoutInjection.fuelTemperature);
+  // Cold injection reduces coolant enthalpy. Fuel temperature is not monotonic:
+  // pressure/void and neutron feedback also change the generated heat.
+  assert(
+    withInjection.coolantTemperature < withoutInjection.coolantTemperature,
+  );
+  assert(
+    withInjection.cycle.injectionMass[0] <
+      withoutInjection.cycle.injectionMass[0],
+  );
 }
 
 {
@@ -211,4 +219,4 @@ const partById = (id) => RBMK_PANEL_PARTS.find((part) => part.id === id);
   assert.equal(follower.setControl('scenario', 'unknown'), undefined);
 }
 
-console.log('RBMK educational model v3: scenario checks passed');
+console.log('RBMK educational model v4: scenario checks passed');

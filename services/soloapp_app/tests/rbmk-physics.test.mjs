@@ -158,7 +158,11 @@ test('SUZ cooling, gas circuit, condensers and generator excitation are separate
   assert(state.equipment.gasPressure > 1.5);
   assert(state.equipment.gasFlow < 1);
   assert(state.equipment.condenserPressure1 > 18);
-  assert.equal(state.equipment.condenserPressure2, 5);
+  // Removing electrical output leaves extra heat in the steam/return cycle.
+  assert(state.equipment.condenserPressure2 > 5);
+  assert(
+    state.equipment.condenserPressure2 < state.equipment.condenserPressure1,
+  );
   assert(state.equipment.turbineValve1 < 0.1);
   assert(state.equipment.generatorVoltage2 < 1);
   assert(state.flowLeft > 99 && state.flowRight > 99);

@@ -574,7 +574,13 @@ nav > span {
   display: none;
 }
 
-#reactor-hints[aria-pressed='true'] {
+.in-physical-system #telemetry,
+.in-physical-system #reactor-team {
+  display: none;
+}
+
+#reactor-hints[aria-pressed='true'],
+#physical-room[aria-pressed='true'] {
   background: #d4e39c;
   color: #203b31;
 }

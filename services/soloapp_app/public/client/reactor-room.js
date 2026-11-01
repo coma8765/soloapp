@@ -1,11 +1,12 @@
 import { orientation, vec } from './scene.js';
-import { REACTOR_MAP } from '../shared/room.js';
+import { REACTOR_MAP, PHYSICAL_MAP, isReactorMap } from '../shared/room.js';
 import { RbmkModel } from './rbmk-model.js';
 import { RBMK_CONTROLS, RBMK_PANEL_PARTS } from './rbmk-data.js';
 import { RbmkPhysicalConsole } from './rbmk-console.js';
 import { RbmkJournalStation } from './rbmk-journal-station.js';
 import { RbmkJournal } from './rbmk-journal.js';
 import { RbmkServerSync } from './rbmk-server.js';
+import { PhysicalSystemRoom } from './physical-system-room.js';
 
 const B = window.BABYLON;
 export { REACTOR_MAP } from '../shared/room.js';
@@ -352,15 +353,70 @@ export class ReactorRoom {
 
   interactiveMesh(mesh) {
     return !!(
-      mesh.metadata?.rbmkPart ||
-      mesh.metadata?.rbmkControl ||
-      mesh.metadata?.rbmkAction ||
-      mesh.metadata?.rbmkJournal
+      mesh?.isEnabled() &&
+      (mesh.metadata?.physicalSystem ||
+        mesh.metadata?.rbmkPart ||
+        mesh.metadata?.rbmkControl ||
+        mesh.metadata?.rbmkAction ||
+        mesh.metadata?.rbmkJournal)
     );
   }
 
   activatePhysical(mesh) {
+    if (this.physicalView) return this.physicalRoom?.activate(mesh) || false;
     return this.journal.activate(mesh) || this.physicalConsole.activate(mesh);
+  }
+
+  activateCenter() {
+    if (!this.active || this.uiOpen) return false;
+    return this.activatePhysical(
+      this.scene.pickWithRay(this.scene.activeCamera.getForwardRay(8), (mesh) =>
+        this.interactiveMesh(mesh),
+      )?.pickedMesh,
+    );
+  }
+
+  togglePhysical() {
+    if (!this.active) this.enter();
+    if (!this.active) return false;
+    this.physicalRoom ||= new PhysicalSystemRoom(this);
+    this.setHints(false);
+    this.elements.dialog.close();
+    this.journal.blur();
+    document.body.classList.remove('at-journal');
+    this.viewPoses ||= {};
+    this.viewPoses[this.physicalView ? 'physical' : 'control'] = {
+      position: this.player.position.asArray(),
+      forward: this.player.forward.clone(),
+      pitch: this.player.pitch,
+    };
+    this.physicalView = !this.physicalView;
+    this.root.setEnabled(!this.physicalView);
+    this.physicalRoom.root.setEnabled(this.physicalView);
+    const pose = this.viewPoses[this.physicalView ? 'physical' : 'control'];
+    this.player.roomColliders = this.physicalView
+      ? this.physicalRoom.colliders
+      : this.colliders;
+    this.player.setMap(
+      this.physicalView ? PHYSICAL_MAP : REACTOR_MAP,
+      pose?.position || [0, 0, 7],
+    );
+    if (pose) {
+      this.player.forward.copyFrom(pose.forward);
+      this.player.pitch = pose.pitch;
+    }
+    this.player.update(0);
+    this.elements.hints.hidden = this.physicalView;
+    this.journalButton.hidden = this.physicalView;
+    document.body.classList.toggle('in-physical-system', this.physicalView);
+    this.physicalRoom.update(0, true);
+    this.record(
+      this.physicalView
+        ? 'переход в комнату физических процессов'
+        : 'возврат в БЩУ',
+    );
+    this.cooldown = 1.5;
+    return true;
   }
 
   xrRay(frame, source, referenceSpace, origin) {
@@ -501,7 +557,7 @@ export class ReactorRoom {
     const participants = [
       ...(this.network?.id ? [this.network.id] : []),
       ...[...(this.network?.remotes || [])]
-        .filter(([, remote]) => remote.state?.map === REACTOR_MAP)
+        .filter(([, remote]) => isReactorMap(remote.state?.map))
         .map(([id]) => id),
     ].sort((a, b) => a - b);
     const heading = participants.length
@@ -639,7 +695,7 @@ export class ReactorRoom {
     const candidates = [
       ...(this.network?.id ? [this.network.id] : []),
       ...[...(this.network?.remotes || [])]
-        .filter(([, remote]) => remote.state?.map === REACTOR_MAP)
+        .filter(([, remote]) => isReactorMap(remote.state?.map))
         .map(([id]) => id),
     ];
     return candidates.length ? Math.min(...candidates) : 0;
@@ -649,8 +705,8 @@ export class ReactorRoom {
     if (!this.active) return 0;
     return (
       1 +
-      [...(this.network?.remotes || [])].filter(
-        ([, remote]) => remote.state?.map === REACTOR_MAP,
+      [...(this.network?.remotes || [])].filter(([, remote]) =>
+        isReactorMap(remote.state?.map),
       ).length
     );
   }
@@ -725,13 +781,20 @@ export class ReactorRoom {
       'click',
       (event) => {
         if (!this.active) return;
-        const hit = this.scene.pick(
-          this.scene.pointerX,
-          this.scene.pointerY,
-          (mesh) => this.interactiveMesh(mesh),
-        );
+        const hit =
+          document.pointerLockElement === this.canvas
+            ? this.scene.pickWithRay(
+                this.scene.activeCamera.getForwardRay(8),
+                (mesh) => this.interactiveMesh(mesh),
+              )
+            : this.scene.pick(
+                this.scene.pointerX,
+                this.scene.pointerY,
+                (mesh) => this.interactiveMesh(mesh),
+              );
         const mesh = hit?.pickedMesh;
         if (
+          mesh?.metadata?.physicalSystem ||
           mesh?.metadata?.rbmkControl ||
           mesh?.metadata?.rbmkAction ||
           mesh?.metadata?.rbmkJournal
@@ -901,6 +964,7 @@ export class ReactorRoom {
       this.localJournal = null;
       this.journal.storageKey = null;
     }
+    this.physicalView = false;
     this.cooldown = 1.5;
     this.root.setEnabled(true);
     this.roomLight.setEnabled(true);
@@ -929,6 +993,9 @@ export class ReactorRoom {
     document.body.classList.remove('at-journal');
     for (const line of this.xrRays?.values() || []) line.setEnabled(false);
     this.active = false;
+    this.physicalView = false;
+    this.physicalRoom?.root.setEnabled(false);
+    document.body.classList.remove('in-physical-system');
     this.cooldown = 1.5;
     this.root.setEnabled(false);
     this.roomLight.setEnabled(false);
@@ -968,6 +1035,7 @@ export class ReactorRoom {
     }
     if (!this.server.required || this.server.ready) this.model.step(dt);
     this.server.tick(this.model.snapshot());
+    this.physicalRoom?.update(dt);
     if (
       Math.hypot(this.player.position.x + 3.5, this.player.position.z - 3.1) >
       3.8
@@ -986,6 +1054,7 @@ export class ReactorRoom {
       this.share('state', { state: this.model.snapshot() });
     }
     if (
+      !this.physicalView &&
       this.cooldown === 0 &&
       Math.hypot(
         this.player.position.x - this.exitPortal.position.x,
@@ -1003,6 +1072,8 @@ export class ReactorRoom {
 
   statusText() {
     const s = this.model.snapshot();
+    if (this.physicalView)
+      return `ФИЗИЧЕСКАЯ СИСТЕМА · учебный разрез\nP / L1+R1 / оба grip · в БЩУ\nE / A / триггер · взаимодействовать\nНейтронная мощность ${s.power.toFixed(1)}%\nТепловая ${s.thermalPowerMW.toFixed(0)} МВт\nЭлектрическая ${s.electricalPower.toFixed(0)} МВт\nОстаточное тепло ${s.decayHeatMW.toFixed(1)} МВт\nДавление ${s.pressure.toFixed(2)} МПа\n${s.validity === 'outside-domain' ? 'ВНЕ ОБЛАСТИ МОДЕЛИ · нужен сброс' : s.scrammed ? 'АЗ: ' + s.scramReason : s.scenario.label}`;
     const alarms = s.alarms.length ? s.alarms.join('\n') : 'Сигналов нет';
     return `РБМК · УЧЕБНАЯ МОДЕЛЬ v${s.modelVersion}\nСценарий: ${s.scenario.label}\nНейтронная мощность ${s.power.toFixed(1)} %\nТепловая ${s.thermalPowerMW.toFixed(0)} МВт · эл. ${s.electricalPower.toFixed(0)} МВт\nДавление ${s.pressure.toFixed(2)} МПа\nУровни БС Л/П ${Math.round(s.drumLevelLeft)} / ${Math.round(s.drumLevelRight)} мм\nРасходы физ. Л/П ${s.flowLeft.toFixed(0)} / ${s.flowRight.toFixed(0)} %\nПоказания Л/П ${s.measuredFlowLeft.toFixed(0)} / ${s.measuredFlowRight.toFixed(0)} %\nОЗР ${s.orm.toFixed(1)} ст. · ρ ${s.reactivity.toFixed(2)} βэф\nПаросодержание ${(s.voidFraction * 100).toFixed(1)} % · запас ${s.coolantInventory.toFixed(1)} %\nT теплоносителя/топлива ${s.coolantTemperature.toFixed(1)} / ${s.fuelTemperature.toFixed(0)} °C\n${alarms}`;
   }
