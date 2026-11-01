@@ -3,6 +3,7 @@
 #include "json.hpp"
 #include "odb/primary_pool.hpp"
 #include <algorithm>
+#include <filesystem>
 #include <memory>
 #include <set>
 namespace planet {
@@ -10,8 +11,10 @@ WorldStore::WorldStore(const std::string &dsn, const std::string &navigation, st
     : identity(std::move(id)), db_(solo::db::PoolConnectionInfo(dsn, solo::db::PoolConfigFromEnv()),
                                    std::unique_ptr<odb::pgsql::connection_factory>(
                                        new solo::db::PrimaryPool(solo::db::PoolConfigFromEnv()))),
-      simulation_(navigation) {}
-Frame WorldStore::exchange(const Json::Value &local, const std::vector<Json::Value> &signals) {
+      simulation_(navigation),
+      reactor_((std::filesystem::path(navigation).parent_path() / "rbmk-profile.json").string()) {}
+Frame WorldStore::exchange(const Json::Value &local, const std::vector<Json::Value> &signals,
+                           const std::vector<Json::Value> &reactorMessages) {
     auto tx = solo::db::BeginPrimary(db_, [&] { return db_.query_value<Primary>().writable; });
     db_.execute("SET LOCAL statement_timeout=2000");
     db_.execute("SET LOCAL lock_timeout=1000");
@@ -72,10 +75,15 @@ Frame WorldStore::exchange(const Json::Value &local, const std::vector<Json::Val
     }
     frame.leader = world.owner == identity;
     frame.epoch = world.epoch;
+    auto checkpoint = decode(world.checkpoint);
+    auto reactor = decode(world.reactor);
+    frame.reactorReplies = reactor_.update(reactor, frame.players, reactorMessages, now);
+    frame.reactor = reactor_.publicState(reactor);
+    frame.reactorJournal = reactor["journal"];
+    frame.reactorCommands = reactor["commands"];
     if (frame.leader) {
         // Always restore the last committed state. A failed/ambiguous commit must
         // never publish speculative local simulation on the next transaction.
-        const auto checkpoint = decode(world.checkpoint);
         if (!checkpoint.empty())
             simulation_.restore(checkpoint);
         std::vector<Vec3> positions;
@@ -94,9 +102,16 @@ Frame WorldStore::exchange(const Json::Value &local, const std::vector<Json::Val
             remaining -= step;
         }
         world.advanced_ms = now;
-        world.checkpoint = encode(simulation_.checkpoint());
+        checkpoint = simulation_.checkpoint();
         world.snapshot = encode(simulation_.snapshot());
         world.lease_ms = now + 3000;
+    }
+    // A separate column survives old fish-only writers during a rolling
+    // deployment. Commands, journal entries and snapshots share this commit.
+    world.checkpoint = encode(checkpoint);
+    const auto reactorJson = encode(reactor);
+    if (frame.leader || reactorJson != world.reactor) {
+        world.reactor = reactorJson;
         db_.update(world);
     }
     frame.fish = decode(world.snapshot);

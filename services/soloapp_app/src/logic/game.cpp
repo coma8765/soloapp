@@ -42,13 +42,15 @@ Game::Game()
             const auto start = std::chrono::steady_clock::now();
             Json::Value local;
             std::vector<Json::Value> signals;
+            std::vector<Json::Value> reactorMessages;
             {
                 std::lock_guard<std::mutex> lock(mutex_);
                 local = local_;
                 signals.swap(signals_);
+                reactorMessages.swap(reactorMessages_);
             }
             try {
-                auto frame = store_->exchange(local, signals);
+                auto frame = store_->exchange(local, signals, reactorMessages);
                 lastFrame_ = clockNow();
                 drogon::app().getLoop()->queueInLoop([this, frame = std::move(frame)]() mutable {
                     if (!stop_)
@@ -56,6 +58,13 @@ Game::Game()
                 });
             } catch (...) {
                 ++databaseErrors;
+                // Do not lose commands on an aborted/ambiguous transaction.
+                // Request IDs make a retry after a committed timeout idempotent.
+                std::lock_guard<std::mutex> lock(mutex_);
+                reactorMessages_.insert(reactorMessages_.begin(), reactorMessages.begin(),
+                                        reactorMessages.end());
+                if (reactorMessages_.size() > 256)
+                    reactorMessages_.resize(256);
             }
             std::this_thread::sleep_until(start + std::chrono::milliseconds(100));
         }
@@ -176,6 +185,20 @@ void Game::message(const drogon::WebSocketConnectionPtr &socket, const std::stri
     }
     if (!s.joined)
         return;
+    if (v["type"] == "reactor_join" && v["active"].isBool()) {
+        s.reactor = v["active"].asBool();
+        s.reactorVersion = s.journalSequence = s.commandRevision = 0;
+        refresh();
+        return;
+    }
+    if ((v["type"] == "reactor_command" || v["type"] == "reactor_snapshot") && s.reactor) {
+        v["from"] = Json::UInt64(s.id);
+        v["user_id"] = s.user;
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (reactorMessages_.size() < 128)
+            reactorMessages_.push_back(std::move(v));
+        return;
+    }
     if (v["type"] == "state") {
         if (validState(v) &&
             (s.state.empty() || v["sequence"].asUInt64() > s.state["sequence"].asUInt64()))
@@ -223,6 +246,7 @@ void Game::refresh() {
         player["id"] = Json::UInt64(s.id);
         player["user_id"] = s.user;
         player["state"] = s.state;
+        player["reactor"] = s.reactor;
         local.append(player);
     }
     for (const auto &socket : expired) {
@@ -252,6 +276,7 @@ void Game::received(Frame frame) {
             welcome["id"] = Json::UInt64(s.id);
             welcome["user_id"] = s.user;
             welcome["world_protocol"] = 2;
+            welcome["reactor_protocol"] = 1;
             welcome["rtc_config"]["iceServers"] = Json::Value(Json::arrayValue);
             welcome["peers"] = Json::Value(Json::arrayValue);
             for (auto id : peers)
@@ -288,6 +313,33 @@ void Game::received(Frame frame) {
         for (const auto &signal : frame.signals)
             if (signal["to"].asUInt64() == s.id)
                 send(s.socket, signal);
+        if (s.reactor) {
+            const auto version = frame.reactor["version"].asUInt64();
+            if (version != s.reactorVersion) {
+                send(s.socket, frame.reactor);
+                s.reactorVersion = version;
+            }
+            for (const auto &entry : frame.reactorJournal)
+                if (entry["serverSequence"].asUInt64() > s.journalSequence) {
+                    Json::Value envelope;
+                    envelope["type"] = "reactor_journal";
+                    envelope["entry"] = entry;
+                    send(s.socket, envelope);
+                    s.journalSequence = entry["serverSequence"].asUInt64();
+                }
+            for (const auto &record : frame.reactorCommands)
+                if (record["revision"].asUInt64() > s.commandRevision) {
+                    Json::Value envelope;
+                    envelope["type"] = "reactor_command_record";
+                    envelope["record"] = record;
+                    envelope["record"].removeMember("user_id");
+                    send(s.socket, envelope);
+                    s.commandRevision = record["revision"].asUInt64();
+                }
+            for (const auto &reply : frame.reactorReplies)
+                if (reply["to"].asUInt64() == s.id)
+                    send(s.socket, reply);
+        }
     }
     peers_ = std::move(peers);
 }

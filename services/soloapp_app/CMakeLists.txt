@@ -12,7 +12,7 @@ add_custom_command(OUTPUT ${ODB_DIR}/world-odb.cxx ${ODB_DIR}/world-odb.hxx ${OD
  COMMAND ${CMAKE_COMMAND} -E make_directory ${ODB_DIR}
  COMMAND ${ODB_COMPILER} --std c++11 --database pgsql --generate-query --output-dir ${ODB_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src/models/world.hpp
  DEPENDS src/models/world.hpp VERBATIM)
-add_library(world_store src/logic/world_store.cpp src/logic/simulation.cpp ${ODB_DIR}/world-odb.cxx)
+add_library(world_store src/logic/world_store.cpp src/logic/simulation.cpp src/logic/reactor.cpp ${ODB_DIR}/world-odb.cxx)
 target_include_directories(world_store PUBLIC src src/models src/logic ../../libs /usr/include/postgresql)
 target_link_libraries(world_store PUBLIC Drogon::Drogon OpenSSL::Crypto ${ODB_LIBRARY} ${ODB_PGSQL_LIBRARY})
 add_executable(soloapp-app src/main.cpp src/views/api.cpp src/logic/game.cpp src/logic/professor.cpp)
@@ -23,6 +23,10 @@ add_executable(simulation_test tests/simulation_test.cpp src/logic/simulation.cp
 target_include_directories(simulation_test PRIVATE src/logic)
 target_link_libraries(simulation_test PRIVATE Drogon::Drogon)
 add_test(NAME simulation COMMAND simulation_test ${CMAKE_CURRENT_SOURCE_DIR}/src/data/lakes.json)
+add_executable(reactor_test tests/reactor_test.cpp src/logic/reactor.cpp)
+target_include_directories(reactor_test PRIVATE src/logic)
+target_link_libraries(reactor_test PRIVATE Drogon::Drogon OpenSSL::Crypto)
+add_test(NAME reactor COMMAND reactor_test ${CMAKE_CURRENT_SOURCE_DIR}/src/data/rbmk-profile.json)
 
 # Explicit integration binary: run against a disposable database with schema.sql.
 add_executable(world_store_test tests/world_store_test.cpp)

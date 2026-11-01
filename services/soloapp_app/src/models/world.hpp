@@ -12,6 +12,7 @@ struct World {
     unsigned long long epoch = 0;
     std::string checkpoint = "{}";
     std::string snapshot = "{}";
+    std::string reactor = "{}";
 };
 #pragma db object table("planet_portals")
 struct Portal {
