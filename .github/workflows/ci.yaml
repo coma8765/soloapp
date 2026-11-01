@@ -237,6 +237,14 @@ jobs:
         run: docker build -t soloapp-whisper-test -f services/whisper/deploy/Dockerfile .
       - name: Verify real Whisper offline model within pod resource limits
         run: docker run --rm --network none --read-only --cap-drop=ALL --memory=2560m --cpus=2 -v "$PWD/services/whisper/tests/smoke.py:/smoke.py:ro" --entrypoint python3 soloapp-whisper-test /smoke.py
+      - name: Export immutable Whisper image
+        run: docker buildx build --platform linux/amd64 --provenance=false --sbom=false --target runtime --label org.opencontainers.image.revision="$GITHUB_SHA" --label org.opencontainers.image.version="$GITHUB_SHA" -f services/whisper/deploy/Dockerfile --output type=oci,dest="$RUNNER_TEMP/whisper.oci.tar" .
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: whisper-image
+          path: ${{ runner.temp }}/whisper.oci.tar
+          retention-days: 1
+          compression-level: 0
       - name: Build C++ and test checkpoint recovery
         run: |
           docker buildx create --use

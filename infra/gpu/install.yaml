@@ -30,6 +30,16 @@
       notify: Restart k3s to discover runtime
     - name: Apply runtime changes before device plugin
       ansible.builtin.meta: flush_handlers
+    - name: Set inotify capacity for the existing pod count
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/90-soloapp-inotify.conf
+        mode: '0644'
+        content: |
+          fs.inotify.max_user_instances = 1024
+          fs.inotify.max_user_watches = 524288
+    - name: Apply inotify capacity without reboot
+      ansible.builtin.command: sysctl -p /etc/sysctl.d/90-soloapp-inotify.conf
+      changed_when: false
     - name: Copy GPU device plugin
       ansible.builtin.copy:
         src: device-plugin.yaml
@@ -41,6 +51,17 @@
       changed_when: "'configured' in plugin_apply.stdout or 'created' in plugin_apply.stdout"
     - name: Wait for plugin
       ansible.builtin.command: k3s kubectl -n kube-system rollout status daemonset/soloapp-nvidia-device-plugin --timeout=180s
+      changed_when: false
+    - name: Wait until Kubernetes advertises the GPU
+      ansible.builtin.shell: |
+        set -o pipefail
+        k3s kubectl get nodes -o json | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if any(int(n["status"]["allocatable"].get("nvidia.com/gpu",0)) > 0 for n in d["items"]) else 1)'
+      args:
+        executable: /bin/bash
+      register: gpu_allocatable
+      until: gpu_allocatable.rc == 0
+      retries: 30
+      delay: 5
       changed_when: false
   handlers:
     - name: Restart k3s to discover runtime
