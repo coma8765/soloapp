@@ -59,121 +59,111 @@ export class ReactorRoom {
   }
 
   buildRoom() {
-    const dark = this.material('RBMK room invisible shell', '#15191b');
-    dark.alpha = 0.01;
+    const floor = this.material('RBMK room terrazzo floor', '#778786');
+    floor.specularColor.set(0.24, 0.24, 0.24);
+    const ceiling = this.material('RBMK room acoustic ceiling', '#c8c7ba');
+    ceiling.emissiveColor = B.Color3.FromHexString('#5a5a54');
+    const wall = this.material('RBMK room wood wall', '#75563e');
+    const panelWall = this.material('RBMK room panel wall', '#4d5658');
     this.box(
       'RBMK floor collider',
       [24, 0.2, 24],
       [0, -0.1, 0],
-      dark,
+      floor,
       this.root,
       true,
     );
     this.box(
       'RBMK ceiling collider',
       [24, 0.2, 24],
-      [0, 24.1, 0],
-      dark,
+      [0, 5.9, 0],
+      ceiling,
       this.root,
       true,
     );
     this.box(
       'RBMK west wall collider',
-      [0.2, 24, 24],
-      [-12.1, 12, 0],
-      dark,
+      [0.2, 6, 24],
+      [-12.1, 3, 0],
+      wall,
       this.root,
       true,
     );
     this.box(
       'RBMK east wall collider',
-      [0.2, 24, 24],
-      [12.1, 12, 0],
-      dark,
+      [0.2, 6, 24],
+      [12.1, 3, 0],
+      wall,
       this.root,
       true,
     );
     this.box(
       'RBMK north wall collider',
-      [24, 24, 0.2],
-      [0, 12, -12.1],
-      dark,
+      [24, 6, 0.2],
+      [0, 3, -12.1],
+      panelWall,
       this.root,
       true,
     );
     this.box(
       'RBMK south wall collider',
-      [24, 24, 0.2],
-      [0, 12, 12.1],
-      dark,
+      [24, 6, 0.2],
+      [0, 3, 12.1],
+      wall,
       this.root,
       true,
     );
-
-    const face = (name, filename, position, rotation) => {
-      const mesh = B.MeshBuilder.CreatePlane(name, { size: 24 }, this.scene);
-      mesh.parent = this.root;
-      mesh.position.copyFromFloats(...position);
-      mesh.rotation.copyFromFloats(...rotation);
-      mesh.isPickable = false;
-      const texture = new B.Texture(
-        new URL(`../assets/reactor/${filename}`, import.meta.url).href,
-        this.scene,
-        false,
-        true,
-        B.Texture.TRILINEAR_SAMPLINGMODE,
+    const grid = this.material('RBMK ceiling grid', '#86877f');
+    for (let x = -11; x <= 11; x += 2)
+      this.box(
+        `RBMK ceiling longitudinal grid ${x}`,
+        [0.045, 0.055, 24],
+        [x, 5.78, 0],
+        grid,
       );
-      texture.anisotropicFilteringLevel = 8;
-      const material = this.material(name + ' material', '#ffffff', true);
-      material.diffuseTexture = texture;
-      material.emissiveTexture = texture;
-      material.backFaceCulling = false;
-      mesh.material = material;
-      return mesh;
-    };
-    face(
-      'Ignalina panorama f',
-      'ignalina-control-room-f-3200.jpg',
-      [0, 12, -12],
-      [0, 0, 0],
+    for (let z = -11; z <= 11; z += 2)
+      this.box(
+        `RBMK ceiling transverse grid ${z}`,
+        [24, 0.055, 0.045],
+        [0, 5.77, z],
+        grid,
+      );
+    const lamp = this.material(
+      'RBMK fluorescent ceiling lamps',
+      '#f4f0d8',
+      true,
     );
-    face(
-      'Ignalina panorama b',
-      'ignalina-control-room-b-3200.jpg',
-      [0, 12, 12],
-      [0, Math.PI, 0],
-    );
-    face(
-      'Ignalina panorama r',
-      'ignalina-control-room-r-3200.jpg',
-      [12, 12, 0],
-      [0, -Math.PI / 2, 0],
-    );
-    face(
-      'Ignalina panorama l',
-      'ignalina-control-room-l-3200.jpg',
-      [-12, 12, 0],
-      [0, Math.PI / 2, 0],
-    );
-    face(
-      'Ignalina panorama u',
-      'ignalina-control-room-u-3200.jpg',
-      [0, 24, 0],
-      [Math.PI / 2, 0, 0],
-    );
-    face(
-      'Ignalina panorama d',
-      'ignalina-control-room-d-3200.jpg',
-      [0, 0.01, 0],
-      [-Math.PI / 2, 0, 0],
-    );
+    for (const [x, z] of [
+      [-7, -7],
+      [-3, -7],
+      [1, -7],
+      [5, -7],
+      [-5, -3],
+      [-1, -3],
+      [3, -3],
+      [7, -3],
+      [-7, 1],
+      [-3, 1],
+      [1, 1],
+      [5, 1],
+      [-5, 5],
+      [-1, 5],
+      [3, 5],
+      [7, 5],
+    ])
+      this.box(
+        `RBMK ceiling luminaire ${x} ${z}`,
+        [1.55, 0.035, 0.5],
+        [x, 5.72, z],
+        lamp,
+      );
 
     this.roomLight = new B.HemisphericLight(
       'RBMK room ambient light',
       B.Vector3.Up(),
       this.scene,
     );
-    this.roomLight.intensity = 0.8;
+    this.roomLight.intensity = 1.05;
     this.roomLight.setEnabled(false);
     this.buildExitPortal();
     this.buildHotspots();
@@ -485,6 +475,7 @@ export class ReactorRoom {
       );
       const mesh = hit?.pickedMesh;
       const part = mesh?.metadata?.rbmkPart;
+      this.physicalConsole.setHovered(mesh);
       if (this.hints && part) this.openPart(part);
       this.canvas.style.cursor = mesh
         ? mesh.metadata.rbmkControl || mesh.metadata.rbmkAction
@@ -665,7 +656,7 @@ export class ReactorRoom {
     this.portalRoot.setEnabled(false);
     this.planet.setVisible(false);
     this.player.roomColliders = this.colliders;
-    this.player.setMap(REACTOR_MAP, [0, 0, 7.4]);
+    this.player.setMap(REACTOR_MAP, [0, 0, 4.4]);
     this.player.forward.set(0, 0, -1);
     this.elements.hints.hidden = false;
     this.elements.exit.hidden = false;

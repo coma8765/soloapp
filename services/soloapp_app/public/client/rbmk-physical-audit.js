@@ -97,10 +97,14 @@ class RbmkPhysicalAudit {
     mesh.computeWorldMatrix(true);
     const target = mesh.getAbsolutePosition();
     const player = this.app.player;
-    player.position.set(target.x, 0, target.z + 2.55);
-    player.forward.set(0, 0, -1);
+    const outward = mesh.getDirection(B.Axis.Z);
+    outward.y = 0;
+    outward.normalize();
+    player.position.copyFrom(target.add(outward.scale(1.35)));
+    player.position.y = 0;
     const eye = player.position.add(B.Vector3.Up().scale(1.65));
     const direction = target.subtract(eye);
+    player.forward.set(direction.x, 0, direction.z).normalize();
     player.pitch = Math.atan2(
       direction.y,
       Math.hypot(direction.x, direction.z),
@@ -157,6 +161,20 @@ class RbmkPhysicalAudit {
         sameControls(screen.renderedState?.controls, event.after.controls),
     );
     if (!screensMatch) errors.push('один из шести экранов отстаёт от модели');
+    const secondaryDisplays = [
+      ...this.console.signalPanels,
+      ...this.console.mimicPanels,
+      ...this.console.recorders,
+      ...this.console.auxiliaryPanels,
+    ];
+    if (
+      !secondaryDisplays.every(
+        (display) => display.renderedAt === this.console.lastDraw,
+      ) ||
+      this.console.channelMapsRenderedAt !== this.console.lastDraw ||
+      this.console.clock.renderedAt !== this.console.lastDraw
+    )
+      errors.push('часть вторичных приборов отстаёт от модели');
     return errors;
   }
 
@@ -191,12 +209,14 @@ class RbmkPhysicalAudit {
   finish() {
     this.console.onActivation = null;
     const passed = this.results.filter((result) => result.ok).length;
-    window.rbmkPhysicalAuditReport = {
+    const report = {
       total: this.targets.length,
       passed,
       failed: this.targets.length - passed,
       results: this.results.map((result) => ({ ...result })),
     };
+    report.fidelity = this.console.fidelityMetrics(report);
+    window.rbmkPhysicalAuditReport = report;
     this.overlay.dataset.complete = 'true';
     this.render(
       passed === this.targets.length
@@ -207,6 +227,10 @@ class RbmkPhysicalAudit {
 
   render(note = '') {
     const passed = this.results.filter((result) => result.ok).length;
+    const fidelity = this.console.fidelityMetrics({
+      total: this.targets.length,
+      passed,
+    });
     const rows = this.results.map(
       (result) =>
         `${result.ok ? '✓' : '✗'} ${String(result.index).padStart(2, '0')} ${result.label}${
@@ -217,6 +241,8 @@ class RbmkPhysicalAudit {
     this.overlay.textContent = [
       'ФИЗИЧЕСКИЙ АУДИТ БЩУ',
       `${passed}/${this.targets.length} успешно · ${this.results.length} проверено`,
+      `ПОЛНОТА ${fidelity.score}/100 · компоновка ${fidelity.layout} · системы ${fidelity.systemCoverage} · плотность ${fidelity.density} · смысл ${fidelity.semantics} · поведение ${fidelity.behavior}`,
+      `Функциональных элементов ${fidelity.counts.functionalElements} · неподписанного декора ${fidelity.counts.unlabeledDecorativeElements}`,
       current
         ? `Цель ${this.index + 1}/${this.targets.length}: ${targetLabel(current)}`
         : 'Целей больше нет',
@@ -224,7 +250,7 @@ class RbmkPhysicalAudit {
       '',
       ...rows,
     ]
-      .filter((line, index) => line || index === 4)
+      .filter((line, index) => line || index === 6)
       .join('\n');
   }
 }
