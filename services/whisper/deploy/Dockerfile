@@ -16,6 +16,9 @@ ENV HF_HUB_DISABLE_IMPLICIT_TOKEN=1 HF_HUB_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1 P
 ENV WHISPER_MODEL_ID=openai/whisper-large-v3-turbo
 COPY --from=model /model /model
 RUN test -s /model/model.bin && test -s /model/tokenizer.json && test -s /model/preprocessor_config.json
+ARG TARGETARCH
+RUN if [ "$TARGETARCH" = amd64 ]; then pip install --no-cache-dir nvidia-cublas-cu12==12.8.4.1 nvidia-cudnn-cu12==9.8.0.87; fi
+ENV LD_LIBRARY_PATH=/usr/local/lib/python3.12/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.12/site-packages/nvidia/cudnn/lib
 COPY services/whisper/src /app
 USER 10001:10001
 EXPOSE 8178

@@ -13,3 +13,6 @@ service_overrides:
   client_gateway:
     replicas: 2
 network_direct_https_mark: '0x2024'
+
+whisper_overrides:
+  gpu: true

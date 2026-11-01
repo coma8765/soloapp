@@ -300,34 +300,38 @@ def main():
             return
         if mode.startswith("push-"):
             service = mode.removeprefix("push-")
-            run(
-                [
-                    "docker",
-                    "run",
-                    "--rm",
-                    "-i",
-                    "--network",
-                    "host",
-                    "--read-only",
-                    "--cap-drop=ALL",
-                    "--security-opt",
-                    "no-new-privileges",
-                    "--user",
-                    "10006:10006",
-                    "--tmpfs",
-                    "/tmp:rw,nosuid,nodev,size=2200m,mode=1777",
-                    "-v",
-                    str(source) + ":/src:ro",
-                    "-v",
-                    "/run/soloapp-registry-publisher:/run/soloapp-registry:ro",
-                    "--entrypoint",
-                    "python3",
-                    "soloapp/deploy-controller:1",
-                    "/src/infra/registry/push.py",
-                    sha,
-                    service,
-                ]
-            )
+            # CUDA archives exceed spare RAM. Only public image bytes go to disk;
+            # credentials remain read-only in /run and are never copied here.
+            with tempfile.TemporaryDirectory(prefix="upload-", dir=STATE) as staging:
+                os.chown(staging, 10006, 10006)
+                run(
+                    [
+                        "docker",
+                        "run",
+                        "--rm",
+                        "-i",
+                        "--network",
+                        "host",
+                        "--read-only",
+                        "--cap-drop=ALL",
+                        "--security-opt",
+                        "no-new-privileges",
+                        "--user",
+                        "10006:10006",
+                        "-v",
+                        staging + ":/tmp:rw",
+                        "-v",
+                        str(source) + ":/src:ro",
+                        "-v",
+                        "/run/soloapp-registry-publisher:/run/soloapp-registry:ro",
+                        "--entrypoint",
+                        "python3",
+                        "soloapp/deploy-controller:1",
+                        "/src/infra/registry/push.py",
+                        sha,
+                        service,
+                    ]
+                )
             return
         if not is_rollback and scope in ("web", "all"):
             # Only a web activation depends on the static asset release.

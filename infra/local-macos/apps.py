@@ -150,6 +150,36 @@ def manifests():
             )
         )
     )
+    if CONFIG.get("whisper", {}).get("metal_host"):
+        # Colima forwards this host-only IP to macOS loopback, never the LAN.
+        host = CONFIG["whisper"]["metal_host"]
+        docs[0]["spec"]["replicas"] = 0
+        service = docs[1]
+        service["spec"].pop("selector")
+        service["spec"]["ports"][0]["targetPort"] = 8178
+        docs.append(
+            {
+                "apiVersion": "discovery.k8s.io/v1",
+                "kind": "EndpointSlice",
+                "metadata": {
+                    "name": "whisper-metal",
+                    "namespace": NS,
+                    "labels": {
+                        "kubernetes.io/service-name": "whisper",
+                        "endpointslice.kubernetes.io/managed-by": "soloapp-local",
+                    },
+                },
+                "addressType": "IPv4",
+                "ports": [{"name": "", "protocol": "TCP", "port": 8178}],
+                "endpoints": [{"addresses": [host], "conditions": {"ready": True}}],
+            }
+        )
+        docs[3]["spec"]["egress"] = [
+            {
+                "to": [{"ipBlock": {"cidr": host + "/32"}}],
+                "ports": [{"protocol": "TCP", "port": 8178}],
+            }
+        ]
     docs += list(
         yaml.safe_load_all(
             jinja2.Template(
