@@ -71,6 +71,22 @@ const partById = (id) => RBMK_PANEL_PARTS.find((part) => part.id === id);
     ),
     new Set(['scram', 'clear', 'reset']),
   );
+  const physicalButtonCount = RBMK_PHYSICAL_CONTROL_GROUPS.reduce(
+    (total, group) =>
+      total +
+      group.controls.reduce(
+        (count, name) =>
+          count + (RBMK_CONTROLS[name].type === 'checkbox' ? 1 : 2),
+        0,
+      ) +
+      (group.actions?.length || 0),
+    0,
+  );
+  assert.equal(
+    physicalButtonCount,
+    36,
+    'the browser audit must cover every physical button and toggle',
+  );
 }
 
 {

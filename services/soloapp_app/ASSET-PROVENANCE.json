@@ -50,10 +50,7 @@
       "Embedded original geometry, 65-joint skin and resized PNGs in GLB 2.0; no external resources or animation clips."
     ],
     "loaderSource": "https://cdn.jsdelivr.net/npm/babylonjs-loaders@8.56.2/babylonjs.loaders.min.js",
-    "models": [
-      "Superhero_Male_FullBody.gltf",
-      "Superhero_Female_FullBody.gltf"
-    ]
+    "models": ["Superhero_Male_FullBody.gltf", "Superhero_Female_FullBody.gltf"]
   },
   "urarakaAvatar": {
     "source": "https://sketchfab.com/3d-models/uraraka-ochako-040a689bf9e443f9a97710c2264f3d57",
@@ -84,11 +81,12 @@
   "ignalinaControlRoom": {
     "source": "https://virtual.iae.lt/#",
     "scene": "Ignalina Nuclear Power Plant virtual tour, main control room panorama",
-    "reactor": "RBMK-1500 visual reference used in an educational RBMK simulator; it is not presented as an exact RBMK-1000 control room",
+    "reactor": "RBMK-1500 visual reference used to reconstruct the visible control-room architecture for an educational RBMK-1000 simulator; it is not presented as the equipment schedule of a specific RBMK-1000 unit",
     "license": "No redistribution license was identified on the source site. Confirm publication rights before production distribution.",
     "processing": [
       "Captured the six 3200 px panorama cube faces from the public virtual tour.",
-      "Converted PNG cube faces to JPEG for browser delivery without changing their dimensions."
+      "Converted PNG cube faces to JPEG without changing their dimensions.",
+      "Retained only as offline visual references. Runtime room rendering uses new Babylon.js geometry and procedural dynamic instrument faces; no photograph or panorama fragment is displayed in the room."
     ],
     "files": [
       "public/assets/reactor/ignalina-control-room-f-3200.jpg",
