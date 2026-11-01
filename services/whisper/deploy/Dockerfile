@@ -4,7 +4,7 @@ RUN pip install --no-cache-dir torch==2.8.0 --index-url https://download.pytorch
 RUN pip install --no-cache-dir ctranslate2==4.6.0 transformers==4.55.4 huggingface-hub==0.36.0 numpy==2.2.6
 ENV HF_HUB_DISABLE_IMPLICIT_TOKEN=1
 RUN hf download openai/whisper-large-v3-turbo --revision 41f01f3fe87f28c78e2fbf8b568835947dd65ed9 --local-dir /source --include '*.json' '*.txt' '*.safetensors' README.md
-RUN HF_HUB_OFFLINE=1 ct2-transformers-converter --model /source --output_dir /model --quantization int8 --load_as_float16 --copy_files tokenizer.json preprocessor_config.json \
+RUN HF_HUB_OFFLINE=1 ct2-transformers-converter --model /source --output_dir /model --quantization int8 --copy_files tokenizer.json preprocessor_config.json \
     && cp /source/README.md /model/MODEL_CARD.md \
     && chmod -R a+rX /model
 
