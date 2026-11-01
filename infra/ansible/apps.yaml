@@ -31,6 +31,10 @@
       label: '{{ item.image }}'
     tags: [always]
   tasks:
+  - name: Deploy Llama on home
+    ansible.builtin.import_tasks: ../../services/llama/deploy/ansible/tasks.yaml
+    when: inventory_hostname == "home"
+    tags: [llama]
   - name: Deploy TTS
     ansible.builtin.import_tasks: ../../services/tts/deploy/ansible/tasks.yaml
     tags: [tts]

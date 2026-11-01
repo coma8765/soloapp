@@ -78,5 +78,14 @@ export const operations = {
       200
     ],
     "websocket": false
+  },
+  "professor_respond": {
+    "path": "/api/v1/soloapp_app/v1/professor/respond",
+    "method": "POST",
+    "timeout": 170000,
+    "success": [
+      200
+    ],
+    "websocket": false
   }
 };

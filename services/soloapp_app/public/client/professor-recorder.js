@@ -1,5 +1,5 @@
 import { operations } from './generated/api.js';
-import { SpeechTrack, transcribeWindow } from './speech-audio.js';
+import { ProfessorVoiceTurn, askProfessor } from './professor-voice.js';
 
 // Borrows the voice chat stream. Only VoiceChat owns microphone permissions,
 // track handlers and track lifetime; stopping transcription never stops chat.
@@ -22,7 +22,12 @@ export class ProfessorRecorder {
   }
   record(lake) {
     if (!this.records.has(lake))
-      this.records.set(lake, { text: '', segments: [] });
+      this.records.set(lake, {
+        text: '',
+        answer: '',
+        status: '',
+        segments: [],
+      });
     return this.records.get(lake);
   }
   setTarget(lake) {
@@ -44,22 +49,57 @@ export class ProfessorRecorder {
       id = crypto.randomUUID();
     record.segments.push(segment);
     record.segments = record.segments.slice(-24);
-    const track = new SpeechTrack({
-      speaker: this.speaker,
-      lake,
-      transcribe: (samples) => transcribeWindow(samples, this.getToken()),
-      onText: (text) => {
-        segment.text = text;
-        record.text = record.segments
-          .map((s) => s.text)
-          .filter(Boolean)
-          .join(' ')
-          .slice(-3000);
+    const track = new ProfessorVoiceTurn({
+      request: (samples, signal) =>
+        askProfessor(samples, this.getToken(), signal),
+      onState: (status) => {
+        record.status = status;
         this.onChange();
+      },
+      onResult: async (result) => {
+        segment.text = result.transcript;
+        record.text = result.transcript;
+        record.answer = result.answer;
+        this.error = result.audio_error
+          ? 'Ответ готов, но озвучка временно недоступна.'
+          : '';
+        this.onChange();
+        if (
+          this.target !== lake ||
+          !this.enabled ||
+          track.cancelled ||
+          !result.audio_base64
+        )
+          return;
+        record.status = 'Отвечаю…';
+        this.onChange();
+        const bytes = Uint8Array.from(atob(result.audio_base64), (c) =>
+          c.charCodeAt(0),
+        );
+        const context = this.context;
+        if (!context || context.state === 'closed') return;
+        const audio = await context.decodeAudioData(bytes.buffer);
+        if (track.cancelled || this.target !== lake) return;
+        await context.resume();
+        if (context.state !== 'running')
+          throw Error(
+            'Включите звук, чтобы услышать ответ. Текст показан выше.',
+          );
+        await new Promise((resolve) => {
+          const source = context.createBufferSource();
+          source.buffer = audio;
+          source.connect(context.destination);
+          this.answerSource = source;
+          source.onended = () => {
+            source.disconnect();
+            if (this.answerSource === source) this.answerSource = null;
+            resolve();
+          };
+          source.start();
+        });
       },
       onError: (error) => {
         this.error = error.message;
-        void this.stop(false);
         this.onChange();
       },
     });
@@ -68,6 +108,9 @@ export class ProfessorRecorder {
     this.node.port.postMessage({ route: id });
   }
   finishTrack() {
+    this.track?.cancel();
+    this.answerSource?.stop();
+    this.answerSource = null;
     this.track = null;
     this.node?.port.postMessage({ route: null });
   }

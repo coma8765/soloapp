@@ -134,7 +134,7 @@ export class LakeProfessors {
       this.drawSpeech(guide);
       return;
     }
-    const title = `Профессор · озеро ${guide.id + 1}`;
+    const title = `AI-профессор · озеро ${guide.id + 1}`;
     const message = guide.near
       ? 'Здравствуйте! Рад вас видеть.'
       : 'Подойдите познакомиться';
@@ -164,17 +164,21 @@ export class LakeProfessors {
   drawSpeech(guide) {
     const recorder = this.recorder,
       active = this.nearest === guide.id;
-    const text = recorder.record(guide.id).text;
+    const record = recorder.record(guide.id);
+    const text = record.text;
+    const answer = record.answer || '';
     const status = active
       ? recorder.error ||
+        record.status ||
         (recorder.pending
           ? 'Подключаю голосовой чат…'
           : recorder.enabled
-            ? '● Слушаю голосовой чат · Whisper сервиса'
+            ? '● Слушаю. Задайте вопрос и сделайте паузу.'
             : 'Включите микрофон голосового чата — я запишу ваши слова.')
       : 'Подойдите, чтобы поговорить';
     const state = JSON.stringify([
       text,
+      answer,
       status,
       recorder.enabled,
       recorder.pending,
@@ -195,7 +199,7 @@ export class LakeProfessors {
     c.textAlign = 'left';
     c.fillStyle = '#e9f5ed';
     c.font = '42px sans-serif';
-    c.fillText(`Профессор · озеро ${guide.id + 1}`, 42, 76);
+    c.fillText(`AI-профессор · озеро ${guide.id + 1}`, 42, 76);
     c.font = '28px sans-serif';
     c.fillStyle = recorder.error && active ? '#ffc7ae' : '#c5e9d1';
     const wrap = (value, width) => {
@@ -213,19 +217,21 @@ export class LakeProfessors {
     wrap(status, 940)
       .slice(0, 2)
       .forEach((line, i) => c.fillText(line, 42, 130 + i * 36));
-    c.font = '32px sans-serif';
+    c.font = '28px sans-serif';
     c.fillStyle = '#f1f8f2';
     wrap(
-      text || 'Здесь появятся ваши слова. Аудио не сохраняется на диск.',
+      answer
+        ? `Вы: ${text}\nПрофессор: ${answer}`
+        : text || 'Задайте вопрос голосом. Аудио не сохраняется на диск.',
       940,
     )
-      .slice(-7)
-      .forEach((line, i) => c.fillText(line, 42, 230 + i * 43));
+      .slice(-11)
+      .forEach((line, i) => c.fillText(line, 42, 230 + i * 32));
     c.fillStyle = '#c5e9d1';
     c.textAlign = 'center';
     c.font = '28px sans-serif';
     c.fillText(
-      'Запись включается вместе с микрофоном голосового чата',
+      'После вопроса сделайте паузу · ответ голосом и текстом',
       512,
       635,
     );

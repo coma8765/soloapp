@@ -233,6 +233,7 @@ const DEPLOY_SERVICES = [
   'keycloak',
   'whisper',
   'tts',
+  'llama',
 ];
 export function deploymentMessage(payload) {
   const states = {
@@ -259,7 +260,7 @@ export function deploymentMessage(payload) {
   const lines = [
     `Soloapp · ${states[payload.state]} · ${payload.operation}`,
     `Сервис: ${payload.service}`,
-    'Площадки: YC → home',
+    payload.service === 'llama' ? 'Площадки: home' : 'Площадки: YC → home',
     `Ревизия: ${payload.target}`,
     `Этап: ${payload.phase}`,
     `Попытка: ${payload.attempt}`,

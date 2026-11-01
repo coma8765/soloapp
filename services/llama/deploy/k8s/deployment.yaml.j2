@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: llama, namespace: soloapp}
+spec:
+  replicas: {{ (llama_overrides | default({})).replicas | default(1) }}
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  progressDeadlineSeconds: 600
+  selector: {matchLabels: {app: llama}}
+  template:
+    metadata: {labels: {app: llama}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+      - name: llama
+        image: '{{ llama_image }}'
+        ports: [{name: http, containerPort: 8180}]
+        args: ['--model', '/model/model.gguf', '--host', '0.0.0.0', '--port', '8180', '--ctx-size', '2048', '--parallel', '1', '--threads', '{{ (llama_overrides | default({})).threads | default(4) }}', '--n-gpu-layers', '0', '--alias', 'llama-3.2-1b-instruct', '--log-disable']
+        resources:
+          requests: {cpu: 500m, memory: 1536Mi}
+          limits: {cpu: '4', memory: 2048Mi}
+        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+        startupProbe: {httpGet: {path: /health, port: http}, periodSeconds: 5, failureThreshold: 60}
+        readinessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 5, timeoutSeconds: 2}
+        livenessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 15, timeoutSeconds: 3, failureThreshold: 4}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: llama, namespace: soloapp}
+spec:
+  selector: {app: llama}
+  ports: [{port: 8180, targetPort: http}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: llama-isolation, namespace: soloapp}
+spec:
+  podSelector: {matchLabels: {app: llama}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+  - from: [{podSelector: {matchLabels: {app: whoami}}}]
+    ports: [{protocol: TCP, port: 8180}]
+  egress: []
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: whoami-to-llama, namespace: soloapp}
+spec:
+  podSelector: {matchLabels: {app: whoami}}
+  policyTypes: [Egress]
+  egress:
+  - to: [{podSelector: {matchLabels: {app: llama}}}]
+    ports: [{protocol: TCP, port: 8180}]

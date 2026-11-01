@@ -11,7 +11,7 @@ CHECK_TARGETS := $(addprefix check-codegen-,$(SERVICES))
 
 .PHONY: all build test test-image codegen check-codegen help $(SERVICES) $(BUILD_TARGETS) $(TEST_TARGETS) $(TEST_IMAGE_TARGETS) $(CODEGEN_TARGETS) $(CHECK_TARGETS)
 all: build
-build: $(BUILD_TARGETS) build-nginx build-web build-keycloak build-soloapp build-whisper build-tts
+build: $(BUILD_TARGETS) build-nginx build-web build-keycloak build-soloapp build-whisper build-tts build-llama
 test: test-codegen $(TEST_TARGETS) test-soloapp test-whisper test-tts
 test-image: $(TEST_IMAGE_TARGETS)
 codegen: $(CODEGEN_TARGETS) codegen-nginx codegen-web codegen-soloapp
@@ -120,3 +120,7 @@ build-whisper test-whisper:
 .PHONY: build-tts test-tts
 build-tts test-tts:
 	$(MAKE) -C services/tts $(subst -tts,,$@)
+
+.PHONY: build-llama test-llama
+build-llama test-llama:
+	$(MAKE) -C services/llama $(subst -llama,,$@)

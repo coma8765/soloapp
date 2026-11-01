@@ -7,7 +7,7 @@ on:
         required: true
         type: choice
         default: app-api
-        options: [app-api, client-notify, client-gateway, auth, web, nginx, keycloak, whisper, tts, all]
+        options: [app-api, client-notify, client-gateway, auth, web, nginx, keycloak, whisper, tts, llama, all]
       rollback_revision:
         description: Previously deployed v0.1.P or full commit SHA; empty for a new release
         required: false
@@ -68,7 +68,8 @@ jobs:
             keycloak) images=keycloak ;;
             whisper) images=whisper ;;
             tts) images=tts ;;
-            all) images='auth whoami web client-notify client-gateway keycloak whisper tts' ;;
+            llama) images=llama ;;
+            all) images='auth whoami web client-notify client-gateway keycloak whisper tts llama' ;;
             *) exit 2 ;;
           esac
           echo "service=$SERVICE" >> "$GITHUB_OUTPUT"
@@ -162,6 +163,7 @@ jobs:
             done
           done
       - name: Roll YC
+        if: needs.prepare.outputs.service != 'llama'
         env:
           HOST: ${{ secrets.CD_YC_HOST }}
           PORT: ${{ secrets.CD_YC_PORT }}

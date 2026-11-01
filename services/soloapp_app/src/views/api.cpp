@@ -1,6 +1,7 @@
 #include "api.hpp"
 #include "generated/routes.hpp"
 #include "logic/config.hpp"
+#include "logic/professor.hpp"
 #include "runtime/http.hpp"
 #include "runtime/signing.hpp"
 #include <drogon/WebSocketController.h>
@@ -64,6 +65,21 @@ void installApi(planet::Game &game) {
             },
             {drogon::Get});
     }
+    drogon::app().registerHandler(planet::routes::professor_respond,
+                                  [](const drogon::HttpRequestPtr &req, solo::Callback &&cb) {
+                                      if (!authenticated(req)) {
+                                          cb(solo::Error(drogon::k401Unauthorized, "unauthorized"));
+                                          return;
+                                      }
+                                      if (req->getHeader("content-type") != "audio/wav" ||
+                                          req->body().size() < 44 || req->body().size() > 256044) {
+                                          cb(solo::Error(drogon::k400BadRequest, "invalid_wav"));
+                                          return;
+                                      }
+                                      planet::professorReply(std::string(req->body()),
+                                                             std::move(cb));
+                                  },
+                                  {drogon::Post});
     auto identity = [](const drogon::HttpRequestPtr &req, solo::Callback &&cb) {
         if (!authenticated(req)) {
             cb(solo::Error(drogon::k401Unauthorized, "unauthorized"));

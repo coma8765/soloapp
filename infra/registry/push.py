@@ -22,6 +22,7 @@ SERVICES = (
     "keycloak",
     "whisper",
     "tts",
+    "llama",
     "headlamp",
 )
 MAX_ARCHIVE = 2 * 1024**3

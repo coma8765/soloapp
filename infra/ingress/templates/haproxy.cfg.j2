@@ -36,6 +36,7 @@ frontend https
 {% if keycloak_enabled | default(false) %}
   use_backend keycloak_sites if { path /id } or { path_beg /id/ }
 {% endif %}
+  use_backend professor_home if { path /api/v1/soloapp_app/v1/professor/respond }
   default_backend auth_sites
 backend auth_sites
   balance roundrobin
@@ -100,3 +101,11 @@ backend keycloak_sites
   server {{ site }} {{ hostvars[site].private_ip }}:{{ hostvars[site].nginx_config.node_port }} ssl verify required ca-file /run/soloapp-ingress/ca.crt crt /run/soloapp-ingress/client.pem verifyhost nginx-{{ site }} check
 {% endfor %}
 {% endif %}
+
+# Only home hosts Llama; normal application routing retains both sites.
+backend professor_home
+  timeout server 170s
+  option httpchk
+  http-check send meth GET uri /ready ver HTTP/1.1 hdr Host {{ public_domain }}
+  http-check expect status 200
+  server home {{ hostvars['home'].private_ip }}:{{ hostvars['home'].nginx_config.node_port }} ssl verify required ca-file /run/soloapp-ingress/ca.crt crt /run/soloapp-ingress/client.pem verifyhost nginx-home check inter 2s fall 2 rise 1

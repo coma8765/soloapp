@@ -19,6 +19,7 @@ SERVICES = (
     "keycloak",
     "whisper",
     "tts",
+    "llama",
 )
 
 
