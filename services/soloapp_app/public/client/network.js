@@ -425,7 +425,9 @@ export class Network {
   }
 
   apply(id, state) {
-    if (!validState(state, this.player.worldMap)) return;
+    // Retain off-room peer poses too: room changes must hide old avatars and
+    // reactor leader election needs to see teammates in both teaching rooms.
+    if (!validState(state, state?.map || 'planet')) return;
     let remote = this.remotes.get(id);
     // Server world snapshots carry pose only; retain peer appearance metadata.
     const avatarId =

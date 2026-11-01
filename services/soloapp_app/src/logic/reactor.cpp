@@ -73,12 +73,39 @@ bool ReactorAuthority::validControl(const std::string &name, const Json::Value &
 }
 
 bool ReactorAuthority::validSnapshot(const Json::Value &state) const {
-    if (!state.isObject() || state["modelVersion"] != 3 || !bounded(state) ||
+    if (!state.isObject() || state["modelVersion"] != 4 || !bounded(state) ||
         !state["elapsed"].isNumeric() || state["elapsed"].asDouble() < 0 ||
         !state["controls"].isObject() || !state["rods"].isObject() ||
         !state["equipment"].isObject() || state["precursors"].size() != 6 ||
         state["decayHeatGroups"].size() != 6 || state["loopMasses"].size() != 2 ||
         state["loopEnergies"].size() != 2)
+        return false;
+    for (const char *name : {"fuelTemperatures", "voidFractions", "geometricLevels"}) {
+        const auto &values = state[name];
+        if (!values.isArray() || values.size() != 2 ||
+            !std::all_of(values.begin(), values.end(),
+                         [](const auto &value) { return value.isNumeric(); }))
+            return false;
+    }
+    const auto &cycle = state["cycle"];
+    if (!cycle.isObject())
+        return false;
+    for (const auto &name : profile_["initial"]["cycle"].getMemberNames()) {
+        const auto &expected = profile_["initial"]["cycle"][name];
+        const auto &actual = cycle[name];
+        if (expected.isArray()) {
+            if (!actual.isArray() || actual.size() != expected.size() ||
+                !std::all_of(actual.begin(), actual.end(),
+                             [](const auto &value) { return value.isNumeric(); }))
+                return false;
+        } else if (!actual.isNumeric())
+            return false;
+    }
+    const std::initializer_list<const char *> inventories = {"returnMass", "injectionMass"};
+    if (std::any_of(inventories.begin(), inventories.end(), [&](const auto *name) {
+            return std::any_of(cycle[name].begin(), cycle[name].end(),
+                               [](const auto &value) { return value.asDouble() < 0; });
+        }))
         return false;
     const auto fields = profile_["initial"].getMemberNames();
     if (!std::all_of(fields.begin(), fields.end(), [&](const auto &name) {
@@ -274,6 +301,36 @@ Json::Value ReactorAuthority::update(Json::Value &data, const Json::Value &playe
         data["journal"] = Json::Value(Json::arrayValue);
         data["commands"] = Json::Value(Json::arrayValue);
         data["receipts"] = Json::Value(Json::arrayValue);
+    }
+    // Upgrade persisted v3 once without discarding the exercise or its audit.
+    // Newly modelled inventories start at their teaching defaults; conservation
+    // accounting starts at this boundary, not at an invented historical balance.
+    if (data["state"]["modelVersion"] == 3) {
+        auto upgraded = data["state"];
+        upgraded["modelVersion"] = 4;
+        upgraded["cycle"] = profile_["initial"]["cycle"];
+        double mass = 0, energy = upgraded["graphiteTemperature"].asDouble() * 2890;
+        for (unsigned i = 0; i < 2; ++i) {
+            upgraded["fuelTemperatures"][i] = upgraded["fuelTemperature"];
+            upgraded["voidFractions"][i] = upgraded["voidFraction"];
+            upgraded["geometricLevels"][i] = (upgraded["loopMasses"][i].asDouble() - 700000) / 100 +
+                                             700 * (upgraded["voidFraction"].asDouble() - 0.12);
+            mass += upgraded["loopMasses"][i].asDouble() +
+                    upgraded["cycle"]["returnMass"][i].asDouble() +
+                    upgraded["cycle"]["injectionMass"][i].asDouble();
+            energy += upgraded["loopEnergies"][i].asDouble() +
+                      upgraded["cycle"]["returnEnergy"][i].asDouble() +
+                      upgraded["cycle"]["injectionMass"][i].asDouble() * 0.17 +
+                      upgraded["fuelTemperature"].asDouble() * 30;
+        }
+        upgraded["cycle"]["initialMass"] = mass;
+        upgraded["cycle"]["initialEnergy"] = energy;
+        if (!validSnapshot(upgraded))
+            throw std::runtime_error("reactor_v3_migration_invalid");
+        data["previousModelState"] = data["state"];
+        data["state"] = std::move(upgraded);
+        data["version"] = Json::UInt64(data["version"].asUInt64() + 1);
+        data["writerEpoch"] = Json::UInt64(data["writerEpoch"].asUInt64() + 1);
     }
     unsigned long long writer = 0;
     for (const auto &player : players)

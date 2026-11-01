@@ -140,7 +140,15 @@ export function initialEquipment() {
   };
 }
 
-export function updateEquipment(state, controls, power, graphite, elapsed, dt) {
+export function updateEquipment(
+  state,
+  controls,
+  power,
+  graphite,
+  elapsed,
+  dt,
+  coupledCondenser = false,
+) {
   const approach = (value, target, rate) =>
     value + (target - value) * -Math.expm1(-rate * dt);
   const count = (prefix, maximum) =>
@@ -218,11 +226,12 @@ export function updateEquipment(state, controls, power, graphite, elapsed, dt) {
   );
   for (let i = 1; i <= 2; i++) {
     const cooling = controls[`condenserCooling${i}`] && technicalWater > 0;
-    state[`condenserPressure${i}`] = approach(
-      state[`condenserPressure${i}`],
-      cooling ? 5 : 30,
-      0.07,
-    );
+    if (!coupledCondenser)
+      state[`condenserPressure${i}`] = approach(
+        state[`condenserPressure${i}`],
+        cooling ? 5 : 30,
+        0.07,
+      );
     const available =
       !lostPower &&
       controls.scenario !== 'turbine-trip' &&

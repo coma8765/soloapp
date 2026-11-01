@@ -12,10 +12,13 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%237ba15b'/%3E%3Cellipse cx='29' cy='29' rx='14' ry='9' fill='%232c6b70'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="/client/style.css?revision=rbmk-journal-v1" />
+    <link rel="stylesheet" href="/client/style.css?revision=rbmk-physical-v1" />
     <script defer src="/vendor/babylon.js"></script>
     <script defer src="/vendor/babylonjs.loaders.min.js"></script>
-    <script type="module" src="/client/main.js?revision=rbmk-journal-v1"></script>
+    <script
+      type="module"
+      src="/client/main.js?revision=rbmk-physical-v1"
+    ></script>
   </head>
   <body class="auth-required">
     <canvas
@@ -57,6 +60,12 @@
         VR · плавно</button
       ><button id="sound">M · Звук включён</button
       ><button id="vr" disabled>Проверка WebXR…</button
+      ><button
+        id="physical-room"
+        aria-pressed="false"
+        title="P · геймпад L1+R1 · VR: оба grip"
+      >
+        P · Физическая система</button
       ><button id="reactor-hints" aria-pressed="false" hidden>
         Подсказки по панели</button
       ><button id="reactor-exit" hidden>Выйти через портал</button

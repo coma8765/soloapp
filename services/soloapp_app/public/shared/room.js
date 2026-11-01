@@ -1,5 +1,8 @@
 export const ROOM_MAP = 'white-room';
 export const REACTOR_MAP = 'rbmk-training-room';
+export const PHYSICAL_MAP = 'rbmk-physical-system';
+export const isReactorMap = (map) =>
+  map === REACTOR_MAP || map === PHYSICAL_MAP;
 export const ROOM_HALF = 12;
 export const ROOM_HEIGHT = 6;
 export const ROOM_PLAYER_LIMIT = ROOM_HALF - 0.35;

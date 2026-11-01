@@ -1,5 +1,11 @@
 import { RBMK_CONTROLS, RBMK_SCENARIOS } from './rbmk-data.js';
 import {
+  initialCycle,
+  cycleIsValid,
+  hydraulicFlow,
+  updateCycle,
+} from './rbmk-cycle.js';
+import {
   PHYSICS,
   equilibriumPrecursors,
   neutronStep,
@@ -18,7 +24,7 @@ const finite = (value, fallback) =>
   Number.isFinite(Number(value)) ? Number(value) : fallback;
 
 export { RBMK_CONTROLS, RBMK_SCENARIOS } from './rbmk-data.js';
-export const RBMK_MODEL_VERSION = 3;
+export const RBMK_MODEL_VERSION = 4;
 
 export class RbmkModel {
   constructor() {
@@ -60,6 +66,10 @@ export class RbmkModel {
     this.voidFraction = 0.12;
     this.coolantTemperature = 284.5;
     this.fuelTemperature = 700;
+    this.fuelTemperatures = [700, 700];
+    this.voidFractions = [0.12, 0.12];
+    this.geometricLevels = [0, 0];
+    this.cycle = initialCycle();
     this.graphiteTemperature = 640;
     this.iodine = 1;
     this.xenon = 1;
@@ -187,17 +197,21 @@ export class RbmkModel {
   }
 
   integrate(dt) {
+    // A teaching-domain exit is a stopped calculation, never a fabricated
+    // continuation through negative inventory or unsupported damage physics.
+    if (this.validity === 'outside-domain') return;
     const previousAlarms = this.alarms;
     this.elapsed += dt;
     const c = this.controls;
     const effects = this.scenarioEffects();
-    const equipment = updateEquipment(
+    updateEquipment(
       this.equipment,
       c,
       this.power,
       this.graphiteTemperature,
       this.elapsed,
       dt,
+      true,
     );
 
     if (c.automaticRegulator && !this.scrammed) {
@@ -229,29 +243,38 @@ export class RbmkModel {
       0,
       100,
     );
-    const naturalFlow =
-      10 * Math.cbrt(Math.max(0, this.thermalPowerMW / PHYSICS.thermalMW));
-    const leftFlowTarget = Math.max(
-      naturalFlow,
-      c.coolantFlowLeft * (equipment.pumpsLeft / 3) ** 0.75,
-    );
-    const rightFlowTarget = Math.max(
-      naturalFlow,
-      c.coolantFlowRight * (equipment.pumpsRight / 3) ** 0.75,
-    );
+    const flowTarget = (side) =>
+      hydraulicFlow(
+        Array.from(
+          { length: 4 },
+          (_, i) => this.equipment[`pumpSpeed${side}${i + 1}`],
+        ),
+        c[`coolantFlow${side}`] / 100,
+        this.thermalPowerMW / PHYSICS.thermalMW,
+      );
+    const leftFlowTarget = flowTarget('Left');
+    const rightFlowTarget = flowTarget('Right');
     this.flowLeft = approach(this.flowLeft, leftFlowTarget, 0.9, dt);
     this.flowRight = approach(this.flowRight, rightFlowTarget, 0.9, dt);
     const averageFlow = (this.flowLeft + this.flowRight) / 2;
 
-    const voidTarget = clamp(
-      0.035 +
-        this.power * 0.00085 +
-        Math.max(0, 100 - averageFlow) * 0.0045 +
-        effects.leak * 0.08,
-      0.02,
-      0.82,
+    this.voidFractions = this.voidFractions.map((value, i) =>
+      approach(
+        value,
+        clamp(
+          0.035 +
+            this.power * 0.00085 +
+            Math.max(0, 100 - (i ? this.flowRight : this.flowLeft)) * 0.0045 -
+            (this.loopPressures[i] - PHYSICS.nominalPressure) * 0.04 +
+            (!i ? effects.leak * 0.08 : 0),
+          0.02,
+          0.82,
+        ),
+        0.45,
+        dt,
+      ),
     );
-    this.voidFraction = approach(this.voidFraction, voidTarget, 0.45, dt);
+    this.voidFraction = (this.voidFractions[0] + this.voidFractions[1]) / 2;
 
     const poison = poisonStep(this.iodine, this.xenon, this.power / 100, dt);
     this.iodine = poison.iodine;
@@ -308,17 +331,27 @@ export class RbmkModel {
     this.decayHeatMW = this.decayHeatGroups.reduce((a, b) => a + b, 0);
     this.thermalPowerMW =
       (PHYSICS.thermalMW * 0.935 * this.power) / 100 + this.decayHeatMW;
-    const fuelHeat =
-      ((PHYSICS.thermalMW * 0.95) / (700 - 284.5)) *
-      Math.max(0.05, (averageFlow / 100) ** 0.8) *
-      (this.fuelTemperature - this.coolantTemperature);
+    const fuelHeats = this.fuelTemperatures.map(
+      (temperature, i) =>
+        ((PHYSICS.thermalMW * 0.95) / 2 / (700 - 284.5)) *
+        Math.max(0.05, ((i ? this.flowRight : this.flowLeft) / 100) ** 0.8) *
+        (temperature -
+          (284.5 + (this.loopPressures[i] - PHYSICS.nominalPressure) * 8)),
+    );
     const graphiteHeat =
       ((PHYSICS.thermalMW * 0.05) / (640 - 284.5)) *
       (this.graphiteTemperature - this.coolantTemperature);
-    this.fuelTemperature += ((this.thermalPowerMW * 0.95 - fuelHeat) / 60) * dt;
+    this.fuelTemperatures = this.fuelTemperatures.map(
+      (temperature, i) =>
+        temperature +
+        (((this.thermalPowerMW * 0.95) / 2 - fuelHeats[i]) / 30) * dt,
+    );
+    this.fuelTemperature =
+      (this.fuelTemperatures[0] + this.fuelTemperatures[1]) / 2;
     this.graphiteTemperature +=
       ((this.thermalPowerMW * 0.05 - graphiteHeat) / 2890) * dt;
     const steamFlows = [];
+    const cycleFlows = [];
     for (let index = 0; index < 2; index++) {
       const side = index ? 'Right' : 'Left';
       const oldMass = this.loopMasses[index];
@@ -328,29 +361,33 @@ export class RbmkModel {
       const turbine = index + 1;
       const load = index ? c.turbineLoad2 : c.turbineLoad1;
       const breaker = index ? c.generatorBreaker2 : c.generatorBreaker1;
-      const steam =
+      const turbineSteam =
         (breaker
           ? (load / 500) * this.equipment[`turbineValve${turbine}`]
           : 0) *
-          750 *
-          Math.sqrt(pressure / PHYSICS.nominalPressure) +
-        (c.steamDump / 100) * 750;
-      const feed =
-        ((index ? effects.feedwaterRight : effects.feedwaterLeft) / 100) *
         750 *
-        this.equipment[`feedCapacity${side}`];
+        Math.sqrt(pressure / PHYSICS.nominalPressure);
+      const dump = (c.steamDump / 100) * 750;
+      const steam = turbineSteam + dump;
+      const feed = Math.min(
+        this.cycle.returnMass[index] / dt,
+        ((index ? effects.feedwaterRight : effects.feedwaterLeft) / 100) *
+          750 *
+          this.equipment[`feedCapacity${side}`],
+      );
       const leak = !index && effects.leak ? 150 : 0;
-      const addedWater = injection * 220;
+      const addedWater = Math.min(
+        injection * 220,
+        this.cycle.injectionMass[index] / dt,
+      );
       const blowdown = this.equipment.blowdownKgS / 2;
-      const heatShare =
-        (index ? this.flowRight : this.flowLeft) /
-        Math.max(1, this.flowLeft + this.flowRight);
       const heat =
-        fuelHeat * heatShare + graphiteHeat / 2 - this.equipment.cooldownMW / 2;
+        fuelHeats[index] + graphiteHeat / 2 - this.equipment.cooldownMW / 2;
       const massRate = feed + addedWater - steam - leak - blowdown;
       const energyRate =
         heat +
-        feed * (2.8 - 3200 / 1500) +
+        (feed * this.cycle.returnEnergy[index]) /
+          Math.max(1, this.cycle.returnMass[index]) +
         addedWater * 0.17 -
         steam * 2.8 -
         (leak + blowdown) * internal;
@@ -370,35 +407,34 @@ export class RbmkModel {
       )
         this.validity = 'outside-domain';
       steamFlows.push(steam);
+      cycleFlows.push({
+        feed,
+        steam: turbineSteam,
+        dump,
+        injection: addedWater,
+        leak,
+        blowdown,
+        loopSpecific: internal,
+        cooldown: this.equipment.cooldownMW / 2,
+      });
     }
     this.coolantInventory = (this.loopMasses[0] + this.loopMasses[1]) / 14000;
     this.drumLevelLeft = (this.loopMasses[0] - 700000) / 100;
     this.drumLevelRight = (this.loopMasses[1] - 700000) / 100;
+    this.geometricLevels = this.loopMasses.map(
+      (mass, i) => (mass - 700000) / 100 + 700 * (this.voidFractions[i] - 0.12),
+    );
     this.pressure = (this.loopPressures[0] + this.loopPressures[1]) / 2;
     this.coolantTemperature =
       284.5 + (this.pressure - PHYSICS.nominalPressure) * 8;
     this.steamFlow = (steamFlows[0] + steamFlows[1]) / 15;
 
-    const turbinePowerTarget = effects.turbineAvailable
-      ? (c.generatorBreaker1
-          ? ((c.turbineLoad1 *
-              this.equipment.turbineValve1 *
-              this.equipment.generatorVoltage1) /
-              21) *
-            Math.sqrt(
-              Math.max(0, this.loopPressures[0]) / PHYSICS.nominalPressure,
-            )
-          : 0) +
-        (c.generatorBreaker2
-          ? ((c.turbineLoad2 *
-              this.equipment.turbineValve2 *
-              this.equipment.generatorVoltage2) /
-              21) *
-            Math.sqrt(
-              Math.max(0, this.loopPressures[1]) / PHYSICS.nominalPressure,
-            )
-          : 0)
-      : 0;
+    const turbinePowerTarget = updateCycle(this, cycleFlows, dt);
+    if (
+      this.cycle.returnEnergy.some((value) => value <= 0) ||
+      this.fuelTemperatures.some((value) => value < 0 || value > 2000)
+    )
+      this.validity = 'outside-domain';
     this.electricalPower = approach(
       this.electricalPower,
       turbinePowerTarget,
@@ -437,7 +473,7 @@ export class RbmkModel {
               ? 'Уровень БС ниже −1100 мм'
               : averageFlow < 42
                 ? 'Недостаточный расход КМПЦ'
-                : this.fuelTemperature > 1050
+                : Math.max(...this.fuelTemperatures) > 1050
                   ? 'Температура топлива выше диапазона модели'
                   : this.coolantInventory < 60
                     ? 'Запас теплоносителя ниже 60%'
@@ -552,6 +588,9 @@ export class RbmkModel {
       return false;
     this.rods = { ...raw.rods };
     for (const [name, length, minimum, maximum] of [
+      ['fuelTemperatures', 2, 0, 5000],
+      ['voidFractions', 2, 0, 1],
+      ['geometricLevels', 2, -20000, 20000],
       ['precursors', 6, 0, 1e8],
       ['decayHeatGroups', 6, 0, 1e4],
       ['loopMasses', 2, 1, 2e6],
@@ -582,6 +621,8 @@ export class RbmkModel {
     )
       return false;
     this.equipment = { ...raw.equipment };
+    if (!cycleIsValid(raw.cycle)) return false;
+    this.cycle = structuredClone(raw.cycle);
     if (!['reduced-model', 'outside-domain'].includes(raw.validity))
       return false;
     this.validity = raw.validity;
@@ -610,6 +651,10 @@ export class RbmkModel {
       voidFraction: this.voidFraction,
       coolantTemperature: this.coolantTemperature,
       fuelTemperature: this.fuelTemperature,
+      fuelTemperatures: [...this.fuelTemperatures],
+      voidFractions: [...this.voidFractions],
+      geometricLevels: [...this.geometricLevels],
+      cycle: structuredClone(this.cycle),
       graphiteTemperature: this.graphiteTemperature,
       iodine: this.iodine,
       xenon: this.xenon,
