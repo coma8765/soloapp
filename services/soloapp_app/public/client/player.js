@@ -146,6 +146,8 @@ export class Player {
       rotation: this.rotation.asArray(),
       pitch: this.pitch,
       avatarId: this.avatar.id || DEFAULT_AVATAR,
+      professorTarget:
+        this.worldMap === 'planet' ? (this.professorTarget ?? null) : null,
       speed: this.inputEnabled ? Math.min(20, Math.max(0, this.speed)) : 0,
     };
   }

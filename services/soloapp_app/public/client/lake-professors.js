@@ -1,5 +1,6 @@
 import { fetchAsset, loadAssetContainer } from './asset-cache.js';
 import { lakeProfessorSites } from './lake-sites.js';
+import { professorDisplay } from './lake-professor-sync.js';
 import { orientation, vec } from './scene.js';
 const B = window.BABYLON;
 
@@ -105,6 +106,7 @@ export class LakeProfessors {
         ...site,
         root,
         model,
+        facing,
         sign,
         texture,
         near: false,
@@ -165,36 +167,41 @@ export class LakeProfessors {
   drawSpeech(guide) {
     const recorder = this.recorder,
       active = this.nearest === guide.id;
-    const record = recorder.record(guide.id);
+    const shared = this.sync?.required;
+    const display = shared
+      ? professorDisplay(this.sync.record(guide.id), this.sync.now())
+      : null;
+    const record = shared ? display : recorder.record(guide.id);
     const text = record.text;
     const answer = record.answer || '';
-    const status = active
-      ? recorder.error ||
-        record.status ||
-        (recorder.pending
-          ? 'Подключаю голосовой чат…'
-          : recorder.enabled
-            ? '● Слушаю. Задайте вопрос и сделайте паузу.'
-            : 'Включите микрофон голосового чата — я запишу ваши слова.')
-      : 'Подойдите, чтобы поговорить';
+    const status = shared
+      ? display.status
+      : active
+        ? recorder.error ||
+          record.status ||
+          (recorder.pending
+            ? 'Подключаю голосовой чат…'
+            : recorder.enabled
+              ? '● Слушаю. Задайте вопрос и сделайте паузу.'
+              : 'Включите микрофон голосового чата — я запишу ваши слова.')
+        : 'Подойдите, чтобы поговорить';
     const state = JSON.stringify([
       text,
       answer,
       status,
-      recorder.enabled,
-      recorder.pending,
-      active,
-      recorder.tracks.size,
+      shared ? display.focused : active,
     ]);
     if (guide.state === state) return;
     guide.state = state;
     const c = guide.texture.getContext();
     c.clearRect(0, 0, 1024, 768);
-    c.fillStyle = active ? '#204e4bf2' : '#183642eb';
+    c.fillStyle = (shared ? display.focused : active)
+      ? '#204e4bf2'
+      : '#183642eb';
     c.beginPath();
     c.roundRect(3, 3, 1018, 762, 32);
     c.fill();
-    c.strokeStyle = active ? '#c7ebad' : '#718e99';
+    c.strokeStyle = (shared ? display.focused : active) ? '#c7ebad' : '#718e99';
     c.lineWidth = 4;
     c.stroke();
     c.textAlign = 'left';
@@ -202,7 +209,7 @@ export class LakeProfessors {
     c.font = '42px sans-serif';
     c.fillText(`AI-профессор · озеро ${guide.id + 1}`, 42, 76);
     c.font = '28px sans-serif';
-    c.fillStyle = recorder.error && active ? '#ffc7ae' : '#c5e9d1';
+    c.fillStyle = !shared && recorder.error && active ? '#ffc7ae' : '#c5e9d1';
     const wrap = (value, width) => {
       const lines = [];
       let line = '';
@@ -222,7 +229,7 @@ export class LakeProfessors {
     c.fillStyle = '#f1f8f2';
     wrap(
       answer
-        ? `Вы: ${text}\nПрофессор: ${answer}`
+        ? `Вопрос: ${text}\nПрофессор: ${answer}`
         : text || 'Задайте вопрос голосом. Аудио не сохраняется на диск.',
       940,
     )
@@ -239,13 +246,17 @@ export class LakeProfessors {
     c.font = '22px sans-serif';
     c.fillStyle = '#b4cbd0';
     c.fillText(
-      'Только ваша речь · Professor Einstein / klava88 · CC BY 4.0',
+      shared
+        ? 'Общий разговор · Professor Einstein / klava88 · CC BY 4.0'
+        : 'Только ваша речь · Professor Einstein / klava88 · CC BY 4.0',
       512,
       725,
     );
     guide.texture.update();
   }
   update(dt, player, camera, visible = true) {
+    this.sync?.tick();
+    player.professorTarget = null;
     if (visible !== this.visible) this.setVisible(visible);
     this.nearest = null;
     for (const site of this.sites) {
@@ -275,20 +286,38 @@ export class LakeProfessors {
         this.nearest = guide.id;
         closest = distance;
       }
+      const shared = this.sync?.required;
+      const display = shared
+        ? professorDisplay(this.sync.record(guide.id), this.sync.now())
+        : null;
       const up = vec(guide.up),
-        forward = guide.near ? delta : vec(guide.forward);
-      if (B.Vector3.Cross(forward, up).lengthSquared() > 0.001) {
-        const rotation = orientation(forward, up);
-        guide.root.rotationQuaternion = B.Quaternion.Slerp(
-          guide.root.rotationQuaternion,
-          rotation,
-          1 - Math.exp(-dt * 5),
+        forward = shared
+          ? display.position
+            ? vec(display.position).subtract(guide.root.position)
+            : vec(guide.forward)
+          : guide.near
+            ? delta
+            : vec(guide.forward);
+      guide.facing.rotation.x = display?.nod || 0;
+      const hasDirection = B.Vector3.Cross(forward, up).lengthSquared() > 0.001;
+      if (shared || hasDirection) {
+        const rotation = orientation(
+          hasDirection ? forward : vec(guide.forward),
+          up,
         );
+        guide.root.rotationQuaternion = shared
+          ? rotation
+          : B.Quaternion.Slerp(
+              guide.root.rotationQuaternion,
+              rotation,
+              1 - Math.exp(-dt * 5),
+            );
       }
       const view = camera.globalPosition.subtract(guide.sign.position);
       if (B.Vector3.Cross(view, up).lengthSquared() > 0.001)
         guide.sign.rotationQuaternion = orientation(view.negate(), up);
     }
+    player.professorTarget = this.nearest;
     this.recorder?.setTarget(this.nearest);
     for (const guide of this.guides) this.draw(guide);
   }

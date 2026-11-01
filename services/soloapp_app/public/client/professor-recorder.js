@@ -50,8 +50,10 @@ export class ProfessorRecorder {
     record.segments.push(segment);
     record.segments = record.segments.slice(-24);
     const track = new ProfessorVoiceTurn({
-      request: (samples, signal) =>
-        askProfessor(samples, this.getToken(), signal),
+      request: (samples, signal) => {
+        const run = () => askProfessor(samples, this.getToken(), signal);
+        return this.shared ? this.shared.request(lake, run, signal) : run();
+      },
       onState: (status) => {
         record.status = status;
         this.onChange();

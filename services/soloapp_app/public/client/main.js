@@ -17,6 +17,7 @@ import { WhiteRoom } from './white-room.js';
 import { LakeProfessors } from './lake-professors.js';
 import { MarineLife } from './marine.js';
 import { ProfessorRecorder } from './professor-recorder.js';
+import { LakeProfessorSync } from './lake-professor-sync.js';
 import { Laboratory } from './laboratory.js';
 import { ReactorRoom } from './reactor-room.js';
 import { ShiftClock } from './shift-clock.js';
@@ -159,6 +160,7 @@ async function start() {
     },
     voice,
   );
+  professors.sync = professorRecorder.shared = new LakeProfessorSync(network);
   reactor.connectNetwork(network);
   lobby = new Lobby(
     auth,

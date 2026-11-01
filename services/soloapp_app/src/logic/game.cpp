@@ -172,7 +172,7 @@ void Game::message(const drogon::WebSocketConnectionPtr &socket, const std::stri
         refresh();
         return;
     }
-    if (v["type"] == "door_request" ||
+    if (v["type"] == "door_request" || v["type"] == "professor_command" ||
         ((v["type"] == "reactor_command" || v["type"] == "reactor_snapshot") && s.reactor)) {
         v["from"] = Json::UInt64(s.id);
         v["user_id"] = s.user;
@@ -261,6 +261,7 @@ void Game::received(Frame frame) {
             welcome["world_protocol"] = 2;
             welcome["reactor_protocol"] = 1;
             welcome["door_protocol"] = 1;
+            welcome["professor_protocol"] = 1;
             welcome["rtc_config"]["iceServers"] = Json::Value(Json::arrayValue);
             welcome["peers"] = Json::Value(Json::arrayValue);
             for (auto id : peers)
@@ -302,6 +303,16 @@ void Game::received(Frame frame) {
             s.doorRevision = frame.door["revision"].asUInt64();
         }
         for (const auto &reply : frame.doorReplies)
+            if (reply["to"].asUInt64() == s.id)
+                send(s.socket, reply);
+        const auto professorRevision = frame.professors["revision"].asUInt64();
+        const auto professorTime = frame.professors["serverTime"].asInt64();
+        if (s.professorRevision != professorRevision || professorTime - s.professorSentAt >= 1000) {
+            send(s.socket, frame.professors);
+            s.professorRevision = professorRevision;
+            s.professorSentAt = professorTime;
+        }
+        for (const auto &reply : frame.professorReplies)
             if (reply["to"].asUInt64() == s.id)
                 send(s.socket, reply);
         if (s.reactor) {
