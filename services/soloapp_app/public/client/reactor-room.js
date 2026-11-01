@@ -9,6 +9,7 @@ import { RbmkServerSync } from './rbmk-server.js';
 import { PhysicalSystemRoom } from './physical-system-room.js';
 import { ReactorInstructor } from './reactor-instructor.js';
 import { ReactorDoor } from './reactor-door.js';
+import { ReactorWorkers } from './reactor-workers.js';
 
 const B = window.BABYLON;
 export { REACTOR_MAP } from '../shared/room.js';
@@ -36,6 +37,7 @@ export class ReactorRoom {
     this.door = new ReactorDoor(this, B);
     this.buildRoom();
     this.instructor = new ReactorInstructor(this);
+    this.workers = new ReactorWorkers(this);
     this.server = new RbmkServerSync({
       send: (message) => this.network?.send(message),
       restore: (state) => {
@@ -540,6 +542,11 @@ export class ReactorRoom {
         )
           this.instructor.commandRevision = message.revision;
         this.server.receive(message);
+        if (
+          message.type === 'reactor_state' &&
+          message.storage === 'postgresql'
+        )
+          this.workers.clock.sync(message.serverTime);
       }
     };
     if (this.active && network.auth?.token) this.prepareServer();
@@ -1082,6 +1089,7 @@ export class ReactorRoom {
 
   update(dt) {
     this.instructor.update(dt);
+    this.workers.update(dt);
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.door.update(dt);
     if (!this.active) return;
