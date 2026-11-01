@@ -15,7 +15,7 @@ add_custom_command(OUTPUT ${ODB_DIR}/world-odb.cxx ${ODB_DIR}/world-odb.hxx ${OD
 add_library(world_store src/logic/world_store.cpp src/logic/simulation.cpp ${ODB_DIR}/world-odb.cxx)
 target_include_directories(world_store PUBLIC src src/models src/logic ../../libs /usr/include/postgresql)
 target_link_libraries(world_store PUBLIC Drogon::Drogon OpenSSL::Crypto ${ODB_LIBRARY} ${ODB_PGSQL_LIBRARY})
-add_executable(soloapp-app src/main.cpp src/views/api.cpp src/logic/game.cpp)
+add_executable(soloapp-app src/main.cpp src/views/api.cpp src/logic/game.cpp src/logic/professor.cpp)
 target_link_libraries(soloapp-app PRIVATE world_store ${SODIUM_LIBRARY})
 install(TARGETS soloapp-app RUNTIME DESTINATION bin)
 enable_testing()

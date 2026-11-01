@@ -1,0 +1,9 @@
+- name: Deploy private Llama service
+  ansible.builtin.include_tasks: "{{ project_root }}/infra/kubernetes/tasks/apply.yaml"
+  vars:
+    manifest_source: "{{ project_root }}/services/llama/deploy/k8s/deployment.yaml.j2"
+    manifest_name: llama
+- name: Wait for Llama readiness
+  ansible.builtin.command: k3s kubectl -n soloapp rollout status deployment/llama --timeout=600s
+  changed_when: false
+  when: not ansible_check_mode

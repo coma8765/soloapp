@@ -21,6 +21,7 @@ jobs:
       - name: Validate codegen and policy
         run: |
           make check-codegen test-codegen check-dashboards test-alerts
+          .venv-codegen/bin/python -m unittest discover -s services/llama/tests -v
           .venv-codegen/bin/python -m unittest discover -s infra/cd/tests -v
           .venv-codegen/bin/python -m unittest discover -s infra/headlamp/tests -p "test_*.py" -v
           python3 -m unittest discover -s infra/registry/tests -v
@@ -185,7 +186,7 @@ jobs:
   required:
     name: Required checks
     if: always()
-    needs: [source, quality, services, app-api, web, gateway, keycloak, soloapp]
+    needs: [source, quality, services, app-api, web, gateway, keycloak, soloapp, llama]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -227,6 +228,7 @@ jobs:
           python3 -m unittest discover -s services/tts/tests -v
           python3 -m unittest discover -s services/whisper/tests -v
           node services/soloapp_app/tests/speech.test.mjs
+          node services/soloapp_app/tests/professor-voice.test.mjs
       - name: Build offline TTS runtime
         run: docker build -t soloapp-tts-test -f services/tts/deploy/Dockerfile .
       - name: Verify synthesis without network or writable filesystem
@@ -234,7 +236,18 @@ jobs:
       - name: Build offline Whisper runtime
         run: docker build -t soloapp-whisper-test -f services/whisper/deploy/Dockerfile .
       - name: Build C++ and test checkpoint recovery
-        run: docker build --target build -t soloapp-test -f services/soloapp_app/deploy/Dockerfile .
+        run: |
+          docker buildx create --use
+          docker buildx build --load --target build -t soloapp-test -f services/soloapp_app/deploy/Dockerfile .
+      - name: Build immutable soloapp backend
+        run: |
+          bash infra/registry/build.sh "$GITHUB_SHA" "$RUNNER_TEMP/backend-images" app-api
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: soloapp-backend-image
+          path: ${{ runner.temp }}/backend-images/whoami.oci.tar
+          retention-days: 3
+          compression-level: 0
       - name: Test database election and old leader fencing
         run: bash services/soloapp_app/tests/integration.sh
       - name: Validate versioned browser bundle
@@ -244,3 +257,22 @@ jobs:
           name: soloapp-web-bundle
           path: ${{ runner.temp }}/soloapp-web.tar.gz
           retention-days: 3
+
+  llama:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: {persist-credentials: false}
+      - name: Build and verify offline model
+        run: |
+          docker buildx create --use
+          docker buildx build --load -t soloapp-llama-test -f services/llama/deploy/Dockerfile .
+          python3 services/llama/tests/smoke.py
+          bash infra/registry/build.sh "$GITHUB_SHA" "$RUNNER_TEMP/images" llama
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: llama-image
+          path: ${{ runner.temp }}/images/llama.oci.tar
+          retention-days: 3
+          compression-level: 0
