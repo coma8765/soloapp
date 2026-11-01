@@ -77,7 +77,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - name: Wait for current main push CI (up to 40 minutes)
+      - name: Wait for pinned revision main push CI (up to 40 minutes)
         id: revision
         env:
           GH_TOKEN: ${{ github.token }}

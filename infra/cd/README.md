@@ -2,9 +2,9 @@
 
 `Validate source` runs codegen/policy tests, secret/history scanning, Docker testsuite for auth plus the explicit app-api (NestJS) build/lint/unit/e2e and production-image job, and Flutter analyze/test/web build. Public PRs run only on GitHub-hosted runners and receive no production environment secrets.
 
-`Deploy production` is manually started through Actions (`workflow_dispatch`, main only). Deploy one service at a time (recommended); `all` is an explicit coordinated release. A push still runs validation, but no longer automatically rolls every service. It waits up to 40 minutes for green push CI on the requested main SHA, checking every 15 seconds; the server independently checks the same conditions. The production environment permits only the main branch. Older queued revisions fail closed when main has advanced. GitHub concurrency and per-server file locks prevent overlapping deployments.
+`Deploy production` is manually started through Actions (`workflow_dispatch`, main only). Deploy one service at a time (recommended); `all` is an explicit coordinated release. A push still runs validation, but no longer automatically rolls every service. It waits up to 40 minutes for green push CI on the requested main SHA, checking every 15 seconds; the server independently checks the same conditions. The production environment permits only the main branch. Each run pins its source SHA at dispatch. New commits on main do not invalidate that release; the pinned SHA must remain in main history and have successful push CI for that exact revision. GitHub concurrency and per-server file locks prevent overlapping deployments.
 
-Each site has a separate expiring Ed25519 key, stored in GitHub Environment Secrets. SSH uses pinned host keys, a root-owned forced command, and disables PTY/forwarding. The login has no general sudo; only the fixed gate accepts `probe` or a validated commit SHA. Possession of this key grants deployment of current green main, not a shell. People allowed to change main/workflows remain trusted deployers; changes there must be reviewed.
+Each site has a separate expiring Ed25519 key, stored in GitHub Environment Secrets. SSH uses pinned host keys, a root-owned forced command, and disables PTY/forwarding. The login has no general sudo; only the fixed gate accepts `probe` or a validated commit SHA. Possession of this key grants deployment of a green revision in main history, not a shell. People allowed to change main/workflows remain trusted deployers; changes there must be reviewed.
 
 GitHub-hosted CI builds only the selected runtime image (auth, whoami for app-api, or web), or all three for `all`, labels the approved commit, then publishes identical OCI content to both private S3-backed registries over the restricted SSH gate. Servers never build images. The gate checks matching selected image digests; web/all also require both static release markers, then runs Ansible using a namespace-scoped 20-minute token. Kubernetes pulls pinned digests through mTLS registry mirrors. See `infra/registry/README.md` for storage and access details.
 
@@ -61,7 +61,7 @@ Actions → **Deploy production** → **Run workflow**, branch `main`:
 * `service=all`: explicitly build/publish/roll the complete application.
 
 No other Deployment is applied during a scoped rollout; the gate restricts Ansible to a
-fixed tag (`app-api` maps to `whoami`). Root gate checks, green-current-main checks, pinned
+fixed tag (`app-api` maps to `whoami`). Root gate checks, green pinned-main-revision checks, pinned
 SSH identities, environment branch restrictions and namespace RBAC remain in effect.
 The workflow remains globally serialized because shared APIs/storage can couple releases.
 No new shell, sudo command or IAM capability is granted.
@@ -112,5 +112,5 @@ Operator setup/rotation (credential transfer requires operator authorization):
 .venv-codegen/bin/python infra/cd/configure_notifications.py
 ```
 
-CI still fails closed if main advances, validation fails/cancels, or the 40-minute wait expires.
+CI still fails closed if the pinned revision leaves main history, validation fails/cancels, or the 40-minute wait expires.
 The server gate independently rechecks CI/main before publication or mutation.
