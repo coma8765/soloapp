@@ -44,3 +44,11 @@ NODE_EXTRA_CA_CERTS=outputs/soloapp-local-ca.crt SOLOAPP_BASE_URL=https://<LAN-I
 Container images and the active web bundle must be available locally before
 losing Internet. Voice between clients on different NATs requires TURN; game
 coordinates and shared world snapshots use WSS through the same HTTPS entry.
+
+The chief engineer uses the existing Knowledge Search API and Ollama. Add an
+`engineer` mapping to ignored `config.yaml` with `search_url`, `ollama_url`, and
+`ollama_model`. Use internal IP origins reachable from the Colima pods (the same
+host-loopback bridge used by `whisper.metal_host`), not pod-local `127.0.0.1`.
+The renderer grants `whoami` egress only to those two IP/port pairs. Do not expose
+these unauthenticated ML dependencies on the public gateway. See
+[chief engineer deployment and checks](../../docs/CHIEF_ENGINEER.md).

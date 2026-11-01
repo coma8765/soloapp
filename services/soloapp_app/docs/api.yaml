@@ -155,6 +155,41 @@ paths:
             schema:
               type: string
               format: binary
+  /api/v1/soloapp_app/v1/engineer/respond:
+    post:
+      operationId: engineer_respond
+      security:
+      - bearerAuth: []
+      x-route:
+        exposure: public
+        auth: signed-user
+        max_body_bytes: 256044
+        timeouts:
+          connect_seconds: 2
+          read_seconds: 180
+        rate_limit:
+          group: engineer
+          requests_per_second: 1
+          burst: 2
+      responses:
+        '200':
+          description: Transcript, grounded engineer answer, sources and base64 WAV (audio_error when
+            synthesis is unavailable)
+        '429':
+          description: Busy
+        '503':
+          description: Unavailable
+        '400':
+          description: Invalid bounded mono PCM16 16kHz WAV
+        '401':
+          description: Authentication required
+      requestBody:
+        required: true
+        content:
+          audio/wav:
+            schema:
+              type: string
+              format: binary
 components:
   securitySchemes:
     bearerAuth:

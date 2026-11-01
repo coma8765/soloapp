@@ -17,6 +17,7 @@ import { WhiteRoom } from './white-room.js';
 import { LakeProfessors } from './lake-professors.js';
 import { MarineLife } from './marine.js';
 import { ProfessorRecorder } from './professor-recorder.js';
+import { EngineerConversation } from './engineer-conversation.js';
 import { Laboratory } from './laboratory.js';
 import { ReactorRoom } from './reactor-room.js';
 import { ShiftClock } from './shift-clock.js';
@@ -103,7 +104,8 @@ async function start() {
   document.addEventListener('visibilitychange', () => syncProfessorVoice());
   const laboratory = new Laboratory(scene, terrain, planet, professors);
   player.structures.push(laboratory);
-  let network,
+  let engineer,
+    network,
     lobby,
     xr,
     authPanel,
@@ -135,6 +137,7 @@ async function start() {
     $('voice-unlock').hidden = !voice.playbackBlocked;
   });
   function syncProfessorVoice() {
+    engineer?.update();
     void professorRecorder.setVoiceStream(
       auth.token && !room.serverId && !reactor.active && !document.hidden
         ? voice.stream
@@ -159,6 +162,7 @@ async function start() {
     voice,
   );
   reactor.connectNetwork(network);
+  engineer = new EngineerConversation(reactor, voice, () => auth.token);
   lobby = new Lobby(
     auth,
     network,
@@ -438,6 +442,7 @@ async function start() {
     xr,
     sound,
     shiftClock,
+    engineer,
     voice,
     authPanel,
     quality,

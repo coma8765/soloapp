@@ -1,9 +1,12 @@
+import { NpcVoice } from './npc-voice.js';
+
 // Audio uses the authenticated peer connections negotiated by the C++ server.
 // Reserve audio before the first offer so microphone changes need no renegotiation.
 export class VoiceChat {
   constructor(onChange = () => {}) {
     this.onChange = onChange;
     this.peers = new Map();
+    this.npc = new NpcVoice(this);
     this.online = false;
     this.localAllowed = false;
     this.muted = false;
@@ -47,14 +50,25 @@ export class VoiceChat {
     const peer = {
       pc,
       sender,
+      npcSender: offerer
+        ? pc.addTransceiver('audio', { direction: 'sendrecv' }).sender
+        : null,
       audio: null,
       blocked: false,
       updates: Promise.resolve(),
     };
     this.peers.set(id, peer);
+    void this.npc.connectSender(id, peer.npcSender).catch(() => {});
     this.replace(peer, this.stream?.getAudioTracks()[0] || null);
     pc.ontrack = (event) => {
       if (event.track.kind !== 'audio' || this.peers.get(id) !== peer) return;
+      const audioSlots = pc
+        .getTransceivers()
+        .filter((t) => t.receiver.track.kind === 'audio');
+      if (event.transceiver === audioSlots[1]) {
+        this.npc.attachReceiver(id, event.track);
+        return;
+      }
       if (peer.audio) {
         peer.audio.pause();
         peer.audio.srcObject = null;
@@ -102,6 +116,14 @@ export class VoiceChat {
     peer.sender = audio.sender;
     this.replace(peer, this.stream?.getAudioTracks()[0] || null);
     await peer.updates;
+    const npc = peer.pc
+      .getTransceivers()
+      .filter((t) => t.receiver.track.kind === 'audio')[1];
+    if (npc) {
+      npc.direction = 'sendrecv';
+      peer.npcSender = npc.sender;
+      await this.npc.connectSender(id, peer.npcSender);
+    }
   }
 
   play(peer) {
@@ -119,11 +141,14 @@ export class VoiceChat {
   }
 
   unlock() {
+    void this.npc.unlock();
     for (const peer of this.peers.values())
       if (peer.audio?.paused) this.play(peer);
   }
   get playbackBlocked() {
-    return [...this.peers.values()].some((peer) => peer.blocked);
+    return [...this.peers.values(), ...this.npc.receivers.values()].some(
+      (peer) => peer.blocked,
+    );
   }
 
   async toggle() {
@@ -191,6 +216,7 @@ export class VoiceChat {
   }
 
   stop() {
+    this.npc.stop();
     ++this.generation;
     this.pending = false;
     this.stream?.getTracks().forEach((track) => {
@@ -205,6 +231,7 @@ export class VoiceChat {
 
   togglePlayback() {
     this.muted = !this.muted;
+    this.npc.updateGains();
     for (const peer of this.peers.values())
       if (peer.audio) peer.audio.muted = this.muted;
     if (!this.muted) this.unlock();
@@ -212,6 +239,7 @@ export class VoiceChat {
   }
 
   remove(id) {
+    this.npc.remove(id);
     const peer = this.peers.get(id);
     if (!peer) return;
     peer.pc.ontrack = null;
@@ -230,5 +258,6 @@ export class VoiceChat {
     this.online = false;
     this.stop();
     for (const id of this.peers.keys()) this.remove(id);
+    this.npc.dispose();
   }
 }

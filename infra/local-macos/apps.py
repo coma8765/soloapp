@@ -3,8 +3,10 @@
 
 import hashlib
 import hmac
+import ipaddress
 import json
 import sys
+from urllib.parse import urlsplit
 
 import jinja2
 import yaml
@@ -212,6 +214,48 @@ def manifests():
         if app == "whoami":
             env["LLAMA_URL"] = "http://llama.soloapp.svc.cluster.local:8180"
             env["TTS_URL"] = "http://tts.soloapp.svc.cluster.local:8179"
+            engineer = CONFIG.get("engineer", {})
+            for name, key in (
+                ("ENGINEER_SEARCH_URL", "search_url"),
+                ("OLLAMA_URL", "ollama_url"),
+                ("OLLAMA_MODEL", "ollama_model"),
+            ):
+                env[name] = engineer.get(key, "")
+            if engineer:
+                egress = []
+                for key in ("search_url", "ollama_url"):
+                    endpoint = urlsplit(engineer[key])
+                    host = ipaddress.ip_address(endpoint.hostname)
+                    if (
+                        endpoint.scheme != "http"
+                        or endpoint.username
+                        or endpoint.path not in ("", "/")
+                    ):
+                        raise ValueError("Engineer dependencies require an internal HTTP origin")
+                    egress.append(
+                        {
+                            "to": [
+                                {
+                                    "ipBlock": {
+                                        "cidr": str(host) + ("/32" if host.version == 4 else "/128")
+                                    }
+                                }
+                            ],
+                            "ports": [{"protocol": "TCP", "port": endpoint.port or 80}],
+                        }
+                    )
+                docs.append(
+                    {
+                        "apiVersion": "networking.k8s.io/v1",
+                        "kind": "NetworkPolicy",
+                        "metadata": {"name": "whoami-to-engineer-services", "namespace": NS},
+                        "spec": {
+                            "podSelector": {"matchLabels": {"app": "whoami"}},
+                            "policyTypes": ["Egress"],
+                            "egress": egress,
+                        },
+                    }
+                )
         app_ports = {"http": port}
         if app == "client-gateway":
             app_ports["internal"] = 8443
