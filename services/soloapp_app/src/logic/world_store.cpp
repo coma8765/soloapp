@@ -79,6 +79,8 @@ Frame WorldStore::exchange(const Json::Value &local, const std::vector<Json::Val
     auto reactor = decode(world.reactor);
     frame.reactorReplies = reactor_.update(reactor, frame.players, reactorMessages, now);
     frame.reactor = reactor_.publicState(reactor);
+    // One database clock for room NPCs, including late joiners across replicas.
+    frame.reactor["serverTime"] = Json::Int64(now);
     frame.reactorJournal = reactor["journal"];
     frame.reactorCommands = reactor["commands"];
     if (frame.leader) {

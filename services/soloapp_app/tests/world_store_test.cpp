@@ -11,6 +11,9 @@ int run_test(int argc, char **argv) {
     const Json::Value empty(Json::arrayValue);
     auto initial = first.exchange(empty, {});
     auto follower = second.exchange(empty, {});
+    if (!initial.reactor["serverTime"].isInt64() || initial.reactor["serverTime"].asInt64() <= 0 ||
+        follower.reactor["serverTime"].asInt64() < initial.reactor["serverTime"].asInt64())
+        throw std::runtime_error("Room NPC database clock missing or reversed across nodes");
     if (!initial.leader || follower.leader || initial.epoch != follower.epoch ||
         initial.fish != follower.fish)
         throw std::runtime_error("leader election failed");
@@ -19,6 +22,8 @@ int run_test(int argc, char **argv) {
     if (!promoted.leader || promoted.epoch <= initial.epoch ||
         promoted.fish["sequence"].asUInt64() <= initial.fish["sequence"].asUInt64())
         throw std::runtime_error("checkpoint failover failed");
+    if (promoted.reactor["serverTime"].asInt64() < initial.reactor["serverTime"].asInt64() + 3000)
+        throw std::runtime_error("Room NPC clock stopped without a reactor writer");
     auto stale = first.exchange(empty, {});
     if (stale.leader || stale.epoch != promoted.epoch || stale.fish != promoted.fish)
         throw std::runtime_error("old leader not fenced");
