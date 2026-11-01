@@ -52,6 +52,8 @@ try {
     const engine = player.scene.getEngine();
     engine.stopRenderLoop();
     room.instructor.stop();
+    // Test furniture independently of randomly positioned workers.
+    player.roomPeople = () => [];
     player.inputEnabled = true;
     const cabinets = room.physicalConsole.colliders.filter((m) =>
       /(?:desk|auxiliary|wall) cabinet/.test(m.name),
