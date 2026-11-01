@@ -47,7 +47,9 @@ class WorkerTests(unittest.TestCase):
             release.wait(5)
             return [{"word": str(pcm[0]), "start": 0, "end": 0.1}]
 
-        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(recognize, "test-local"))
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", 0), make_handler(recognize, "test-local", "cuda")
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
 
@@ -65,6 +67,7 @@ class WorkerTests(unittest.TestCase):
 
         try:
             self.assertEqual(request("/health")[1]["ready"], True)
+            self.assertEqual(request("/healthz")[1]["device"], "cuda")
             self.assertEqual(
                 request(
                     "/transcribe",

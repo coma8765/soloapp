@@ -1,0 +1,49 @@
+---
+- name: Enable NVIDIA GPU on the home k3s node
+  hosts: all
+  become: true
+  tasks:
+    - name: Check NVIDIA driver
+      ansible.builtin.command: nvidia-smi -L
+      changed_when: false
+    - name: Install signed NVIDIA repository key
+      ansible.builtin.get_url:
+        url: https://nvidia.github.io/libnvidia-container/gpgkey
+        dest: /usr/share/keyrings/nvidia-container-toolkit.asc
+        mode: '0644'
+    - name: Configure stable NVIDIA repository
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/nvidia-container-toolkit.list
+        mode: '0644'
+        content: "deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit.asc] https://nvidia.github.io/libnvidia-container/stable/deb/$(ARCH) /
+"
+    - name: Refresh only the NVIDIA repository
+      ansible.builtin.command: apt-get update -o Dir::Etc::sourcelist=sources.list.d/nvidia-container-toolkit.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0
+      changed_when: false
+    - name: Install pinned NVIDIA container runtime
+      ansible.builtin.apt:
+        name:
+          - nvidia-container-toolkit=1.20.1-1
+          - nvidia-container-toolkit-base=1.20.1-1
+          - libnvidia-container-tools=1.20.1-1
+          - libnvidia-container1=1.20.1-1
+      notify: Restart k3s to discover runtime
+    - name: Apply runtime changes before device plugin
+      ansible.builtin.meta: flush_handlers
+    - name: Copy GPU device plugin
+      ansible.builtin.copy:
+        src: device-plugin.yaml
+        dest: /run/soloapp-nvidia-plugin.yaml
+        mode: '0600'
+    - name: Apply device plugin
+      ansible.builtin.command: k3s kubectl apply -f /run/soloapp-nvidia-plugin.yaml
+      register: plugin_apply
+      changed_when: "'configured' in plugin_apply.stdout or 'created' in plugin_apply.stdout"
+    - name: Wait for plugin
+      ansible.builtin.command: k3s kubectl -n kube-system rollout status daemonset/soloapp-nvidia-device-plugin --timeout=180s
+      changed_when: false
+  handlers:
+    - name: Restart k3s to discover runtime
+      ansible.builtin.systemd:
+        name: k3s
+        state: restarted
