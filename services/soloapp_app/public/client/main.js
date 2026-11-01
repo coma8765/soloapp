@@ -539,7 +539,7 @@ async function start() {
       !reactor.active &&
       !player.overview &&
       camera.globalPosition.length() < WATER_RADIUS;
-    if (!reactor.active) sound.update(player, underwater);
+    sound.update(player, underwater);
     $('underwater').style.display = underwater ? 'block' : 'none';
     document.body.classList.toggle(
       'playing',
