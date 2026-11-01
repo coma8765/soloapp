@@ -38,6 +38,30 @@ try {
   const point = (x, y, z) =>
     B.Vector3.TransformCoordinates(new B.Vector3(x, y, z), world);
   const back = B.Vector3.TransformNormal(B.Axis.Z, world).normalize();
+  const down = B.Vector3.TransformNormal(B.Axis.Y, world).normalize().negate();
+  const boards = lab.root
+    .getChildMeshes()
+    .filter((mesh) => mesh.name === 'Deck board');
+  check(
+    boards.length === 24 &&
+      boards.every((board) =>
+        [-2, 0, 2].every((z) => {
+          const hits = scene
+            .multiPickWithRay(
+              new B.Ray(point(board.position.x, 1, z), down, 2),
+              (mesh) => mesh === board || mesh.name === 'Veranda foundation',
+            )
+            .sort((a, b) => a.distance - b.distance);
+          return (
+            hits.length === 2 &&
+            hits[0].pickedMesh === board &&
+            Math.abs(lab.localPosition(hits[0].pickedPoint).y) < 0.0001 &&
+            hits[1].distance - hits[0].distance > 0.03
+          );
+        }),
+      ),
+    'Доски лежат на высоте пола; фундамент ниже настила и не перекрывает его поверхность',
+  );
   check(
     planet.trees.every((tree) => {
       const p = lab.localPosition(tree);
