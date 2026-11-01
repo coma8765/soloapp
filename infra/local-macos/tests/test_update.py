@@ -2,9 +2,9 @@ import copy
 import importlib.util
 import io
 import unittest
-from unittest.mock import patch
 import wave
 from pathlib import Path
+from unittest.mock import patch
 
 
 def load(name, filename):
