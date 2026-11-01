@@ -57,6 +57,7 @@ the Dockerfile. CLI: `python3 infra/registry/upload.py --archive IMAGE.oci.tar
 The workflow reports reused layers/bytes and sent bytes. No registry GC is enabled;
 retained release manifests keep base layers available for rollback and reuse.
 
+The Python parent image is digest-pinned; updating its upstream tag alone does not change the base.
 Whisper separates `runtime-base` (Python dependencies, model, CUDA) from the
 application layer. Production CI restores the most recent matching base cache
 and saves it after the build. Application-only edits reuse its layer digests.

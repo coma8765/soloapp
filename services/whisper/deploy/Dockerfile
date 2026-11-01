@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM python:3.12-slim-bookworm AS model
+FROM --platform=$BUILDPLATFORM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337 AS model
 RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir ctranslate2==4.6.0 transformers==4.55.4 huggingface-hub==0.36.0 numpy==2.2.6
@@ -8,7 +8,7 @@ RUN HF_HUB_OFFLINE=1 ct2-transformers-converter --model /source --output_dir /mo
     && cp /source/README.md /model/MODEL_CARD.md \
     && chmod -R a+rX /model
 
-FROM python:3.12-slim-bookworm AS runtime-base
+FROM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337 AS runtime-base
 RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
 COPY services/whisper/deploy/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
