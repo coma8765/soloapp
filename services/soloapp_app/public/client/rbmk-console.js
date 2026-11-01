@@ -67,13 +67,6 @@ function partById(id) {
   return RBMK_PANEL_PARTS.find((part) => part.id === id);
 }
 
-function formatControl(name, value) {
-  const schema = RBMK_CONTROLS[name];
-  if (schema.type === 'checkbox') return value ? 'ВКЛ' : 'ОТКЛ';
-  if (schema.type === 'select') return schema.options[value];
-  return `${Math.round(value / schema.step) * schema.step} ${schema.unit}`;
-}
-
 export class RbmkPhysicalConsole {
   constructor(scene, root, handlers) {
     this.scene = scene;
