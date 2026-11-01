@@ -123,3 +123,10 @@ unprivileged publisher. CI/main checks run before retrieval. No arbitrary URL,
 filesystem path, command or credential is accepted. The default workflow uses
 YC uploads followed by home peer copies; explicit force transfer keeps full SSH
 uploads available. Update both the gate and entry parser before rollout.
+
+Repeated publication first attempts verified peer copies in both directions. If a
+release image already exists on either site, it is reused instead of replacing
+its immutable tag with a nondeterministic rebuild. Only after both sites verify
+the same image does publication skip the new archive. With no reusable copy,
+the workflow uploads the new image normally. Conflicting existing digests still
+fail closed. `force_image_transfer` forces archive transfer, not tag replacement.
