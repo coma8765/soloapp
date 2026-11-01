@@ -160,11 +160,13 @@ export class Network {
       for (const id of message.peers) this.addPeer(id);
       this.worldProtocol = message.world_protocol;
       this.reactorProtocol = message.reactor_protocol;
+      this.doorProtocol = message.door_protocol;
       this.userId = message.user_id;
       this.onReactorServerMessage?.({
         type: 'reactor_welcome',
         id: this.id,
         protocol: this.reactorProtocol,
+        doorProtocol: this.doorProtocol,
         userId: this.userId,
       });
       if (this.worldProtocol === 1) this.startWorld();
@@ -189,6 +191,8 @@ export class Network {
         'reactor_ack',
         'reactor_journal',
         'reactor_command_record',
+        'door_state',
+        'door_ack',
       ].includes(type)
     )
       this.onReactorServerMessage?.(message);

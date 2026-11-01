@@ -14,6 +14,7 @@ export class Player {
     this.inputEnabled = true;
     this.worldMap = 'planet';
     this.roomColliders = [];
+    this.movementConstraints = [];
     this.structures = [];
     this.scene = scene;
     this.terrain = terrain;
@@ -232,6 +233,8 @@ export class Player {
       }
       this.position = u.scale(radius);
     }
+    for (const constrain of this.movementConstraints)
+      this.position = constrain(this.position, before);
     this.forward
       .subtractInPlace(u.scale(B.Vector3.Dot(this.forward, u)))
       .normalize();

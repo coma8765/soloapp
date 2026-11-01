@@ -7,13 +7,15 @@ find_program(ODB_COMPILER odb REQUIRED)
 find_library(ODB_LIBRARY odb REQUIRED)
 find_library(ODB_PGSQL_LIBRARY odb-pgsql REQUIRED)
 find_library(SODIUM_LIBRARY sodium REQUIRED)
-set(ODB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/generated/odb)
+# Generate from the current model, never pick up stale checked-in ODB bindings
+# whose timestamps can be newer than world.hpp in a fresh checkout.
+set(ODB_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/odb)
 add_custom_command(OUTPUT ${ODB_DIR}/world-odb.cxx ${ODB_DIR}/world-odb.hxx ${ODB_DIR}/world-odb.ixx
  COMMAND ${CMAKE_COMMAND} -E make_directory ${ODB_DIR}
  COMMAND ${ODB_COMPILER} --std c++11 --database pgsql --generate-query --output-dir ${ODB_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src/models/world.hpp
  DEPENDS src/models/world.hpp VERBATIM)
-add_library(world_store src/logic/world_store.cpp src/logic/simulation.cpp src/logic/reactor.cpp ${ODB_DIR}/world-odb.cxx)
-target_include_directories(world_store PUBLIC src src/models src/logic ../../libs /usr/include/postgresql)
+add_library(world_store src/logic/world_store.cpp src/logic/simulation.cpp src/logic/reactor.cpp src/logic/door.cpp ${ODB_DIR}/world-odb.cxx)
+target_include_directories(world_store PUBLIC ${CMAKE_CURRENT_BINARY_DIR} src src/models src/logic ../../libs /usr/include/postgresql)
 target_link_libraries(world_store PUBLIC Drogon::Drogon OpenSSL::Crypto ${ODB_LIBRARY} ${ODB_PGSQL_LIBRARY})
 add_executable(soloapp-app src/main.cpp src/views/api.cpp src/logic/game.cpp src/logic/professor.cpp)
 target_link_libraries(soloapp-app PRIVATE world_store ${SODIUM_LIBRARY})
@@ -31,6 +33,10 @@ add_executable(reactor_test tests/reactor_test.cpp src/logic/reactor.cpp)
 target_include_directories(reactor_test PRIVATE src/logic)
 target_link_libraries(reactor_test PRIVATE Drogon::Drogon OpenSSL::Crypto)
 add_test(NAME reactor COMMAND reactor_test ${CMAKE_CURRENT_SOURCE_DIR}/src/data/rbmk-profile.json)
+add_executable(door_test tests/door_test.cpp src/logic/door.cpp)
+target_include_directories(door_test PRIVATE src/logic)
+target_link_libraries(door_test PRIVATE Drogon::Drogon)
+add_test(NAME door COMMAND door_test)
 
 # Explicit integration binary: run against a disposable database with schema.sql.
 add_executable(world_store_test tests/world_store_test.cpp)

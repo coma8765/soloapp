@@ -9,6 +9,7 @@ import { RbmkServerSync } from './rbmk-server.js';
 import { PhysicalSystemRoom } from './physical-system-room.js';
 import { ReactorInstructor } from './reactor-instructor.js';
 import { ReactorWorkers } from './reactor-workers.js';
+import { ReactorDoor } from './reactor-door.js';
 
 const B = window.BABYLON;
 export { REACTOR_MAP } from '../shared/room.js';
@@ -33,6 +34,7 @@ export class ReactorRoom {
     this.lastSharedState = 0;
     this.teamLog = [];
     this.materials = new Map();
+    this.door = new ReactorDoor(this, B);
     this.buildRoom();
     this.instructor = new ReactorInstructor(this);
     this.workers = new ReactorWorkers(this);
@@ -80,6 +82,9 @@ export class ReactorRoom {
       changed: () => this.syncTeamPanel(),
     });
     this.buildPlanetPortal();
+    this.player.movementConstraints.push((next, before) =>
+      this.door.resolve(next, before),
+    );
     this.bindUI();
   }
 
@@ -246,41 +251,7 @@ export class ReactorRoom {
   }
 
   portalFrame(parent, exit) {
-    const frame = this.material(
-      exit ? 'RBMK return portal frame' : 'RBMK entry portal frame',
-      exit ? '#d7b15e' : '#62d0d8',
-      true,
-    );
-    const glow = this.material(
-      exit ? 'RBMK return portal glow' : 'RBMK entry portal glow',
-      exit ? '#9a6e34' : '#154f59',
-      true,
-      0.62,
-    );
-    this.box(
-      'Portal left upright',
-      [0.18, 3.1, 0.22],
-      [-1.15, 1.55, 0],
-      frame,
-      parent,
-    );
-    this.box(
-      'Portal right upright',
-      [0.18, 3.1, 0.22],
-      [1.15, 1.55, 0],
-      frame,
-      parent,
-    );
-    this.box('Portal lintel', [2.48, 0.18, 0.22], [0, 3.02, 0], frame, parent);
-    const surface = B.MeshBuilder.CreatePlane(
-      exit ? 'Return portal surface' : 'RBMK portal surface',
-      { width: 2.15, height: 2.82 },
-      this.scene,
-    );
-    surface.parent = parent;
-    surface.position.set(0, 1.52, 0.05);
-    surface.material = glow;
-    surface.isPickable = false;
+    this.door.build(parent, exit);
   }
 
   buildExitPortal() {
@@ -429,7 +400,6 @@ export class ReactorRoom {
   }
 
   togglePhysical() {
-    if (!this.active) this.enter();
     if (!this.active) return false;
     this.physicalRoom ||= new PhysicalSystemRoom(this);
     this.setHints(false);
@@ -551,7 +521,14 @@ export class ReactorRoom {
       this.receiveNetworkMessage(peerId, message);
     network.onReactorServerMessage = (message) => {
       if (message.type === 'reactor_disconnect') {
+        this.door.sync.disconnect();
         this.server.disconnect();
+        return;
+      }
+      if (message.type === 'reactor_welcome')
+        this.door.sync.connect(message.doorProtocol, message.userId);
+      if (message.type === 'door_state' || message.type === 'door_ack') {
+        this.door.sync.receive(message);
         return;
       }
       if (!this.active) return;
@@ -573,6 +550,9 @@ export class ReactorRoom {
       }
     };
     if (this.active && network.auth?.token) this.prepareServer();
+    this.door.sync.requireServer(!!network.auth?.token);
+    if (network.id)
+      this.door.sync.connect(network.doorProtocol, network.userId);
   }
 
   prepareServer() {
@@ -810,7 +790,16 @@ export class ReactorRoom {
   bindUI() {
     const { hints, exit, dialog, close, fields, actions } = this.elements;
     hints.onclick = () => this.setHints(!this.hints);
-    exit.onclick = () => this.leave();
+    exit.textContent = 'К двери на планету';
+    exit.onclick = () => {
+      if (this.physicalView) this.togglePhysical();
+      this.setHints(false);
+      this.journal.blur();
+      this.elements.dialog.close();
+      this.player.setMap(REACTOR_MAP, [0, 0, 7.8]);
+      this.player.forward.set(0, 0, 1);
+      this.player.update(0);
+    };
     close.onclick = () => dialog.close();
     this.journalButton = document.createElement('button');
     this.journalButton.id = 'reactor-journal';
@@ -1033,15 +1022,16 @@ export class ReactorRoom {
     this.portalRoot.setEnabled(false);
     this.planet.setVisible(false);
     this.player.roomColliders = this.colliders;
-    this.player.setMap(REACTOR_MAP, [0, 0, 4.4]);
+    this.player.setMap(REACTOR_MAP, [0, 0, 7.8]);
     this.player.forward.set(0, 0, -1);
     this.elements.hints.hidden = false;
+    document.getElementById('physical-room').hidden = false;
     this.journalButton.hidden = false;
     this.elements.exit.hidden = false;
     this.elements.telemetry.hidden = false;
     if (this.elements.team) this.elements.team.hidden = false;
     document.body.classList.add('in-reactor');
-    this.record('вход через портал');
+    this.record('вход через дверь');
     this.instructor.enter();
     this.share('state-request');
     this.syncTeamPanel();
@@ -1067,11 +1057,21 @@ export class ReactorRoom {
     this.planet.setVisible(true);
     this.portalRoot.setEnabled(true);
     this.player.roomColliders = [];
-    this.player.setMap('planet', this.saved.position.asArray());
-    this.player.forward.copyFrom(this.saved.forward);
-    this.player.pitch = this.saved.pitch;
+    const outside = B.Vector3.TransformCoordinates(
+      new B.Vector3(0, 0, 2.9),
+      this.portalRoot.computeWorldMatrix(true),
+    );
+    outside
+      .normalize()
+      .scaleInPlace(this.terrain.radius(outside.asArray()) + 0.12);
+    this.player.setMap('planet', outside.asArray());
+    this.player.forward.copyFrom(
+      B.Vector3.TransformNormal(B.Axis.Z, this.portalRoot.getWorldMatrix()),
+    );
+    this.player.pitch = -0.12;
     this.player.update(0);
     this.elements.hints.hidden = true;
+    document.getElementById('physical-room').hidden = true;
     this.journalButton.hidden = true;
     this.elements.exit.hidden = true;
     this.elements.telemetry.hidden = true;
@@ -1091,15 +1091,8 @@ export class ReactorRoom {
     this.instructor.update(dt);
     this.workers.update(dt);
     this.cooldown = Math.max(0, this.cooldown - dt);
-    if (!this.active) {
-      if (
-        this.cooldown === 0 &&
-        this.planet.visible &&
-        B.Vector3.Distance(this.player.position, this.portalPosition) < 1.25
-      )
-        this.enter();
-      return;
-    }
+    this.door.update(dt);
+    if (!this.active) return;
     if (!this.server.required || this.server.ready) this.model.step(dt);
     this.server.tick(this.model.snapshot());
     this.physicalRoom?.update(dt);
@@ -1119,17 +1112,6 @@ export class ReactorRoom {
     ) {
       this.lastSharedState = now;
       this.share('state', { state: this.model.snapshot() });
-    }
-    if (
-      !this.physicalView &&
-      this.cooldown === 0 &&
-      Math.hypot(
-        this.player.position.x - this.exitPortal.position.x,
-        this.player.position.z - this.exitPortal.position.z,
-      ) < 1.15
-    ) {
-      this.leave();
-      return;
     }
     this.drawStatus();
     if (this.elements.dialog.open) this.syncDialog();
