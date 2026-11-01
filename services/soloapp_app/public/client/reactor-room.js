@@ -3,6 +3,7 @@ import { REACTOR_MAP } from '../shared/room.js';
 import { RbmkModel } from './rbmk-model.js';
 import { RBMK_CONTROLS, RBMK_PANEL_PARTS } from './rbmk-data.js';
 import { RbmkPhysicalConsole } from './rbmk-console.js';
+import { RbmkJournalStation } from './rbmk-journal-station.js';
 
 const B = window.BABYLON;
 export { REACTOR_MAP } from '../shared/room.js';
@@ -285,7 +286,112 @@ export class ReactorRoom {
       control: (name, value) => this.commitControl(name, value),
       action: (action) => this.commitAction(action),
     });
+    this.journal = new RbmkJournalStation(this);
+    this.journal.restore();
     this.drawStatus(true);
+  }
+
+  focusJournal(view = 'machine') {
+    if (!this.active || this.player.xr) return;
+    this.setHints(false);
+    document.exitPointerLock?.();
+    this.player.keys.clear();
+    const views = {
+      machine: [-4.48, 5.9, -0.12],
+      book: [-2.35, 5.9, -0.38],
+      tape: [-0.3, 6.4, 0.05],
+    };
+    const [x, z, pitch] = views[view] || views.machine;
+    this.player.position.set(x, 0, z);
+    this.player.forward.set(0, 0, -1);
+    this.player.pitch = pitch;
+    this.player.update(0);
+    document.body.classList.add('at-journal');
+  }
+
+  interactiveMesh(mesh) {
+    return !!(
+      mesh.metadata?.rbmkPart ||
+      mesh.metadata?.rbmkControl ||
+      mesh.metadata?.rbmkAction ||
+      mesh.metadata?.rbmkJournal
+    );
+  }
+
+  activatePhysical(mesh) {
+    return this.journal.activate(mesh) || this.physicalConsole.activate(mesh);
+  }
+
+  xrRay(frame, source, referenceSpace, origin) {
+    const pose = frame.getPose(source.targetRaySpace, referenceSpace);
+    if (!pose) return null;
+    const { position: p, orientation: q } = pose.transform;
+    const direction = new B.Vector3(0, 0, -1).rotateByQuaternionToRef(
+      new B.Quaternion(q.x, q.y, q.z, q.w),
+      B.Vector3.Zero(),
+    );
+    const world = origin.computeWorldMatrix(true);
+    return new B.Ray(
+      B.Vector3.TransformCoordinates(new B.Vector3(p.x, p.y, p.z), world),
+      B.Vector3.TransformNormal(direction, world).normalize(),
+      5,
+    );
+  }
+
+  selectXR(event, referenceSpace, origin) {
+    if (!this.active) return;
+    const ray = this.xrRay(
+      event.frame,
+      event.inputSource,
+      referenceSpace,
+      origin,
+    );
+    if (ray)
+      this.activatePhysical(
+        this.scene.pickWithRay(ray, (mesh) => this.interactiveMesh(mesh))
+          ?.pickedMesh,
+      );
+  }
+
+  updateXR(frame, referenceSpace, origin) {
+    this.xrRays ||= new Map();
+    for (const line of this.xrRays.values()) line.setEnabled(false);
+    if (!this.active) return;
+    for (const source of frame.session.inputSources) {
+      const ray = this.xrRay(frame, source, referenceSpace, origin);
+      if (!ray) continue;
+      const pick = this.scene.pickWithRay(ray, (mesh) =>
+        this.interactiveMesh(mesh),
+      );
+      const points = [
+        ray.origin,
+        pick?.hit ? pick.pickedPoint : ray.origin.add(ray.direction.scale(3)),
+      ];
+      let line = this.xrRays.get(source);
+      if (!line) {
+        line = B.MeshBuilder.CreateLines(
+          'RBMK controller pointer',
+          { points, updatable: true },
+          this.scene,
+        );
+        line.isPickable = false;
+        this.xrRays.set(source, line);
+      } else
+        B.MeshBuilder.CreateLines(
+          'RBMK controller pointer',
+          { points, instance: line },
+          this.scene,
+        );
+      line.color = pick?.hit
+        ? new B.Color3(0.9, 0.85, 0.55)
+        : new B.Color3(0.4, 0.65, 0.75);
+      line.setEnabled(true);
+    }
+    for (const [source, line] of this.xrRays)
+      if (![...frame.session.inputSources].includes(source)) {
+        line.dispose();
+        this.xrRays.delete(source);
+      }
   }
 
   connectNetwork(network) {
@@ -315,6 +421,11 @@ export class ReactorRoom {
       ).padStart(2, '0')} · ${this.actorLabel(peerId)} · ${text}`,
     );
     this.teamLog.length = Math.min(this.teamLog.length, 12);
+    this.journal.store.recordAction(
+      text,
+      this.actorLabel(peerId),
+      this.model.elapsed,
+    );
     this.syncTeamPanel();
   }
 
@@ -329,14 +440,20 @@ export class ReactorRoom {
     const heading = participants.length
       ? `Команда в БЩУ: ${participants.map((id) => `#${id}`).join(', ')}`
       : 'Локальный режим · войдите для командной синхронизации';
-    const value = `${heading}\n${
-      this.teamLog.join('\n') || 'Журнал действий пока пуст'
-    }`;
+    const value = heading;
     if (this.elements.team.textContent !== value)
       this.elements.team.textContent = value;
   }
 
   applyAction(action) {
+    if (action === 'acknowledge') {
+      this.model.acknowledgeAlarms();
+      return true;
+    }
+    if (action === 'lamp-test') {
+      this.model.testLamps();
+      return true;
+    }
     if (action === 'scram') {
       this.model.scram();
       return true;
@@ -379,6 +496,33 @@ export class ReactorRoom {
         kind: 'state',
         state: this.model.snapshot(),
       });
+      for (
+        let offset = 0;
+        offset < this.journal.store.entries.length;
+        offset += 10
+      )
+        this.network?.sendControl(peerId, {
+          type: 'reactor',
+          map: REACTOR_MAP,
+          kind: 'journal-history',
+          entries: this.journal.store.entries.slice(offset, offset + 10),
+        });
+      return;
+    }
+    if (message.kind === 'journal-entry') {
+      if (this.journal.store.receive(message.entry, this.actorLabel(peerId))) {
+        this.journal.persist();
+        this.journal.draw(true);
+      }
+      return;
+    }
+    if (message.kind === 'journal-history') {
+      if (!Array.isArray(message.entries) || message.entries.length > 10)
+        return;
+      for (const entry of message.entries)
+        this.journal.store.receive(entry, entry?.actor);
+      this.journal.persist();
+      this.journal.draw(true);
       return;
     }
     if (message.kind === 'state') {
@@ -433,6 +577,8 @@ export class ReactorRoom {
   }
 
   actionLabel(action) {
+    if (action === 'acknowledge') return 'квитирование сигналов';
+    if (action === 'lamp-test') return 'проверка ламп';
     if (action === 'scram') return 'АЗ-5';
     if (action === 'clear') return 'снятие останова';
     return 'возврат к исходному режиму';
@@ -443,6 +589,12 @@ export class ReactorRoom {
     hints.onclick = () => this.setHints(!this.hints);
     exit.onclick = () => this.leave();
     close.onclick = () => dialog.close();
+    this.journalButton = document.createElement('button');
+    this.journalButton.id = 'reactor-journal';
+    this.journalButton.textContent = 'Журнал · печатная машинка';
+    this.journalButton.hidden = true;
+    this.journalButton.onclick = () => this.focusJournal();
+    hints.after(this.journalButton);
     fields.addEventListener('input', (event) => {
       const input = event.target.closest('[data-rbmk-control]');
       if (!input) return;
@@ -466,19 +618,16 @@ export class ReactorRoom {
       const hit = this.scene.pick(
         this.scene.pointerX,
         this.scene.pointerY,
-        (mesh) =>
-          !!(
-            mesh.metadata?.rbmkPart ||
-            mesh.metadata?.rbmkControl ||
-            mesh.metadata?.rbmkAction
-          ),
+        (mesh) => this.interactiveMesh(mesh),
       );
       const mesh = hit?.pickedMesh;
       const part = mesh?.metadata?.rbmkPart;
       this.physicalConsole.setHovered(mesh);
       if (this.hints && part) this.openPart(part);
       this.canvas.style.cursor = mesh
-        ? mesh.metadata.rbmkControl || mesh.metadata.rbmkAction
+        ? mesh.metadata.rbmkControl ||
+          mesh.metadata.rbmkAction ||
+          mesh.metadata.rbmkJournal
           ? 'pointer'
           : this.hints
             ? 'help'
@@ -492,16 +641,15 @@ export class ReactorRoom {
         const hit = this.scene.pick(
           this.scene.pointerX,
           this.scene.pointerY,
-          (mesh) =>
-            !!(
-              mesh.metadata?.rbmkPart ||
-              mesh.metadata?.rbmkControl ||
-              mesh.metadata?.rbmkAction
-            ),
+          (mesh) => this.interactiveMesh(mesh),
         );
         const mesh = hit?.pickedMesh;
-        if (mesh?.metadata?.rbmkControl || mesh?.metadata?.rbmkAction) {
-          this.physicalConsole.activate(mesh);
+        if (
+          mesh?.metadata?.rbmkControl ||
+          mesh?.metadata?.rbmkAction ||
+          mesh?.metadata?.rbmkJournal
+        ) {
+          this.activatePhysical(mesh);
           event.stopImmediatePropagation();
           return;
         }
@@ -516,7 +664,7 @@ export class ReactorRoom {
     this.scene.onPointerObservable.add((pointerInfo) => {
       if (!this.active || pointerInfo.type !== B.PointerEventTypes.POINTERPICK)
         return;
-      this.physicalConsole.activate(pointerInfo.pickInfo?.pickedMesh);
+      this.activatePhysical(pointerInfo.pickInfo?.pickedMesh);
     });
   }
 
@@ -659,6 +807,7 @@ export class ReactorRoom {
     this.player.setMap(REACTOR_MAP, [0, 0, 4.4]);
     this.player.forward.set(0, 0, -1);
     this.elements.hints.hidden = false;
+    this.journalButton.hidden = false;
     this.elements.exit.hidden = false;
     this.elements.telemetry.hidden = false;
     if (this.elements.team) this.elements.team.hidden = false;
@@ -672,6 +821,9 @@ export class ReactorRoom {
   leave() {
     if (!this.active) return;
     this.setHints(false);
+    this.journal.blur();
+    document.body.classList.remove('at-journal');
+    for (const line of this.xrRays?.values() || []) line.setEnabled(false);
     this.active = false;
     this.cooldown = 1.5;
     this.root.setEnabled(false);
@@ -684,6 +836,7 @@ export class ReactorRoom {
     this.player.pitch = this.saved.pitch;
     this.player.update(0);
     this.elements.hints.hidden = true;
+    this.journalButton.hidden = true;
     this.elements.exit.hidden = true;
     this.elements.telemetry.hidden = true;
     if (this.elements.team) this.elements.team.hidden = true;
@@ -692,7 +845,10 @@ export class ReactorRoom {
   }
 
   get uiOpen() {
-    return this.active && (this.hints || this.elements.dialog.open);
+    return (
+      this.active &&
+      (this.hints || this.elements.dialog.open || this.journal.focused)
+    );
   }
 
   update(dt) {
@@ -707,6 +863,13 @@ export class ReactorRoom {
       return;
     }
     this.model.step(dt);
+    if (
+      Math.hypot(this.player.position.x + 3.5, this.player.position.z - 3.1) >
+      3.8
+    )
+      document.body.classList.remove('at-journal');
+    this.journal.store.sample(this.model.snapshot());
+    this.journal.draw();
     const now = performance.now();
     if (
       this.network?.id &&
@@ -735,7 +898,7 @@ export class ReactorRoom {
   statusText() {
     const s = this.model.snapshot();
     const alarms = s.alarms.length ? s.alarms.join('\n') : 'Сигналов нет';
-    return `РБМК · УЧЕБНАЯ МОДЕЛЬ v${s.modelVersion}\nСценарий: ${s.scenario.label}\nМощность ${s.power.toFixed(1)} % · ${s.electricalPower.toFixed(0)} МВт\nДавление ${s.pressure.toFixed(2)} МПа\nУровни БС Л/П ${Math.round(s.drumLevelLeft)} / ${Math.round(s.drumLevelRight)} мм\nРасходы физ. Л/П ${s.flowLeft.toFixed(0)} / ${s.flowRight.toFixed(0)} %\nПоказания Л/П ${s.measuredFlowLeft.toFixed(0)} / ${s.measuredFlowRight.toFixed(0)} %\nОЗР ${s.orm.toFixed(1)} ст. · ρ ${s.reactivity.toFixed(2)} усл.\nПаросодержание ${(s.voidFraction * 100).toFixed(1)} % · запас ${s.coolantInventory.toFixed(1)} %\nT теплоносителя/топлива ${s.coolantTemperature.toFixed(1)} / ${s.fuelTemperature.toFixed(0)} °C\n${alarms}`;
+    return `РБМК · УЧЕБНАЯ МОДЕЛЬ v${s.modelVersion}\nСценарий: ${s.scenario.label}\nНейтронная мощность ${s.power.toFixed(1)} %\nТепловая ${s.thermalPowerMW.toFixed(0)} МВт · эл. ${s.electricalPower.toFixed(0)} МВт\nДавление ${s.pressure.toFixed(2)} МПа\nУровни БС Л/П ${Math.round(s.drumLevelLeft)} / ${Math.round(s.drumLevelRight)} мм\nРасходы физ. Л/П ${s.flowLeft.toFixed(0)} / ${s.flowRight.toFixed(0)} %\nПоказания Л/П ${s.measuredFlowLeft.toFixed(0)} / ${s.measuredFlowRight.toFixed(0)} %\nОЗР ${s.orm.toFixed(1)} ст. · ρ ${s.reactivity.toFixed(2)} βэф\nПаросодержание ${(s.voidFraction * 100).toFixed(1)} % · запас ${s.coolantInventory.toFixed(1)} %\nT теплоносителя/топлива ${s.coolantTemperature.toFixed(1)} / ${s.fuelTemperature.toFixed(0)} °C\n${alarms}`;
   }
 
   drawStatus(force = false) {

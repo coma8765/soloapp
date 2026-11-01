@@ -1,3 +1,5 @@
+import { EQUIPMENT_CONTROLS } from './rbmk-equipment.js';
+
 export const RBMK_SCENARIOS = Object.freeze({
   normal: {
     label: 'Номинальный режим',
@@ -43,6 +45,7 @@ export const RBMK_SCENARIOS = Object.freeze({
 });
 
 export const RBMK_CONTROLS = Object.freeze({
+  ...EQUIPMENT_CONTROLS,
   targetPower: {
     type: 'range',
     label: 'Задание регулятора мощности',
@@ -185,11 +188,11 @@ export const RBMK_INSTRUMENT_PANELS = Object.freeze([
     title: 'РЕАКТОР · СУЗ',
     part: 'neutron-instruments',
     readings: [
-      ['N ТЕПЛОВАЯ', 'power', '%', 1],
-      ['РЕАКТИВНОСТЬ', 'reactivity', 'усл.', 2],
+      ['N НЕЙТРОННАЯ', 'power', '%', 1],
+      ['РЕАКТИВНОСТЬ', 'reactivity', 'βэф', 2],
       ['ОЗР', 'orm', 'ст.', 1],
-      ['РУЧНЫЕ СТЕРЖНИ', 'control:manualRodInsertion', '%', 0],
-      ['АВТО СТЕРЖНИ', 'control:automaticRodInsertion', '%', 0],
+      ['РУЧНЫЕ СТЕРЖНИ', 'rod:manualRodInsertion', '%', 0],
+      ['АВТО СТЕРЖНИ', 'rod:automaticRodInsertion', '%', 0],
     ],
   },
   {
