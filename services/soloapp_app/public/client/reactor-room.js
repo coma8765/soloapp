@@ -4,6 +4,8 @@ import { RbmkModel } from './rbmk-model.js';
 import { RBMK_CONTROLS, RBMK_PANEL_PARTS } from './rbmk-data.js';
 import { RbmkPhysicalConsole } from './rbmk-console.js';
 import { RbmkJournalStation } from './rbmk-journal-station.js';
+import { RbmkJournal } from './rbmk-journal.js';
+import { RbmkServerSync } from './rbmk-server.js';
 
 const B = window.BABYLON;
 export { REACTOR_MAP } from '../shared/room.js';
@@ -29,6 +31,44 @@ export class ReactorRoom {
     this.teamLog = [];
     this.materials = new Map();
     this.buildRoom();
+    this.server = new RbmkServerSync({
+      send: (message) => this.network?.send(message),
+      restore: (state) => {
+        if (!this.model.restore(state)) return false;
+        this.syncDialog();
+        this.drawStatus(true);
+        return true;
+      },
+      journal: (entry) => {
+        if (this.journal.store.receive(entry, entry?.actor)) {
+          if (entry.id === this.journal.pendingId)
+            this.journal.finishEntry(entry);
+          this.journal.persist();
+          this.journal.draw(true);
+        }
+      },
+      record: (record) => {
+        const c = record?.command;
+        if (!c || c.kind === 'journal') return;
+        const label =
+          c.kind === 'control' && RBMK_CONTROLS[c.name]
+            ? `${RBMK_CONTROLS[c.name].label}: ${this.formatControl(c.name, record.value)}`
+            : this.actionLabel(c.action);
+        this.journal.store.recordAction(
+          label,
+          this.actorLabel(record.from),
+          record.elapsed,
+        );
+      },
+      acknowledged: (reply, command) => {
+        if (!reply.accepted && command.kind === 'journal') {
+          this.journal.pendingId = null;
+          this.journal.message = `Запись отклонена сервером: ${reply.error}`;
+          this.journal.draw(true);
+        }
+      },
+      changed: () => this.syncTeamPanel(),
+    });
     this.buildPlanetPortal();
     this.bindUI();
   }
@@ -283,7 +323,8 @@ export class ReactorRoom {
   buildPhysicalConsole() {
     this.physicalConsole = new RbmkPhysicalConsole(this.scene, this.root, {
       state: () => this.model.snapshot(),
-      control: (name, value) => this.commitControl(name, value),
+      control: (name, value, operation) =>
+        this.commitControl(name, value, operation),
       action: (action) => this.commitAction(action),
     });
     this.journal = new RbmkJournalStation(this);
@@ -398,9 +439,35 @@ export class ReactorRoom {
     this.network = network;
     network.onReactorMessage = (peerId, message) =>
       this.receiveNetworkMessage(peerId, message);
+    network.onReactorServerMessage = (message) => {
+      if (message.type === 'reactor_disconnect') {
+        this.server.disconnect();
+        return;
+      }
+      if (!this.active) return;
+      if (message.type === 'reactor_welcome')
+        this.enableServer(message.id, message.protocol, message.userId);
+      else this.server.receive(message);
+    };
+    if (this.active && network.auth?.token) this.prepareServer();
+  }
+
+  prepareServer() {
+    if (!this.server.required) {
+      this.localJournal = this.journal.store;
+      this.journal.store = new RbmkJournal();
+      this.journal.storageKey = 'rbmk-server-journal-cache-v1';
+    }
+    this.server.required = true;
+  }
+
+  enableServer(id, protocol, userId) {
+    this.prepareServer();
+    this.server.connect(id, protocol, userId);
   }
 
   share(kind, payload = {}) {
+    if (this.server?.required) return;
     this.network?.broadcastControl({
       type: 'reactor',
       map: REACTOR_MAP,
@@ -440,7 +507,7 @@ export class ReactorRoom {
     const heading = participants.length
       ? `Команда в БЩУ: ${participants.map((id) => `#${id}`).join(', ')}`
       : 'Локальный режим · войдите для командной синхронизации';
-    const value = heading;
+    const value = `${heading}\n${this.server?.status() || ''}`;
     if (this.elements.team.textContent !== value)
       this.elements.team.textContent = value;
   }
@@ -466,7 +533,24 @@ export class ReactorRoom {
     return false;
   }
 
-  commitControl(name, rawValue) {
+  commitControl(name, rawValue, operation = null) {
+    if (this.server.required) {
+      if (!RBMK_CONTROLS[name]) return false;
+      const mode =
+        operation?.mode === 'toggle'
+          ? 'toggle'
+          : operation?.delta !== undefined
+            ? 'delta'
+            : 'set';
+      return !!this.server.request({
+        kind: 'control',
+        name,
+        mode,
+        ...(mode === 'delta'
+          ? { delta: operation.delta }
+          : { value: rawValue }),
+      });
+    }
     const value = this.model.setControl(name, rawValue);
     if (value === undefined) return false;
     this.share('control', { name, value });
@@ -479,6 +563,8 @@ export class ReactorRoom {
   }
 
   commitAction(action) {
+    if (this.server.required)
+      return !!this.server.request({ kind: 'action', action });
     if (!this.applyAction(action)) return false;
     this.share('action', { action });
     this.record(this.actionLabel(action));
@@ -488,6 +574,7 @@ export class ReactorRoom {
   }
 
   receiveNetworkMessage(peerId, message) {
+    if (this.server.required) return;
     if (!this.active || message?.map !== REACTOR_MAP) return;
     if (message.kind === 'state-request') {
       this.network?.sendControl(peerId, {
@@ -798,6 +885,22 @@ export class ReactorRoom {
       pitch: this.player.pitch,
     };
     this.active = true;
+    if (this.network?.auth?.token) {
+      this.prepareServer();
+      if (this.network.id)
+        this.server.connect(
+          this.network.id,
+          this.network.reactorProtocol,
+          this.network.userId,
+        );
+    } else if (this.server.required) {
+      this.server.required = false;
+      this.server.pending.clear();
+      this.model.reset();
+      this.journal.store = this.localJournal || new RbmkJournal();
+      this.localJournal = null;
+      this.journal.storageKey = null;
+    }
     this.cooldown = 1.5;
     this.root.setEnabled(true);
     this.roomLight.setEnabled(true);
@@ -822,6 +925,7 @@ export class ReactorRoom {
     if (!this.active) return;
     this.setHints(false);
     this.journal.blur();
+    this.server.leave();
     document.body.classList.remove('at-journal');
     for (const line of this.xrRays?.values() || []) line.setEnabled(false);
     this.active = false;
@@ -862,7 +966,8 @@ export class ReactorRoom {
         this.enter();
       return;
     }
-    this.model.step(dt);
+    if (!this.server.required || this.server.ready) this.model.step(dt);
+    this.server.tick(this.model.snapshot());
     if (
       Math.hypot(this.player.position.x + 3.5, this.player.position.z - 3.1) >
       3.8
@@ -872,6 +977,7 @@ export class ReactorRoom {
     this.journal.draw();
     const now = performance.now();
     if (
+      !this.server.required &&
       this.network?.id &&
       this.teamLeader() === this.network.id &&
       now - this.lastSharedState > 1000

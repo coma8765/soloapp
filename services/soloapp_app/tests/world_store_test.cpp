@@ -22,7 +22,81 @@ int run_test(int argc, char **argv) {
     auto stale = first.exchange(empty, {});
     if (stale.leader || stale.epoch != promoted.epoch || stale.fish != promoted.fish)
         throw std::runtime_error("old leader not fenced");
+    auto participant = [](unsigned id, const char *user) {
+        Json::Value players(Json::arrayValue), p;
+        p["id"] = id;
+        p["user_id"] = user;
+        p["reactor"] = true;
+        p["state"] = Json::Value(Json::objectValue);
+        players.append(p);
+        return players;
+    };
+    const auto one = participant(1, "synthetic-user-1"), two = participant(2, "synthetic-user-2");
+    first.exchange(one, {});
+    auto joined = second.exchange(two, {});
+    Json::Value command;
+    command["type"] = "reactor_command";
+    command["from"] = 2;
+    command["user_id"] = "synthetic-user-2";
+    command["requestId"] = "postgres-increment";
+    command["command"]["kind"] = "control";
+    command["command"]["name"] = "targetPower";
+    command["command"]["mode"] = "delta";
+    command["command"]["delta"] = 5;
+    auto changed = second.exchange(two, {}, {command});
+    if (!changed.reactorReplies[0]["accepted"].asBool() ||
+        changed.reactor["state"]["controls"]["targetPower"].asDouble() != 105)
+        throw std::runtime_error("PostgreSQL command not committed");
+    auto repeated = second.exchange(two, {}, {command});
+    if (repeated.reactor["revision"].asUInt64() != changed.reactor["revision"].asUInt64())
+        throw std::runtime_error("PostgreSQL retry applied twice");
+    auto observed = first.exchange(one, {});
+    if (observed.reactor["state"]["controls"]["targetPower"].asDouble() != 105)
+        throw std::runtime_error("Cross-node reactor state did not converge");
+    Json::Value snapshot;
+    snapshot["type"] = "reactor_snapshot";
+    snapshot["from"] = 1;
+    snapshot["user_id"] = "synthetic-user-1";
+    snapshot["writerEpoch"] = observed.reactor["writerEpoch"];
+    snapshot["revision"] = observed.reactor["revision"];
+    snapshot["state"] = observed.reactor["state"];
+    snapshot["state"]["elapsed"] = 1.0;
+    snapshot["state"]["power"] = 99.0;
+    first.exchange(one, {}, {snapshot});
+    planet::WorldStore restarted(argv[1], argv[2], "test-restarted");
+    auto recovered = restarted.exchange(empty, {});
+    if (recovered.reactor["state"]["power"].asDouble() != 99)
+        throw std::runtime_error("Reactor snapshot did not survive node restart");
+    first.exchange(empty, {});
+    auto writerChanged = second.exchange(two, {});
+    snapshot["state"]["power"] = 500.0;
+    auto fenced = first.exchange(empty, {}, {snapshot});
+    if (writerChanged.reactor["writer"].asUInt64() != 2 ||
+        fenced.reactor["state"]["power"].asDouble() != 99)
+        throw std::runtime_error("Old reactor writer not fenced in PostgreSQL");
+    Json::Value entry;
+    entry["id"] = "postgres-note";
+    entry["journal"] = "ИУР";
+    entry["kind"] = "наблюдение";
+    entry["text"] = "Состояние проверено после переподключения";
+    entry["equipment"] = "ГЦН-Л";
+    entry["eventAt"] = 0;
+    entry["status"] = "зафиксировано";
+    for (const char *field : {"sender", "recipient", "ref"})
+        entry[field] = "";
+    command["requestId"] = "postgres-journal";
+    command["command"] = Json::Value(Json::objectValue);
+    command["command"]["kind"] = "journal";
+    command["command"]["entry"] = entry;
+    auto written = second.exchange(two, {}, {command});
+    if (!written.reactorReplies[0]["accepted"].asBool() || written.reactorJournal.size() != 1)
+        throw std::runtime_error("Journal entry not committed in PostgreSQL");
+    planet::WorldStore reader(argv[1], argv[2], "test-reader");
+    if (reader.exchange(empty, {}).reactorJournal[0]["id"] != "postgres-note")
+        throw std::runtime_error("Journal entry did not survive fresh database connection");
     std::cout << "PASS: single leader, checkpoint failover, old leader fenced\n";
+    std::cout << "PASS: PostgreSQL reactor command ordering, idempotency, cross-node recovery, "
+                 "writer fencing and journal persistence\n";
     return 0;
 }
 int main(int argc, char **argv) {

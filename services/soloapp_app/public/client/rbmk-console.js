@@ -957,7 +957,7 @@ export class RbmkPhysicalConsole {
         value =
           options[(index + control.delta + options.length) % options.length];
       } else value = current + control.delta;
-      if (!this.handlers.control(control.name, value)) return false;
+      if (!this.handlers.control(control.name, value, control)) return false;
     } else if (mesh.metadata.rbmkAction) {
       if (!this.handlers.action(mesh.metadata.rbmkAction)) return false;
     } else return false;

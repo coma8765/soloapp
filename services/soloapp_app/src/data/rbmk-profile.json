@@ -1,0 +1,624 @@
+{
+  "controls": {
+    "suzPump1": {
+      "type": "checkbox",
+      "label": "НАСОС СУЗ №1",
+      "shortLabel": "НАСОС СУЗ 1",
+      "defaultValue": true
+    },
+    "suzPump2": {
+      "type": "checkbox",
+      "label": "НАСОС СУЗ №2",
+      "shortLabel": "НАСОС СУЗ 2",
+      "defaultValue": true
+    },
+    "suzPump3": {
+      "type": "checkbox",
+      "label": "НАСОС СУЗ №3",
+      "shortLabel": "НАСОС СУЗ 3",
+      "defaultValue": false
+    },
+    "suzPump4": {
+      "type": "checkbox",
+      "label": "НАСОС СУЗ №4",
+      "shortLabel": "НАСОС СУЗ 4",
+      "defaultValue": false
+    },
+    "suzCoolingValve": {
+      "type": "checkbox",
+      "label": "Подача воды в контур СУЗ",
+      "shortLabel": "ВОДА СУЗ",
+      "defaultValue": true
+    },
+    "suzHeatExchanger1": {
+      "type": "checkbox",
+      "label": "Теплообменник СУЗ №1",
+      "shortLabel": "ТО СУЗ-1",
+      "defaultValue": true
+    },
+    "suzHeatExchanger2": {
+      "type": "checkbox",
+      "label": "Теплообменник СУЗ №2",
+      "shortLabel": "ТО СУЗ-2",
+      "defaultValue": false
+    },
+    "gasBlower1": {
+      "type": "checkbox",
+      "label": "ГАЗОДУВКА №1",
+      "shortLabel": "ГАЗОДУВКА 1",
+      "defaultValue": true
+    },
+    "gasBlower2": {
+      "type": "checkbox",
+      "label": "ГАЗОДУВКА №2",
+      "shortLabel": "ГАЗОДУВКА 2",
+      "defaultValue": false
+    },
+    "gasInletValve": {
+      "type": "checkbox",
+      "label": "Подача газа в кладку",
+      "shortLabel": "ГАЗ ВХОД",
+      "defaultValue": true
+    },
+    "gasOutletValve": {
+      "type": "checkbox",
+      "label": "Отвод газа из кладки",
+      "shortLabel": "ГАЗ ВЫХОД",
+      "defaultValue": true
+    },
+    "mcpLeft1": {
+      "type": "checkbox",
+      "label": "ГЦН-Л №1",
+      "shortLabel": "ГЦН-Л 1",
+      "defaultValue": true
+    },
+    "mcpLeft2": {
+      "type": "checkbox",
+      "label": "ГЦН-Л №2",
+      "shortLabel": "ГЦН-Л 2",
+      "defaultValue": true
+    },
+    "mcpLeft3": {
+      "type": "checkbox",
+      "label": "ГЦН-Л №3",
+      "shortLabel": "ГЦН-Л 3",
+      "defaultValue": true
+    },
+    "mcpLeft4": {
+      "type": "checkbox",
+      "label": "ГЦН-Л №4",
+      "shortLabel": "ГЦН-Л 4",
+      "defaultValue": false
+    },
+    "mcpRight1": {
+      "type": "checkbox",
+      "label": "ГЦН-П №1",
+      "shortLabel": "ГЦН-П 1",
+      "defaultValue": true
+    },
+    "mcpRight2": {
+      "type": "checkbox",
+      "label": "ГЦН-П №2",
+      "shortLabel": "ГЦН-П 2",
+      "defaultValue": true
+    },
+    "mcpRight3": {
+      "type": "checkbox",
+      "label": "ГЦН-П №3",
+      "shortLabel": "ГЦН-П 3",
+      "defaultValue": true
+    },
+    "mcpRight4": {
+      "type": "checkbox",
+      "label": "ГЦН-П №4",
+      "shortLabel": "ГЦН-П 4",
+      "defaultValue": false
+    },
+    "mcpValveLeft1": {
+      "type": "checkbox",
+      "label": "ЗАДВ. ГЦН-Л №1",
+      "shortLabel": "ЗАДВ. ГЦН-Л 1",
+      "defaultValue": true
+    },
+    "mcpValveLeft2": {
+      "type": "checkbox",
+      "label": "ЗАДВ. ГЦН-Л №2",
+      "shortLabel": "ЗАДВ. ГЦН-Л 2",
+      "defaultValue": true
+    },
+    "mcpValveLeft3": {
+      "type": "checkbox",
+      "label": "ЗАДВ. ГЦН-Л №3",
+      "shortLabel": "ЗАДВ. ГЦН-Л 3",
+      "defaultValue": true
+    },
+    "mcpValveLeft4": {
+      "type": "checkbox",
+      "label": "ЗАДВ. ГЦН-Л №4",
+      "shortLabel": "ЗАДВ. ГЦН-Л 4",
+      "defaultValue": true
+    },
+    "mcpValveRight1": {
+      "type": "checkbox",
+      "label": "ЗАДВ. ГЦН-П №1",
+      "shortLabel": "ЗАДВ. ГЦН-П 1",
+      "defaultValue": true
+    },
+    "mcpValveRight2": {
+      "type": "checkbox",
+      "label": "ЗАДВ. ГЦН-П №2",
+      "shortLabel": "ЗАДВ. ГЦН-П 2",
+      "defaultValue": true
+    },
+    "mcpValveRight3": {
+      "type": "checkbox",
+      "label": "ЗАДВ. ГЦН-П №3",
+      "shortLabel": "ЗАДВ. ГЦН-П 3",
+      "defaultValue": true
+    },
+    "mcpValveRight4": {
+      "type": "checkbox",
+      "label": "ЗАДВ. ГЦН-П №4",
+      "shortLabel": "ЗАДВ. ГЦН-П 4",
+      "defaultValue": true
+    },
+    "feedPumpLeft1": {
+      "type": "checkbox",
+      "label": "ПЭН-Л №1",
+      "shortLabel": "ПЭН-Л 1",
+      "defaultValue": true
+    },
+    "feedPumpLeft2": {
+      "type": "checkbox",
+      "label": "ПЭН-Л №2",
+      "shortLabel": "ПЭН-Л 2",
+      "defaultValue": true
+    },
+    "feedPumpLeft3": {
+      "type": "checkbox",
+      "label": "ПЭН-Л №3",
+      "shortLabel": "ПЭН-Л 3",
+      "defaultValue": false
+    },
+    "feedPumpRight1": {
+      "type": "checkbox",
+      "label": "ПЭН-П №1",
+      "shortLabel": "ПЭН-П 1",
+      "defaultValue": true
+    },
+    "feedPumpRight2": {
+      "type": "checkbox",
+      "label": "ПЭН-П №2",
+      "shortLabel": "ПЭН-П 2",
+      "defaultValue": true
+    },
+    "feedPumpRight3": {
+      "type": "checkbox",
+      "label": "ПЭН-П №3",
+      "shortLabel": "ПЭН-П 3",
+      "defaultValue": false
+    },
+    "feedIsolationLeft": {
+      "type": "checkbox",
+      "label": "Питательная линия левой петли",
+      "shortLabel": "ПВ-Л ЛИНИЯ",
+      "defaultValue": true
+    },
+    "feedIsolationRight": {
+      "type": "checkbox",
+      "label": "Питательная линия правой петли",
+      "shortLabel": "ПВ-П ЛИНИЯ",
+      "defaultValue": true
+    },
+    "steamAdmission1": {
+      "type": "checkbox",
+      "label": "Стопорный клапан ТГ-1",
+      "shortLabel": "СТОП ТГ-1",
+      "defaultValue": true
+    },
+    "steamAdmission2": {
+      "type": "checkbox",
+      "label": "Стопорный клапан ТГ-2",
+      "shortLabel": "СТОП ТГ-2",
+      "defaultValue": true
+    },
+    "condenserCooling1": {
+      "type": "checkbox",
+      "label": "Охлаждение конденсатора ТГ-1",
+      "shortLabel": "КОНДЕНС.-1",
+      "defaultValue": true
+    },
+    "condenserCooling2": {
+      "type": "checkbox",
+      "label": "Охлаждение конденсатора ТГ-2",
+      "shortLabel": "КОНДЕНС.-2",
+      "defaultValue": true
+    },
+    "generatorExcitation1": {
+      "type": "checkbox",
+      "label": "Возбуждение генератора ТГ-1",
+      "shortLabel": "ВОЗБУЖД.-1",
+      "defaultValue": true
+    },
+    "generatorExcitation2": {
+      "type": "checkbox",
+      "label": "Возбуждение генератора ТГ-2",
+      "shortLabel": "ВОЗБУЖД.-2",
+      "defaultValue": true
+    },
+    "serviceWaterPump1": {
+      "type": "checkbox",
+      "label": "Насос технической воды №1",
+      "shortLabel": "ТЕХВОДА-1",
+      "defaultValue": true
+    },
+    "serviceWaterPump2": {
+      "type": "checkbox",
+      "label": "Насос технической воды №2",
+      "shortLabel": "ТЕХВОДА-2",
+      "defaultValue": true
+    },
+    "eccsChannel1": {
+      "type": "checkbox",
+      "label": "КАНАЛ САОР №1",
+      "shortLabel": "КАНАЛ САОР 1",
+      "defaultValue": true
+    },
+    "eccsChannel2": {
+      "type": "checkbox",
+      "label": "КАНАЛ САОР №2",
+      "shortLabel": "КАНАЛ САОР 2",
+      "defaultValue": true
+    },
+    "eccsChannel3": {
+      "type": "checkbox",
+      "label": "КАНАЛ САОР №3",
+      "shortLabel": "КАНАЛ САОР 3",
+      "defaultValue": true
+    },
+    "eccsValve1": {
+      "type": "checkbox",
+      "label": "ЗАДВ. САОР №1",
+      "shortLabel": "ЗАДВ. САОР 1",
+      "defaultValue": true
+    },
+    "eccsValve2": {
+      "type": "checkbox",
+      "label": "ЗАДВ. САОР №2",
+      "shortLabel": "ЗАДВ. САОР 2",
+      "defaultValue": true
+    },
+    "eccsValve3": {
+      "type": "checkbox",
+      "label": "ЗАДВ. САОР №3",
+      "shortLabel": "ЗАДВ. САОР 3",
+      "defaultValue": true
+    },
+    "cooldownPump1": {
+      "type": "checkbox",
+      "label": "НАСОС СПиР №1",
+      "shortLabel": "НАСОС СПиР 1",
+      "defaultValue": true
+    },
+    "cooldownPump2": {
+      "type": "checkbox",
+      "label": "НАСОС СПиР №2",
+      "shortLabel": "НАСОС СПиР 2",
+      "defaultValue": false
+    },
+    "cooldownValve": {
+      "type": "checkbox",
+      "label": "Отвод тепла через СПиР",
+      "shortLabel": "ОТВОД СПиР",
+      "defaultValue": false
+    },
+    "blowdownValve": {
+      "type": "checkbox",
+      "label": "Продувка КМПЦ",
+      "shortLabel": "ПРОДУВКА",
+      "defaultValue": false
+    },
+    "targetPower": {
+      "type": "range",
+      "label": "Задание регулятора мощности",
+      "min": 0,
+      "max": 110,
+      "step": 1,
+      "unit": "% Nном"
+    },
+    "manualRodInsertion": {
+      "type": "range",
+      "label": "Стержни ручного регулирования",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "% ввода"
+    },
+    "shortenedRodInsertion": {
+      "type": "range",
+      "label": "Укороченные стержни-поглотители",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "% ввода"
+    },
+    "automaticRodInsertion": {
+      "type": "range",
+      "label": "Стержни автоматического регулирования",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "% ввода"
+    },
+    "automaticRegulator": {
+      "type": "checkbox",
+      "label": "Автоматический регулятор мощности включён"
+    },
+    "coolantFlowLeft": {
+      "type": "range",
+      "label": "Задание расхода левой петли КМПЦ",
+      "min": 40,
+      "max": 120,
+      "step": 1,
+      "unit": "%"
+    },
+    "coolantFlowRight": {
+      "type": "range",
+      "label": "Задание расхода правой петли КМПЦ",
+      "min": 40,
+      "max": 120,
+      "step": 1,
+      "unit": "%"
+    },
+    "pumpsLeft": {
+      "type": "range",
+      "label": "Работающие ГЦН левой петли",
+      "min": 0,
+      "max": 4,
+      "step": 1,
+      "unit": "ГЦН"
+    },
+    "pumpsRight": {
+      "type": "range",
+      "label": "Работающие ГЦН правой петли",
+      "min": 0,
+      "max": 4,
+      "step": 1,
+      "unit": "ГЦН"
+    },
+    "feedwaterLeft": {
+      "type": "range",
+      "label": "Питательная вода левого БС",
+      "min": 0,
+      "max": 120,
+      "step": 1,
+      "unit": "%"
+    },
+    "feedwaterRight": {
+      "type": "range",
+      "label": "Питательная вода правого БС",
+      "min": 0,
+      "max": 120,
+      "step": 1,
+      "unit": "%"
+    },
+    "turbineLoad1": {
+      "type": "range",
+      "label": "Нагрузка турбогенератора №1",
+      "min": 0,
+      "max": 500,
+      "step": 10,
+      "unit": "МВт"
+    },
+    "turbineLoad2": {
+      "type": "range",
+      "label": "Нагрузка турбогенератора №2",
+      "min": 0,
+      "max": 500,
+      "step": 10,
+      "unit": "МВт"
+    },
+    "generatorBreaker1": {
+      "type": "checkbox",
+      "label": "Выключатель генератора №1 замкнут"
+    },
+    "generatorBreaker2": {
+      "type": "checkbox",
+      "label": "Выключатель генератора №2 замкнут"
+    },
+    "steamDump": {
+      "type": "range",
+      "label": "Паросброс мимо турбин",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "%"
+    },
+    "eccsAvailable": {
+      "type": "checkbox",
+      "label": "САОР доступна"
+    },
+    "emergencyInjection": {
+      "type": "checkbox",
+      "label": "Аварийный впрыск включён"
+    },
+    "scenario": {
+      "type": "select",
+      "label": "Внесённое инструктором событие",
+      "options": {
+        "normal": "Номинальный режим",
+        "mcp-left-trip": "Отключение ГЦН левой петли",
+        "feedwater-loss": "Потеря питательной воды",
+        "turbine-trip": "Отключение турбогенераторов",
+        "small-loca": "Малая потеря теплоносителя",
+        "loss-offsite-power": "Потеря внешнего электроснабжения",
+        "flow-sensor-failure": "Отказ измерения расхода"
+      }
+    }
+  },
+  "optionOrder": {
+    "scenario": [
+      "normal",
+      "mcp-left-trip",
+      "feedwater-loss",
+      "turbine-trip",
+      "small-loca",
+      "loss-offsite-power",
+      "flow-sensor-failure"
+    ]
+  },
+  "initial": {
+    "modelVersion": 3,
+    "controls": {
+      "suzPump1": true,
+      "suzPump2": true,
+      "suzPump3": false,
+      "suzPump4": false,
+      "suzCoolingValve": true,
+      "suzHeatExchanger1": true,
+      "suzHeatExchanger2": false,
+      "gasBlower1": true,
+      "gasBlower2": false,
+      "gasInletValve": true,
+      "gasOutletValve": true,
+      "mcpLeft1": true,
+      "mcpLeft2": true,
+      "mcpLeft3": true,
+      "mcpLeft4": false,
+      "mcpRight1": true,
+      "mcpRight2": true,
+      "mcpRight3": true,
+      "mcpRight4": false,
+      "mcpValveLeft1": true,
+      "mcpValveLeft2": true,
+      "mcpValveLeft3": true,
+      "mcpValveLeft4": true,
+      "mcpValveRight1": true,
+      "mcpValveRight2": true,
+      "mcpValveRight3": true,
+      "mcpValveRight4": true,
+      "feedPumpLeft1": true,
+      "feedPumpLeft2": true,
+      "feedPumpLeft3": false,
+      "feedPumpRight1": true,
+      "feedPumpRight2": true,
+      "feedPumpRight3": false,
+      "feedIsolationLeft": true,
+      "feedIsolationRight": true,
+      "steamAdmission1": true,
+      "steamAdmission2": true,
+      "condenserCooling1": true,
+      "condenserCooling2": true,
+      "generatorExcitation1": true,
+      "generatorExcitation2": true,
+      "serviceWaterPump1": true,
+      "serviceWaterPump2": true,
+      "eccsChannel1": true,
+      "eccsChannel2": true,
+      "eccsChannel3": true,
+      "eccsValve1": true,
+      "eccsValve2": true,
+      "eccsValve3": true,
+      "cooldownPump1": true,
+      "cooldownPump2": false,
+      "cooldownValve": false,
+      "blowdownValve": false,
+      "targetPower": 100,
+      "manualRodInsertion": 45,
+      "shortenedRodInsertion": 20,
+      "automaticRodInsertion": 45,
+      "automaticRegulator": true,
+      "coolantFlowLeft": 100,
+      "coolantFlowRight": 100,
+      "pumpsLeft": 3,
+      "pumpsRight": 3,
+      "feedwaterLeft": 100,
+      "feedwaterRight": 100,
+      "turbineLoad1": 500,
+      "turbineLoad2": 500,
+      "generatorBreaker1": true,
+      "generatorBreaker2": true,
+      "steamDump": 0,
+      "eccsAvailable": true,
+      "emergencyInjection": false,
+      "scenario": "normal"
+    },
+    "scenario": {
+      "label": "Номинальный режим",
+      "description": "Сбалансированная работа без внесённого отказа.",
+      "source": "R01, R03 и R04."
+    },
+    "power": 100,
+    "pressure": 6.87,
+    "drumLevelLeft": 0,
+    "drumLevelRight": 0,
+    "coolantInventory": 100,
+    "flowLeft": 100,
+    "flowRight": 100,
+    "measuredFlowLeft": 100,
+    "measuredFlowRight": 100,
+    "voidFraction": 0.12,
+    "coolantTemperature": 284.5,
+    "fuelTemperature": 700,
+    "graphiteTemperature": 640,
+    "iodine": 1,
+    "xenon": 1,
+    "rods": {
+      "manualRodInsertion": 45,
+      "automaticRodInsertion": 45,
+      "shortenedRodInsertion": 20
+    },
+    "precursors": [
+      15.601112998408206, 42.9927568086424, 10.502108553429615,
+      7.883917152568254, 0.6101999826256094, 0.08282714518262371
+    ],
+    "decayHeatGroups": [12.8, 25.6, 48, 57.599999999999994, 38.4, 25.6],
+    "loopMasses": [700000, 700000],
+    "loopEnergies": [882000, 882000],
+    "loopPressures": [6.87, 6.87],
+    "massResiduals": [0, 0],
+    "energyResiduals": [0, 0],
+    "equipment": {
+      "suzFlow": 100,
+      "suzTemperature": 40,
+      "suzTank": 100,
+      "gasFlow": 100,
+      "gasPressure": 1,
+      "gasHumidity": 0.1,
+      "condenserPressure1": 5,
+      "condenserPressure2": 5,
+      "turbineValve1": 1,
+      "turbineValve2": 1,
+      "generatorVoltage1": 21,
+      "generatorVoltage2": 21,
+      "feedCapacityLeft": 1,
+      "feedCapacityRight": 1,
+      "eccsCapacity": 1,
+      "cooldownMW": 0,
+      "blowdownKgS": 0,
+      "acknowledged": false,
+      "lampTestUntil": 0,
+      "pumpSpeedLeft1": 1,
+      "pumpSpeedLeft2": 1,
+      "pumpSpeedLeft3": 1,
+      "pumpSpeedLeft4": 0,
+      "pumpSpeedRight1": 1,
+      "pumpSpeedRight2": 1,
+      "pumpSpeedRight3": 1,
+      "pumpSpeedRight4": 0
+    },
+    "fastProtectionInsertion": 0,
+    "thermalPowerMW": 3200,
+    "decayHeatMW": 208,
+    "validity": "reduced-model",
+    "orm": 30,
+    "reactivity": 0,
+    "steamFlow": 100,
+    "electricalPower": 1000,
+    "frequency": 50,
+    "scrammed": false,
+    "scramReason": "",
+    "elapsed": 0,
+    "alarms": []
+  }
+}

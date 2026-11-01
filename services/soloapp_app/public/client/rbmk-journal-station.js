@@ -543,31 +543,49 @@ export class RbmkJournalStation {
 
   submit() {
     try {
-      const entry = this.store.create(
+      if (this.pendingId)
+        throw new Error('Ожидается подтверждение предыдущей записи PostgreSQL');
+      const target = this.room.server.required ? new RbmkJournal() : this.store;
+      if (this.room.server.required) target.entries = [...this.store.entries];
+      const entry = target.create(
         this.draft,
         this.room.actorLabel(),
         this.room.model.elapsed,
         `${this.room.network?.id || 'Л'}-${crypto.randomUUID().slice(0, 8)}`,
       );
+      if (this.room.server.required) {
+        if (!this.room.server.request({ kind: 'journal', entry }, entry.id))
+          throw new Error(this.room.server.status());
+        this.pendingId = entry.id;
+        this.message = 'Запись отправлена. Ожидается подтверждение PostgreSQL.';
+        this.draw(true);
+        return;
+      }
       this.room.share('journal-entry', { entry });
-      this.printedEntry = entry;
       this.persist();
-      this.draft.text = '';
-      this.draft.eventTime = '';
-      this.input.value = this.draft[this.field];
-      this.page = 0;
-      this.message = `Запись № ${entry.id} внесена. Исправление — отдельной записью.`;
-      this.strike();
+      this.finishEntry(entry);
     } catch (error) {
       this.message = error.message;
     }
     this.draw(true);
   }
 
+  finishEntry(entry) {
+    this.pendingId = null;
+    this.printedEntry = entry;
+    this.draft.text = '';
+    this.draft.eventTime = '';
+    this.input.value = this.draft[this.field];
+    this.page = 0;
+    this.message = `Запись № ${entry.id} внесена${this.room.server.required ? ' · PostgreSQL' : ''}. Исправление — отдельной записью.`;
+    this.strike();
+    this.draw(true);
+  }
+
   persist() {
     try {
       sessionStorage.setItem(
-        'rbmk-human-journal-v1',
+        this.storageKey || 'rbmk-human-journal-v1',
         JSON.stringify(this.store.entries),
       );
     } catch {

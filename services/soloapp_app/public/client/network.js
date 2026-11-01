@@ -33,8 +33,11 @@ export class Network {
   }
 
   send(message) {
-    if (this.id && this.socket?.readyState === WebSocket.OPEN)
+    if (this.id && this.socket?.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify(message));
+      return true;
+    }
+    return false;
   }
 
   clearPeers() {
@@ -52,6 +55,7 @@ export class Network {
   }
 
   disconnect() {
+    this.onReactorServerMessage?.({ type: 'reactor_disconnect' });
     this.generation++;
     this.socket?.close();
     this.socket = null;
@@ -114,6 +118,7 @@ export class Network {
           : 'Нет соединения · переподключитесь';
       this.worldTransport = 'отключён';
       this.id = 0;
+      this.onReactorServerMessage?.({ type: 'reactor_disconnect' });
       this.clearPeers();
       setTimeout(
         () => {
@@ -150,6 +155,14 @@ export class Network {
       this.status = 'В сети';
       for (const id of message.peers) this.addPeer(id);
       this.worldProtocol = message.world_protocol;
+      this.reactorProtocol = message.reactor_protocol;
+      this.userId = message.user_id;
+      this.onReactorServerMessage?.({
+        type: 'reactor_welcome',
+        id: this.id,
+        protocol: this.reactorProtocol,
+        userId: this.userId,
+      });
       if (this.worldProtocol === 1) this.startWorld();
       else this.worldTransport = 'WSS · общий мир';
     }
@@ -166,6 +179,15 @@ export class Network {
       this.ping = Math.max(0, Math.round(performance.now() - message.sent));
       this.pingAt = performance.now();
     }
+    if (
+      [
+        'reactor_state',
+        'reactor_ack',
+        'reactor_journal',
+        'reactor_command_record',
+      ].includes(type)
+    )
+      this.onReactorServerMessage?.(message);
     if (type === 'joined') this.addPeer(message.id);
     if (type === 'left') {
       this.voice?.remove(message.id);

@@ -28,6 +28,8 @@ class Game {
         drogon::WebSocketConnectionPtr socket;
         std::string token, user;
         bool checking = false, joined = false;
+        bool reactor = false;
+        unsigned long long reactorVersion = 0, journalSequence = 0, commandRevision = 0;
         double authAt = 0, window = 0;
         unsigned messages = 0;
         Json::Value state;
@@ -42,6 +44,7 @@ class Game {
     std::mutex mutex_;
     Json::Value local_{Json::arrayValue};
     std::vector<Json::Value> signals_;
+    std::vector<Json::Value> reactorMessages_;
     void verify(const drogon::WebSocketConnectionPtr &socket, const std::string &token);
     void refresh();
     void received(Frame frame);

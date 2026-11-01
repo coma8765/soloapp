@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS planet_world (
  epoch bigint NOT NULL DEFAULT 0, checkpoint text NOT NULL DEFAULT '{}', snapshot text NOT NULL DEFAULT '{}'
 );
 ALTER TABLE planet_world ADD COLUMN IF NOT EXISTS advanced_ms bigint NOT NULL DEFAULT 0;
+ALTER TABLE planet_world ADD COLUMN IF NOT EXISTS reactor text NOT NULL DEFAULT '{}';
 INSERT INTO planet_world(id) VALUES(1) ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS planet_portals(id text PRIMARY KEY, pulse_ms bigint NOT NULL, players text NOT NULL);
 CREATE TABLE IF NOT EXISTS planet_signals(id text PRIMARY KEY, target text NOT NULL, expires_ms bigint NOT NULL, payload text NOT NULL);
