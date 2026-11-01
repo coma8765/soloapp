@@ -48,6 +48,8 @@ const { chromium } = require('playwright');
     for (const [index, page] of pages.entries())
       await page.evaluate((index) => {
         const app = planetApp;
+        // Keep narration tests away from the worker proximity route.
+        app.player.position.set(0, 0, 0);
         app.network.id = index + 1;
         app.reactor.instructor.session.reset();
         app.reactor.instructor.stop();
