@@ -1,4 +1,15 @@
 import { RBMK_CONTROLS, RBMK_SCENARIOS } from './rbmk-data.js';
+import {
+  PHYSICS,
+  equilibriumPrecursors,
+  neutronStep,
+  poisonStep,
+} from './rbmk-physics.js';
+import {
+  equipmentDefaults,
+  initialEquipment,
+  updateEquipment,
+} from './rbmk-equipment.js';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const approach = (value, target, rate, dt) =>
@@ -7,7 +18,7 @@ const finite = (value, fallback) =>
   Number.isFinite(Number(value)) ? Number(value) : fallback;
 
 export { RBMK_CONTROLS, RBMK_SCENARIOS } from './rbmk-data.js';
-export const RBMK_MODEL_VERSION = 2;
+export const RBMK_MODEL_VERSION = 3;
 
 export class RbmkModel {
   constructor() {
@@ -16,6 +27,7 @@ export class RbmkModel {
 
   reset() {
     this.controls = {
+      ...equipmentDefaults(),
       targetPower: 100,
       manualRodInsertion: 45,
       shortenedRodInsertion: 20,
@@ -23,8 +35,8 @@ export class RbmkModel {
       automaticRegulator: true,
       coolantFlowLeft: 100,
       coolantFlowRight: 100,
-      pumpsLeft: 4,
-      pumpsRight: 4,
+      pumpsLeft: 3,
+      pumpsRight: 3,
       feedwaterLeft: 100,
       feedwaterRight: 100,
       turbineLoad1: 500,
@@ -37,7 +49,7 @@ export class RbmkModel {
       scenario: 'normal',
     };
     this.power = 100;
-    this.pressure = 7;
+    this.pressure = PHYSICS.nominalPressure;
     this.drumLevelLeft = 0;
     this.drumLevelRight = 0;
     this.coolantInventory = 100;
@@ -46,11 +58,30 @@ export class RbmkModel {
     this.measuredFlowLeft = 100;
     this.measuredFlowRight = 100;
     this.voidFraction = 0.12;
-    this.coolantTemperature = 284;
+    this.coolantTemperature = 284.5;
     this.fuelTemperature = 700;
     this.graphiteTemperature = 640;
-    this.iodine = 0;
-    this.xenon = 0;
+    this.iodine = 1;
+    this.xenon = 1;
+    this.rods = {
+      manualRodInsertion: 45,
+      automaticRodInsertion: 45,
+      shortenedRodInsertion: 20,
+    };
+    this.precursors = equilibriumPrecursors();
+    this.fastProtectionInsertion = 0;
+    this.equipment = initialEquipment();
+    this.loopMasses = [700000, 700000];
+    this.loopEnergies = [882000, 882000];
+    this.loopPressures = [PHYSICS.nominalPressure, PHYSICS.nominalPressure];
+    this.massResiduals = [0, 0];
+    this.energyResiduals = [0, 0];
+    this.decayHeatGroups = [0.004, 0.008, 0.015, 0.018, 0.012, 0.008].map(
+      (fraction) => PHYSICS.thermalMW * fraction,
+    );
+    this.decayHeatMW = this.decayHeatGroups.reduce((a, b) => a + b, 0);
+    this.thermalPowerMW = PHYSICS.thermalMW;
+    this.validity = 'reduced-model';
     this.orm = 30;
     this.reactivity = 0;
     this.steamFlow = 100;
@@ -68,6 +99,16 @@ export class RbmkModel {
     if (!schema) return undefined;
     if (schema.type === 'checkbox') {
       this.controls[name] = Boolean(rawValue);
+      for (const side of ['Left', 'Right']) {
+        if (
+          Array.from({ length: 4 }, (_, i) => `mcp${side}${i + 1}`).includes(
+            name,
+          )
+        )
+          this.controls[`pumps${side}`] = Array.from({ length: 4 }, (_, i) =>
+            Number(this.controls[`mcp${side}${i + 1}`]),
+          ).reduce((a, b) => a + b, 0);
+      }
       return this.controls[name];
     }
     if (schema.type === 'select') {
@@ -79,6 +120,10 @@ export class RbmkModel {
     let value = clamp(Number(rawValue), schema.min, schema.max);
     value = Math.round(value / schema.step) * schema.step;
     this.controls[name] = value;
+    if (name === 'pumpsLeft' || name === 'pumpsRight') {
+      const side = name === 'pumpsLeft' ? 'Left' : 'Right';
+      for (let i = 1; i <= 4; i++) this.controls[`mcp${side}${i}`] = i <= value;
+    }
     return value;
   }
 
@@ -96,10 +141,15 @@ export class RbmkModel {
     this.scrammed = false;
     this.scramReason = '';
     this.controls.targetPower = 5;
-    this.controls.manualRodInsertion = 75;
-    this.controls.shortenedRodInsertion = 70;
-    this.controls.automaticRodInsertion = 70;
     return true;
+  }
+
+  acknowledgeAlarms() {
+    this.equipment.acknowledged = true;
+  }
+
+  testLamps() {
+    this.equipment.lampTestUntil = this.elapsed + 3;
   }
 
   scenarioEffects() {
@@ -131,9 +181,24 @@ export class RbmkModel {
   step(rawDt) {
     const dt = clamp(finite(rawDt, 0), 0, 0.25);
     if (!dt) return this.snapshot();
+    const count = Math.ceil(dt / 0.025);
+    for (let index = 0; index < count; index++) this.integrate(dt / count);
+    return this.snapshot();
+  }
+
+  integrate(dt) {
+    const previousAlarms = this.alarms;
     this.elapsed += dt;
     const c = this.controls;
     const effects = this.scenarioEffects();
+    const equipment = updateEquipment(
+      this.equipment,
+      c,
+      this.power,
+      this.graphiteTemperature,
+      this.elapsed,
+      dt,
+    );
 
     if (c.automaticRegulator && !this.scrammed) {
       c.automaticRodInsertion = clamp(
@@ -143,8 +208,37 @@ export class RbmkModel {
       );
     }
 
-    const leftFlowTarget = c.coolantFlowLeft * (effects.pumpsLeft / 4);
-    const rightFlowTarget = c.coolantFlowRight * (effects.pumpsRight / 4);
+    for (const name of [
+      'manualRodInsertion',
+      'automaticRodInsertion',
+      'shortenedRodInsertion',
+    ]) {
+      const target = this.scrammed ? 100 : c[name];
+      this.rods[name] += clamp(
+        target - this.rods[name],
+        (-100 * dt) / PHYSICS.manualTravelSeconds,
+        (100 * dt) /
+          (this.scrammed
+            ? PHYSICS.scramTravelSeconds
+            : PHYSICS.manualTravelSeconds),
+      );
+    }
+    this.fastProtectionInsertion = clamp(
+      this.fastProtectionInsertion +
+        (((this.scrammed ? 1 : -1) * 100) / 2.5) * dt,
+      0,
+      100,
+    );
+    const naturalFlow =
+      10 * Math.cbrt(Math.max(0, this.thermalPowerMW / PHYSICS.thermalMW));
+    const leftFlowTarget = Math.max(
+      naturalFlow,
+      c.coolantFlowLeft * (equipment.pumpsLeft / 3) ** 0.75,
+    );
+    const rightFlowTarget = Math.max(
+      naturalFlow,
+      c.coolantFlowRight * (equipment.pumpsRight / 3) ** 0.75,
+    );
     this.flowLeft = approach(this.flowLeft, leftFlowTarget, 0.9, dt);
     this.flowRight = approach(this.flowRight, rightFlowTarget, 0.9, dt);
     const averageFlow = (this.flowLeft + this.flowRight) / 2;
@@ -159,123 +253,151 @@ export class RbmkModel {
     );
     this.voidFraction = approach(this.voidFraction, voidTarget, 0.45, dt);
 
-    const iodineTarget = clamp(this.power / 100, 0, 1.35);
-    this.iodine = approach(this.iodine, iodineTarget, 0.008, dt);
-    const xenonTarget = clamp(
-      this.iodine + Math.max(0, 100 - this.power) / 130,
-      0,
-      1.8,
-    );
-    this.xenon = approach(
-      this.xenon,
-      xenonTarget,
-      xenonTarget > this.xenon ? 0.015 : 0.005,
-      dt,
-    );
+    const poison = poisonStep(this.iodine, this.xenon, this.power / 100, dt);
+    this.iodine = poison.iodine;
+    this.xenon = poison.xenon;
 
     const weightedInsertion =
-      c.manualRodInsertion * 0.55 +
-      c.automaticRodInsertion * 0.3 +
-      c.shortenedRodInsertion * 0.15;
-    this.orm = clamp(48 - weightedInsertion * 0.42 - this.xenon * 8, 0, 55);
+      this.rods.manualRodInsertion * 0.55 +
+      this.rods.automaticRodInsertion * 0.3 +
+      this.rods.shortenedRodInsertion * 0.15;
+    this.orm = clamp(30 + (weightedInsertion - 41.25) * 0.42, 0, 100);
     const rodEffect =
-      (45 - c.manualRodInsertion) * 0.036 +
-      (45 - c.automaticRodInsertion) * 0.012 +
-      (20 - c.shortenedRodInsertion) * 0.008;
+      (45 - this.rods.manualRodInsertion) * 0.036 +
+      (45 - this.rods.automaticRodInsertion) * 0.012 +
+      (20 - this.rods.shortenedRodInsertion) * 0.008;
     const voidEffect = (this.voidFraction - 0.12) * 1.35;
-    const xenonEffect = -this.xenon * 0.38;
-    const regulatorEffect = (c.targetPower - this.power) * 0.004;
-    this.reactivity = this.scrammed
-      ? -5
-      : clamp(
-          rodEffect + voidEffect + xenonEffect + regulatorEffect,
-          -2.5,
-          2.5,
-        );
-
-    const demandedPower = this.scrammed
-      ? 0.2
-      : clamp(
-          c.targetPower + rodEffect * 30 + voidEffect * 22 + xenonEffect * 18,
-          0.2,
-          140,
-        );
-    this.power = approach(
-      this.power,
-      demandedPower,
-      this.scrammed ? 1.8 : 0.16 + Math.max(0, this.reactivity) * 0.2,
+    const xenonEffect = -(this.xenon - 1) * 0.38;
+    const thermalEffect =
+      -(this.fuelTemperature - 700) * 0.0013 +
+      (this.graphiteTemperature - 640) * 0.0003;
+    this.reactivity =
+      rodEffect +
+      voidEffect +
+      xenonEffect +
+      thermalEffect -
+      (2 * this.fastProtectionInsertion) / 100;
+    const neutrons = neutronStep(
+      this.power / 100,
+      this.precursors,
+      this.reactivity * PHYSICS.beta,
       dt,
     );
+    this.power = neutrons.power * 100;
+    this.precursors = neutrons.precursors;
+    if (this.power > 500) {
+      this.validity = 'outside-domain';
+      this.power = 500;
+      this.scram('Выход за область точечной модели');
+    }
 
-    const injection = c.eccsAvailable && c.emergencyInjection ? 1 : 0;
-    this.coolantInventory = clamp(
-      this.coolantInventory + (injection * 0.42 - effects.leak * 0.2) * dt,
-      0,
-      110,
+    const injection =
+      c.eccsAvailable && c.emergencyInjection
+        ? Math.min(1, this.equipment.eccsCapacity)
+        : 0;
+    const heatWeights = [0.004, 0.008, 0.015, 0.018, 0.012, 0.008];
+    const heatTimes = [1, 10, 100, 1000, 10000, 100000];
+    this.decayHeatGroups = this.decayHeatGroups.map((heat, index) =>
+      approach(
+        heat,
+        ((PHYSICS.thermalMW * this.power) / 100) * heatWeights[index],
+        1 / heatTimes[index],
+        dt,
+      ),
     );
-    const steamDemand = effects.turbineAvailable
-      ? (c.generatorBreaker1 ? c.turbineLoad1 : 0) / 10 +
-        (c.generatorBreaker2 ? c.turbineLoad2 : 0) / 10 +
-        c.steamDump * 0.55
-      : c.steamDump * 0.55;
-    const pressureTarget = clamp(
-      7 +
-        (this.power - steamDemand) * 0.017 -
-        effects.leak * 1.8 -
-        injection * 0.2,
-      2.5,
-      9.5,
-    );
-    this.pressure = approach(this.pressure, pressureTarget, 0.35, dt);
-    this.steamFlow = approach(
-      this.steamFlow,
-      clamp(this.power * (0.88 + this.voidFraction), 0, 150),
-      0.4,
-      dt,
-    );
-
-    const inventoryPenalty = Math.max(0, 100 - this.coolantInventory) * 0.7;
-    this.drumLevelLeft = clamp(
-      this.drumLevelLeft +
-        (effects.feedwaterLeft - this.power - inventoryPenalty) * 0.72 * dt,
-      -1400,
-      500,
-    );
-    this.drumLevelRight = clamp(
-      this.drumLevelRight +
-        (effects.feedwaterRight - this.power - inventoryPenalty) * 0.72 * dt,
-      -1400,
-      500,
-    );
-
-    const coolantTarget =
-      270 +
-      this.power * 0.14 +
-      Math.max(0, 85 - averageFlow) * 0.32 -
-      injection * 18;
-    this.coolantTemperature = approach(
-      this.coolantTemperature,
-      coolantTarget,
-      0.25,
-      dt,
-    );
-    const fuelTarget =
-      470 +
-      this.power * 2.25 +
-      Math.max(0, 85 - averageFlow) * 4.1 -
-      injection * 80;
-    this.fuelTemperature = approach(this.fuelTemperature, fuelTarget, 0.16, dt);
-    const graphiteTarget = 560 + this.power * 0.8;
-    this.graphiteTemperature = approach(
-      this.graphiteTemperature,
-      graphiteTarget,
-      0.035,
-      dt,
-    );
+    this.decayHeatMW = this.decayHeatGroups.reduce((a, b) => a + b, 0);
+    this.thermalPowerMW =
+      (PHYSICS.thermalMW * 0.935 * this.power) / 100 + this.decayHeatMW;
+    const fuelHeat =
+      ((PHYSICS.thermalMW * 0.95) / (700 - 284.5)) *
+      Math.max(0.05, (averageFlow / 100) ** 0.8) *
+      (this.fuelTemperature - this.coolantTemperature);
+    const graphiteHeat =
+      ((PHYSICS.thermalMW * 0.05) / (640 - 284.5)) *
+      (this.graphiteTemperature - this.coolantTemperature);
+    this.fuelTemperature += ((this.thermalPowerMW * 0.95 - fuelHeat) / 60) * dt;
+    this.graphiteTemperature +=
+      ((this.thermalPowerMW * 0.05 - graphiteHeat) / 2890) * dt;
+    const steamFlows = [];
+    for (let index = 0; index < 2; index++) {
+      const side = index ? 'Right' : 'Left';
+      const oldMass = this.loopMasses[index];
+      const oldEnergy = this.loopEnergies[index];
+      const internal = oldEnergy / oldMass;
+      const pressure = Math.max(0.1, this.loopPressures[index]);
+      const turbine = index + 1;
+      const load = index ? c.turbineLoad2 : c.turbineLoad1;
+      const breaker = index ? c.generatorBreaker2 : c.generatorBreaker1;
+      const steam =
+        (breaker
+          ? (load / 500) * this.equipment[`turbineValve${turbine}`]
+          : 0) *
+          750 *
+          Math.sqrt(pressure / PHYSICS.nominalPressure) +
+        (c.steamDump / 100) * 750;
+      const feed =
+        ((index ? effects.feedwaterRight : effects.feedwaterLeft) / 100) *
+        750 *
+        this.equipment[`feedCapacity${side}`];
+      const leak = !index && effects.leak ? 150 : 0;
+      const addedWater = injection * 220;
+      const blowdown = this.equipment.blowdownKgS / 2;
+      const heatShare =
+        (index ? this.flowRight : this.flowLeft) /
+        Math.max(1, this.flowLeft + this.flowRight);
+      const heat =
+        fuelHeat * heatShare + graphiteHeat / 2 - this.equipment.cooldownMW / 2;
+      const massRate = feed + addedWater - steam - leak - blowdown;
+      const energyRate =
+        heat +
+        feed * (2.8 - 3200 / 1500) +
+        addedWater * 0.17 -
+        steam * 2.8 -
+        (leak + blowdown) * internal;
+      this.loopMasses[index] += massRate * dt;
+      this.loopEnergies[index] += energyRate * dt;
+      this.massResiduals[index] +=
+        this.loopMasses[index] - oldMass - massRate * dt;
+      this.energyResiduals[index] +=
+        this.loopEnergies[index] - oldEnergy - energyRate * dt;
+      this.loopPressures[index] =
+        PHYSICS.nominalPressure +
+        (this.loopEnergies[index] / this.loopMasses[index] - 1.26) / 0.06;
+      if (
+        this.loopMasses[index] < 350000 ||
+        this.loopPressures[index] < 0.1 ||
+        this.loopPressures[index] > 12
+      )
+        this.validity = 'outside-domain';
+      steamFlows.push(steam);
+    }
+    this.coolantInventory = (this.loopMasses[0] + this.loopMasses[1]) / 14000;
+    this.drumLevelLeft = (this.loopMasses[0] - 700000) / 100;
+    this.drumLevelRight = (this.loopMasses[1] - 700000) / 100;
+    this.pressure = (this.loopPressures[0] + this.loopPressures[1]) / 2;
+    this.coolantTemperature =
+      284.5 + (this.pressure - PHYSICS.nominalPressure) * 8;
+    this.steamFlow = (steamFlows[0] + steamFlows[1]) / 15;
 
     const turbinePowerTarget = effects.turbineAvailable
-      ? (c.generatorBreaker1 ? c.turbineLoad1 : 0) +
-        (c.generatorBreaker2 ? c.turbineLoad2 : 0)
+      ? (c.generatorBreaker1
+          ? ((c.turbineLoad1 *
+              this.equipment.turbineValve1 *
+              this.equipment.generatorVoltage1) /
+              21) *
+            Math.sqrt(
+              Math.max(0, this.loopPressures[0]) / PHYSICS.nominalPressure,
+            )
+          : 0) +
+        (c.generatorBreaker2
+          ? ((c.turbineLoad2 *
+              this.equipment.turbineValve2 *
+              this.equipment.generatorVoltage2) /
+              21) *
+            Math.sqrt(
+              Math.max(0, this.loopPressures[1]) / PHYSICS.nominalPressure,
+            )
+          : 0)
       : 0;
     this.electricalPower = approach(
       this.electricalPower,
@@ -285,9 +407,7 @@ export class RbmkModel {
     );
     this.frequency = approach(
       this.frequency,
-      turbinePowerTarget
-        ? clamp(50 + (this.power * 10 - turbinePowerTarget) * 0.0015, 47, 53)
-        : 0,
+      turbinePowerTarget ? 50 : 0,
       0.8,
       dt,
     );
@@ -305,7 +425,7 @@ export class RbmkModel {
       dt,
     );
 
-    const averageDrum = (this.drumLevelLeft + this.drumLevelRight) / 2;
+    const averageDrum = Math.min(this.drumLevelLeft, this.drumLevelRight);
     const automaticTrip =
       c.scenario === 'loss-offsite-power'
         ? 'Потеря внешнего электроснабжения'
@@ -343,52 +463,128 @@ export class RbmkModel {
       this.alarms.push('ДИАГНОСТИКА: РАСХОДОМЕР ЛЕВОЙ ПЕТЛИ');
     if (!effects.turbineAvailable)
       this.alarms.push('ТУРБОГЕНЕРАТОРЫ ОТКЛЮЧЕНЫ');
+    if (this.equipment.suzFlow < 75)
+      this.alarms.push('РАСХОД ОХЛАЖДЕНИЯ СУЗ НИЗКИЙ');
+    if (this.equipment.suzTemperature > 60)
+      this.alarms.push('ТЕМПЕРАТУРА ОХЛАЖДЕНИЯ СУЗ');
+    if (this.equipment.gasFlow < 50) this.alarms.push('РАСХОД ГАЗА НИЗКИЙ');
+    if (this.equipment.gasPressure > 1.5)
+      this.alarms.push('ДАВЛЕНИЕ ГАЗА ВЫСОКОЕ');
+    if (
+      this.equipment.condenserPressure1 > 18 ||
+      this.equipment.condenserPressure2 > 18
+    )
+      this.alarms.push('ВАКУУМ КОНДЕНСАТОРА НИЗКИЙ');
+    if (this.validity === 'outside-domain')
+      this.alarms.push('ВНЕ ОБЛАСТИ МОДЕЛИ');
     if (this.scrammed) this.alarms.push(`АЗ-5 · ${this.scramReason}`);
-    return this.snapshot();
+    if (this.alarms.some((alarm) => !previousAlarms.includes(alarm)))
+      this.equipment.acknowledged = false;
   }
 
   restore(raw) {
+    const candidate = new RbmkModel();
+    if (!candidate.restoreState(raw)) return false;
+    Object.assign(this, candidate);
+    return true;
+  }
+
+  restoreState(raw) {
     if (!raw || raw.modelVersion !== RBMK_MODEL_VERSION || !raw.controls)
       return false;
     for (const name of Object.keys(RBMK_CONTROLS)) {
       const schema = RBMK_CONTROLS[name];
       if (raw.controls[name] === undefined) return false;
-      if (this.setControl(name, raw.controls[name]) === undefined) return false;
+      if (schema.type === 'checkbox' && typeof raw.controls[name] !== 'boolean')
+        return false;
+      if (
+        schema.type === 'select' &&
+        !Object.hasOwn(schema.options, raw.controls[name])
+      )
+        return false;
       if (schema.type === 'range') {
         const value = Number(raw.controls[name]);
         if (!Number.isFinite(value) || value < schema.min || value > schema.max)
           return false;
         this.controls[name] = value;
-      }
+      } else this.controls[name] = raw.controls[name];
     }
     const ranges = {
-      power: [0, 150],
-      pressure: [0, 10],
-      drumLevelLeft: [-1500, 600],
-      drumLevelRight: [-1500, 600],
-      coolantInventory: [0, 120],
+      power: [0, 500],
+      pressure: [0, 15],
+      drumLevelLeft: [-10000, 10000],
+      drumLevelRight: [-10000, 10000],
+      coolantInventory: [0, 250],
       flowLeft: [0, 150],
       flowRight: [0, 150],
       measuredFlowLeft: [0, 150],
       measuredFlowRight: [0, 150],
       voidFraction: [0, 1],
       coolantTemperature: [0, 500],
-      fuelTemperature: [0, 1400],
-      graphiteTemperature: [0, 1000],
-      iodine: [0, 2],
-      xenon: [0, 2],
-      orm: [0, 60],
-      reactivity: [-6, 3],
+      fuelTemperature: [0, 5000],
+      graphiteTemperature: [0, 5000],
+      iodine: [0, 10],
+      xenon: [0, 20],
+      orm: [0, 100],
+      reactivity: [-10, 10],
       steamFlow: [0, 160],
       electricalPower: [0, 1100],
       frequency: [0, 55],
       elapsed: [0, 1e9],
+      fastProtectionInsertion: [0, 100],
+      thermalPowerMW: [0, 20000],
+      decayHeatMW: [0, 2000],
     };
     for (const [name, [min, max]] of Object.entries(ranges)) {
       if (!Number.isFinite(raw[name]) || raw[name] < min || raw[name] > max)
         return false;
     }
     for (const name of Object.keys(ranges)) this[name] = raw[name];
+    if (
+      !raw.rods ||
+      !Object.keys(this.rods).every(
+        (name) =>
+          Number.isFinite(raw.rods[name]) &&
+          raw.rods[name] >= 0 &&
+          raw.rods[name] <= 100,
+      )
+    )
+      return false;
+    this.rods = { ...raw.rods };
+    for (const [name, length, minimum, maximum] of [
+      ['precursors', 6, 0, 1e8],
+      ['decayHeatGroups', 6, 0, 1e4],
+      ['loopMasses', 2, 1, 2e6],
+      ['loopEnergies', 2, 1, 1e7],
+      ['loopPressures', 2, -10, 20],
+      ['massResiduals', 2, -1000, 1000],
+      ['energyResiduals', 2, -1000, 1000],
+    ]) {
+      if (
+        !Array.isArray(raw[name]) ||
+        raw[name].length !== length ||
+        !raw[name].every(
+          (value) =>
+            Number.isFinite(value) && value >= minimum && value <= maximum,
+        )
+      )
+        return false;
+      this[name] = [...raw[name]];
+    }
+    if (
+      !raw.equipment ||
+      !Object.entries(initialEquipment()).every(([name, value]) =>
+        typeof value === 'boolean'
+          ? typeof raw.equipment[name] === 'boolean'
+          : Number.isFinite(raw.equipment[name]) &&
+            Math.abs(raw.equipment[name]) <= 1e9,
+      )
+    )
+      return false;
+    this.equipment = { ...raw.equipment };
+    if (!['reduced-model', 'outside-domain'].includes(raw.validity))
+      return false;
+    this.validity = raw.validity;
     this.scrammed = Boolean(raw.scrammed);
     this.scramReason = String(raw.scramReason || '').slice(0, 160);
     this.alarms = Array.isArray(raw.alarms)
@@ -417,6 +613,19 @@ export class RbmkModel {
       graphiteTemperature: this.graphiteTemperature,
       iodine: this.iodine,
       xenon: this.xenon,
+      rods: { ...this.rods },
+      precursors: [...this.precursors],
+      decayHeatGroups: [...this.decayHeatGroups],
+      loopMasses: [...this.loopMasses],
+      loopEnergies: [...this.loopEnergies],
+      loopPressures: [...this.loopPressures],
+      massResiduals: [...this.massResiduals],
+      energyResiduals: [...this.energyResiduals],
+      equipment: { ...this.equipment },
+      fastProtectionInsertion: this.fastProtectionInsertion,
+      thermalPowerMW: this.thermalPowerMW,
+      decayHeatMW: this.decayHeatMW,
+      validity: this.validity,
       orm: this.orm,
       reactivity: this.reactivity,
       steamFlow: this.steamFlow,

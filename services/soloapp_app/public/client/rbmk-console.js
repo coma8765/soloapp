@@ -4,6 +4,7 @@ import {
   RBMK_PANEL_PARTS,
   RBMK_PHYSICAL_CONTROL_GROUPS,
 } from './rbmk-data.js';
+import { EQUIPMENT_BANKS, EQUIPMENT_CONTROLS } from './rbmk-equipment.js';
 
 const B = window.BABYLON;
 
@@ -49,6 +50,8 @@ const ACTION_LABELS = Object.freeze({
   scram: 'АЗ-5',
   clear: 'СНЯТЬ АЗ',
   reset: 'ИСХОДНЫЙ',
+  acknowledge: 'КВИТИР.',
+  'lamp-test': 'ЛАМПЫ',
 });
 
 const PANEL_SYSTEMS = Object.freeze([
@@ -532,19 +535,18 @@ export class RbmkPhysicalConsole {
     );
     this.box(
       `RBMK auxiliary status bezel ${kind}`,
-      [2.74, 0.1, 1.62],
-      [0, 0.09, 0.04],
+      [2.74, 0.62, 0.1],
+      [0, 0.43, -0.83],
       this.bezel,
       deck,
     );
     const panel = this.texturePlane(
       `RBMK auxiliary live field ${kind}`,
       2.62,
-      1.5,
+      0.54,
       { width: 1048, height: 600 },
-      [0, 0.15, 0.04],
+      [0, 0.43, -0.765],
       deck,
-      [-Math.PI / 2, 0, 0],
     );
     panel.kind = kind;
     panel.plane.metadata = {
@@ -562,20 +564,182 @@ export class RbmkPhysicalConsole {
     this.hintMeshes.push(panel.plane);
   }
 
+  buildEquipmentBank(parent, bank, startIndex = 0) {
+    const controls = bank.controls;
+    const part = {
+      id: `equipment-${bank.kind}`,
+      title: bank.title,
+      description:
+        'Отдельные команды оборудования. ПУСК/ОТКЛ управляют насосами; ОТКР/ЗАКР — арматурой. На приборной надстройке показан фактический отклик. Это учебная адресация; точные адреса конкретного блока не установлены.',
+      source: 'МИФИ-2021, главы 1–5, 8–13; docs/RBMK_PHYSICS.md.',
+      controls: controls.map((schema) => schema.id),
+      actions: bank.actions || [],
+    };
+    controls.forEach((schema, index) => {
+      const column = (index + startIndex) % 4;
+      const row = Math.floor((index + startIndex) / 4);
+      const x = -1.02 + column * 0.68;
+      const z = -0.66 + row * 0.205;
+      this.box(
+        `RBMK equipment cell ${schema.id}`,
+        [0.64, 0.025, 0.192],
+        [x, 0.105, z],
+        this.trim,
+        parent,
+      );
+      const readout = this.texturePlane(
+        `RBMK equipment command ${schema.id}`,
+        0.61,
+        0.085,
+        { width: 400, height: 72 },
+        [x, 0.125, z - 0.06],
+        parent,
+        [-Math.PI / 2, 0, 0],
+      );
+      readout.name = schema.id;
+      readout.plane.metadata = { rbmkPart: part };
+      this.readouts.push(readout);
+      this.hintMeshes.push(readout.plane);
+      const valve = /Valve|Isolation|Admission/.test(schema.id);
+      for (const [value, offset, color, legend] of [
+        [true, -0.15, '#d5c9a5', valve ? 'ОТКР' : 'ПУСК'],
+        [false, 0.15, '#9e5244', valve ? 'ЗАКР' : 'ОТКЛ'],
+      ])
+        this.createButton(
+          parent,
+          `RBMK equipment ${schema.id} ${value}`,
+          [x + offset, 0.168, z + 0.047],
+          [0.25, 0.08, 0.125],
+          color,
+          {
+            rbmkControl: { name: schema.id, mode: 'set', value },
+            rbmkPart: part,
+            legend,
+          },
+        );
+    });
+    (bank.actions || []).forEach((action, index) => {
+      const cell = controls.length + startIndex + index;
+      this.createButton(
+        parent,
+        `RBMK equipment action ${action}`,
+        [
+          -1.02 + (cell % 4) * 0.68,
+          0.145,
+          -0.66 + Math.floor(cell / 4) * 0.205,
+        ],
+        [0.54, 0.06, 0.16],
+        '#bfab6e',
+        { rbmkAction: action, rbmkPart: part, legend: ACTION_LABELS[action] },
+      );
+    });
+  }
+
   buildControlGroup(parent, group) {
     const items = [
       ...group.controls.map((name) => ({ type: 'control', name })),
       ...(group.actions || []).map((name) => ({ type: 'action', name })),
     ];
     items.forEach((item, index) => {
-      const column = index % 2;
-      const row = Math.floor(index / 2);
-      const x = column ? 0.72 : -0.72;
-      const z = -0.52 + row * 0.42;
-      if (item.type === 'control')
-        this.buildControlCell(parent, item.name, x, z, group.part);
-      else this.buildActionCell(parent, item.name, x, z, group.part);
+      const column = index % 4;
+      const row = Math.floor(index / 4);
+      const x = -1.02 + column * 0.68;
+      const z = -0.66 + row * 0.205;
+      const part =
+        RBMK_PANEL_PARTS.find((candidate) =>
+          candidate.controls?.includes(item.name),
+        ) || partById(group.part);
+      if (item.type === 'action') {
+        this.createButton(
+          parent,
+          `RBMK physical action ${item.name}`,
+          [x, 0.145, z],
+          [0.52, 0.06, 0.17],
+          item.name === 'scram' ? '#b9362f' : '#b7a36d',
+          {
+            rbmkAction: item.name,
+            rbmkPart: part,
+            legend: ACTION_LABELS[item.name],
+          },
+        );
+        return;
+      }
+      const schema = RBMK_CONTROLS[item.name];
+      this.box(
+        `RBMK control cell ${item.name}`,
+        [0.64, 0.025, 0.192],
+        [x, 0.105, z],
+        this.trim,
+        parent,
+      );
+      const readout = this.texturePlane(
+        `RBMK control readout ${item.name}`,
+        0.61,
+        0.085,
+        { width: 400, height: 72 },
+        [x, 0.125, z - 0.06],
+        parent,
+        [-Math.PI / 2, 0, 0],
+      );
+      readout.name = item.name;
+      readout.plane.metadata = { rbmkPart: part };
+      this.readouts.push(readout);
+      this.hintMeshes.push(readout.plane);
+      if (schema.type === 'checkbox') {
+        this.createButton(
+          parent,
+          `RBMK toggle ${item.name}`,
+          [x, 0.168, z + 0.047],
+          [0.4, 0.08, 0.125],
+          '#608b7e',
+          { rbmkControl: { name: item.name, mode: 'toggle' }, rbmkPart: part },
+        );
+      } else {
+        const delta =
+          schema.type === 'select'
+            ? 1
+            : PHYSICAL_STEPS[item.name] || schema.step;
+        for (const direction of [-1, 1])
+          this.createButton(
+            parent,
+            `RBMK adjust ${item.name} ${direction}`,
+            [x + direction * 0.15, 0.168, z + 0.047],
+            [0.25, 0.08, 0.125],
+            direction > 0 ? '#638b82' : '#7a7770',
+            {
+              rbmkControl: { name: item.name, delta: direction * delta },
+              rbmkPart: part,
+            },
+          );
+      }
     });
+    const kind = {
+      'reactor-controls': 'channels',
+      'circulation-controls': 'thermal',
+      'turbine-controls': 'turbines',
+      'safety-controls': 'alarms',
+    }[group.id];
+    const bank = EQUIPMENT_BANKS.find((candidate) => candidate.kind === kind);
+    this.buildEquipmentBank(parent, bank, items.length);
+    this.box(
+      `RBMK ${group.id} instrument riser`,
+      [2.74, 0.62, 0.1],
+      [0, 0.43, -0.9],
+      this.steel,
+      parent,
+    );
+    const field = this.texturePlane(
+      `RBMK ${group.id} live equipment scales`,
+      2.62,
+      0.54,
+      { width: 1048, height: 600 },
+      [0, 0.43, -0.835],
+      parent,
+    );
+    field.kind = kind;
+    field.plane.metadata = { rbmkPart: partById(group.part) };
+    this.auxiliaryPanels.push(field);
+    this.hintMeshes.push(field.plane);
   }
 
   buildControlCell(parent, name, x, z, fallbackPart) {
@@ -706,13 +870,15 @@ export class RbmkPhysicalConsole {
       capMaterial,
       button,
     );
-    const capLabel = metadata.rbmkAction
-      ? ACTION_LABELS[metadata.rbmkAction]
-      : metadata.rbmkControl?.mode === 'toggle'
-        ? 'ВКЛ'
-        : metadata.rbmkControl?.delta < 0
-          ? '−'
-          : '+';
+    const capLabel =
+      metadata.legend ||
+      (metadata.rbmkAction
+        ? ACTION_LABELS[metadata.rbmkAction]
+        : metadata.rbmkControl?.mode === 'toggle'
+          ? 'ВКЛ'
+          : metadata.rbmkControl?.delta < 0
+            ? '−'
+            : '+');
     const legend = this.texturePlane(
       `${name} cap legend`,
       size[0] * 0.48,
@@ -726,7 +892,7 @@ export class RbmkPhysicalConsole {
     legendContext.fillStyle = color;
     legendContext.fillRect(0, 0, 256, 128);
     legendContext.fillStyle = '#f3ead0';
-    legendContext.font = `bold ${metadata.rbmkAction ? 50 : 88}px monospace`;
+    legendContext.font = `bold ${metadata.rbmkAction || metadata.legend ? 50 : 88}px monospace`;
     legendContext.textAlign = 'center';
     legendContext.textBaseline = 'middle';
     legendContext.fillText(capLabel, 128, 67, 240);
@@ -783,7 +949,8 @@ export class RbmkPhysicalConsole {
       const schema = RBMK_CONTROLS[control.name];
       const current = state.controls[control.name];
       let value;
-      if (control.mode === 'toggle') value = !current;
+      if (control.mode === 'set') value = control.value;
+      else if (control.mode === 'toggle') value = !current;
       else if (schema.type === 'select') {
         const options = Object.keys(schema.options);
         const index = options.indexOf(current);
@@ -815,8 +982,11 @@ export class RbmkPhysicalConsole {
         button.position.y = button.metadata.restY;
       }
       const control = button.metadata.rbmkControl;
-      if (!control || control.mode !== 'toggle') continue;
-      const active = !!state.controls[control.name];
+      if (!control || !['toggle', 'set'].includes(control.mode)) continue;
+      const active =
+        control.mode === 'set'
+          ? state.controls[control.name] === control.value
+          : !!state.controls[control.name];
       button.metadata.cap.material.diffuseColor = B.Color3.FromHexString(
         active ? '#43a66c' : '#654a43',
       );
@@ -846,7 +1016,7 @@ export class RbmkPhysicalConsole {
     for (const panel of this.mimicPanels) this.drawMimicPanel(panel, state);
     for (const recorder of this.recorders) this.drawRecorder(recorder);
     for (const panel of this.auxiliaryPanels)
-      this.drawAuxiliaryPanel(panel, state);
+      this.drawEquipmentPanel(panel, state);
     this.updateChannelMaps(state);
     this.drawClock(state);
   }
@@ -915,8 +1085,14 @@ export class RbmkPhysicalConsole {
     context.fillStyle = '#596164';
     context.fillRect(0, 0, 744, 212);
     for (let index = 0; index < entries.length; index++) {
-      const [label, active, severity] =
+      const [label, condition, severity] =
         entries[(index + panel.seed * 5) % entries.length];
+      const active =
+        state.equipment.lampTestUntil > state.elapsed ||
+        (condition &&
+          (severity === 'green' ||
+            state.equipment.acknowledged ||
+            Math.floor(state.elapsed * 2) % 2 === 0));
       const column = index % 8;
       const row = Math.floor(index / 8);
       const x = 5 + column * 92;
@@ -970,12 +1146,22 @@ export class RbmkPhysicalConsole {
       ['САОР ВПРЫСК', controls.emergencyInjection ? 1 : 0],
       ['ЛОКАЛИЗАЦИЯ', state.coolantInventory / 100],
       ['РАСХОЛАЖИВ.', (state.flowLeft + state.flowRight) / 240],
-      ['ОХЛАЖД. СУЗ', (controls.pumpsLeft + controls.pumpsRight) / 8],
-      ['ГАЗОВЫЙ КОНТ.', 1 - state.graphiteTemperature / 1000],
+      ['ОХЛАЖД. СУЗ', state.equipment.suzFlow / 150],
+      ['ГАЗОВЫЙ КОНТ.', state.equipment.gasFlow / 200],
       ['ТГ-1', controls.turbineLoad1 / 500],
       ['ТГ-2', controls.turbineLoad2 / 500],
-      ['КОНДЕНСАТОРЫ', (controls.turbineLoad1 + controls.turbineLoad2) / 1000],
-      ['ТЕХНИЧ. ВОДА', (controls.pumpsLeft + controls.pumpsRight) / 8],
+      [
+        'КОНДЕНСАТОРЫ',
+        (state.equipment.condenserPressure1 +
+          state.equipment.condenserPressure2) /
+          60,
+      ],
+      [
+        'ТЕХНИЧ. ВОДА',
+        (Number(controls.serviceWaterPump1) +
+          Number(controls.serviceWaterPump2)) /
+          2,
+      ],
       [
         'СОБСТВ. НУЖДЫ',
         (Number(controls.generatorBreaker1) +
@@ -1174,6 +1360,82 @@ export class RbmkPhysicalConsole {
     panel.renderedAt = this.lastDraw;
   }
 
+  drawEquipmentPanel(panel, state) {
+    const e = state.equipment;
+    const readings = {
+      channels: [
+        ['G СУЗ', e.suzFlow, 150, '%'],
+        ['T СУЗ', e.suzTemperature, 100, '°C'],
+        ['АВАР. БАК', e.suzTank, 100, '%'],
+        ['G ГАЗА', e.gasFlow, 200, '%'],
+        ['P ГАЗА', e.gasPressure, 2, 'отн.'],
+        ['ВЛАЖНОСТЬ', e.gasHumidity, 1, 'отн.'],
+      ],
+      thermal: [
+        ['G КМПЦ-Л', state.flowLeft, 150, '%'],
+        ['G КМПЦ-П', state.flowRight, 150, '%'],
+        ['ПЭН-Л', e.feedCapacityLeft * 100, 150, '%'],
+        ['ПЭН-П', e.feedCapacityRight * 100, 150, '%'],
+        ['БС-Л', state.drumLevelLeft + 1200, 1800, 'мм+1200'],
+        ['БС-П', state.drumLevelRight + 1200, 1800, 'мм+1200'],
+      ],
+      turbines: [
+        ['P КОНД.-1', e.condenserPressure1, 30, 'кПа'],
+        ['P КОНД.-2', e.condenserPressure2, 30, 'кПа'],
+        ['U ГЕН.-1', e.generatorVoltage1, 25, 'кВ'],
+        ['U ГЕН.-2', e.generatorVoltage2, 25, 'кВ'],
+        ['КЛАПАН-1', e.turbineValve1 * 100, 100, '%'],
+        ['КЛАПАН-2', e.turbineValve2 * 100, 100, '%'],
+      ],
+      alarms: [
+        ['САОР ГОТОВА', e.eccsCapacity * 100, 150, '%'],
+        ['СПиР ОТВОД', e.cooldownMW, 60, 'МВт'],
+        ['ПРОДУВКА', e.blowdownKgS, 20, 'кг/с'],
+        ['СИГНАЛОВ', state.alarms.length, 20, 'шт.'],
+        ['КВИТИРОВАНО', Number(e.acknowledged), 1, ''],
+        ['ЛАМПЫ ТЕСТ', Number(e.lampTestUntil > state.elapsed), 1, ''],
+      ],
+    }[panel.kind];
+    const context = panel.texture.getContext();
+    context.fillStyle = '#596164';
+    context.fillRect(0, 0, 1048, 600);
+    readings.forEach(([label, raw, maximum, unit], index) => {
+      const x = 12 + (index % 3) * 346;
+      const y = 12 + Math.floor(index / 3) * 292;
+      context.fillStyle = '#d8cfad';
+      context.fillRect(x, y, 330, 270);
+      context.strokeStyle = '#34342f';
+      context.lineWidth = 7;
+      context.strokeRect(x, y, 330, 270);
+      context.fillStyle = '#34342f';
+      context.textAlign = 'center';
+      context.font = 'bold 28px monospace';
+      context.fillText(label, x + 165, y + 48, 310);
+      context.font = '22px monospace';
+      context.fillText(`0 — ${maximum} ${unit}`, x + 165, y + 243, 308);
+      context.strokeStyle = '#5b574b';
+      context.lineWidth = 3;
+      context.beginPath();
+      context.moveTo(x + 24, y + 160);
+      context.lineTo(x + 306, y + 160);
+      for (let tick = 0; tick <= 10; tick++) {
+        const at = x + 24 + tick * 28.2;
+        context.moveTo(at, y + 145);
+        context.lineTo(at, y + 180);
+      }
+      context.stroke();
+      const needle = x + 24 + 282 * Math.max(0, Math.min(1, raw / maximum));
+      context.strokeStyle = '#943a30';
+      context.lineWidth = 10;
+      context.beginPath();
+      context.moveTo(needle, y + 100);
+      context.lineTo(needle, y + 198);
+      context.stroke();
+    });
+    panel.texture.update();
+    panel.renderedAt = this.lastDraw;
+  }
+
   updateChannelMaps(state) {
     for (const item of this.channelIndicators) {
       const local = Math.max(
@@ -1201,67 +1463,32 @@ export class RbmkPhysicalConsole {
   }
 
   fidelityMetrics(auditReport = window.rbmkPhysicalAuditReport) {
-    const auxiliaryCells = this.auxiliaryPanels.reduce(
-      (total, panel) =>
-        total +
-        (panel.kind === 'channels' ? 80 : panel.kind === 'alarms' ? 32 : 20),
-      0,
-    );
-    const functionalElements =
-      this.signalPanels.length * 32 +
-      this.mimicPanels.length +
-      this.channelIndicators.length +
-      this.coreCells.length +
-      this.recorders.length +
-      this.screens.length +
-      auxiliaryCells +
-      this.readouts.length +
-      this.buttons.length +
-      1;
     const wallBays = this.signalPanels.length;
-    const deskSections = this.auxiliaryPanels.length + 4;
-    const layout =
-      100 * ((Math.min(9, wallBays) / 9 + Math.min(8, deskSections) / 8) / 2);
-    const systemsCovered = PANEL_SYSTEMS.length;
-    const systemsRequired = 19;
-    const systemCoverage = Math.min(
-      100,
-      (systemsCovered / systemsRequired) * 100,
-    );
-    const density = Math.min(100, (functionalElements / 600) * 100);
-    const semantics = 100;
     const behavior = auditReport?.total
       ? (auditReport.passed / auditReport.total) * 100
       : 0;
-    const score =
-      layout * 0.2 +
-      systemCoverage * 0.2 +
-      density * 0.2 +
-      semantics * 0.2 +
-      behavior * 0.2;
     return {
-      score: Math.round(score),
-      gate: 80,
-      passed: score >= 80 && semantics === 100 && behavior === 100,
-      layout: Math.round(layout),
-      systemCoverage,
-      density: Math.round(density),
-      semantics,
+      score: null,
+      gate: 90,
+      passed: false,
+      measurementStatus: 'unmeasured',
+      layout: null,
+      systemCoverage: null,
+      density: null,
+      semantics: null,
       behavior: Math.round(behavior),
       counts: {
         wallBays,
-        deskSections,
+        deskSections: 8,
         signalCells: this.signalPanels.length * 32,
         mimicBlocks: this.mimicPanels.length,
         channelCells: this.channelIndicators.length + this.coreCells.length,
         recorders: this.recorders.length,
         analogSections: this.screens.length,
-        auxiliaryCells,
+        auxiliaryCells: this.auxiliaryPanels.length * 6,
         physicalTargets: this.buttons.length,
-        functionalElements,
-        unlabeledDecorativeElements: 0,
-        systemsCovered,
-        systemsRequired,
+        unlabeledDecorativeElements: null,
+        systemsNamed: PANEL_SYSTEMS.length,
       },
     };
   }
@@ -1278,7 +1505,28 @@ export class RbmkPhysicalConsole {
     context.fillStyle = '#292b29';
     context.font = 'bold 15px monospace';
     context.textAlign = 'center';
-    context.fillText(CONTROL_SHORT_LABELS[name], 200, 17, 382);
+    context.fillText(
+      CONTROL_SHORT_LABELS[name] ||
+        RBMK_CONTROLS[name].shortLabel ||
+        RBMK_CONTROLS[name].label,
+      200,
+      17,
+      382,
+    );
+    if (EQUIPMENT_CONTROLS[name]) {
+      context.fillStyle = value ? '#33654d' : '#8d342a';
+      context.font = 'bold 27px monospace';
+      context.fillText(
+        value ? 'КОМАНДА: ВКЛ / ОТКР' : 'КОМАНДА: ОТКЛ / ЗАКР',
+        200,
+        52,
+        380,
+      );
+      readout.texture.update();
+      readout.renderedValue = value;
+      readout.renderedAt = this.lastDraw;
+      return;
+    }
     const left = 22;
     const right = 378;
     const y = 45;
@@ -1308,6 +1556,7 @@ export class RbmkPhysicalConsole {
   }
 
   readingValue(state, key) {
+    if (key.startsWith('rod:')) return state.rods[key.slice(4)];
     if (key.startsWith('control:')) return state.controls[key.slice(8)];
     if (key === 'voidPercent') return state.voidFraction * 100;
     if (key === 'turbineLoads')
@@ -1331,6 +1580,7 @@ export class RbmkPhysicalConsole {
   }
 
   readingNormalized(state, key, raw) {
+    if (key.startsWith('rod:')) return Number(raw) / 100;
     if (key.startsWith('control:'))
       return this.controlNormalized(key.slice(8), raw);
     const ranges = {
@@ -1433,11 +1683,6 @@ export class RbmkPhysicalConsole {
   }
 
   drawAnnunciator(context, state) {
-    const insertion =
-      (state.controls.manualRodInsertion +
-        state.controls.automaticRodInsertion +
-        state.controls.shortenedRodInsertion) /
-      3;
     const lamps = [
       ['АЗ-5', state.scrammed, 'red'],
       ['N >', state.power > 105, 'red'],
@@ -1448,8 +1693,8 @@ export class RbmkPhysicalConsole {
       ['БС-П', state.drumLevelRight < -450, 'yellow'],
       ['САОР', state.controls.eccsAvailable, 'green'],
       ['ВПРЫСК', state.controls.emergencyInjection, 'green'],
-      ['ГЦН-Л', state.controls.pumpsLeft < 4, 'yellow'],
-      ['ГЦН-П', state.controls.pumpsRight < 4, 'yellow'],
+      ['ГЦН-Л', state.controls.pumpsLeft < 3, 'yellow'],
+      ['ГЦН-П', state.controls.pumpsRight < 3, 'yellow'],
       ['ТГ-1', !state.controls.generatorBreaker1, 'yellow'],
       ['ТГ-2', !state.controls.generatorBreaker2, 'yellow'],
       ['ОЗР', state.orm < 15, 'red'],
@@ -1458,7 +1703,8 @@ export class RbmkPhysicalConsole {
       ['АР', state.controls.automaticRegulator, 'green'],
       ['ГОТОВН.', !state.scrammed, 'green'],
     ];
-    lamps.forEach(([label, active, color], index) => {
+    lamps.forEach(([label, condition, color], index) => {
+      const active = state.equipment.lampTestUntil > state.elapsed || condition;
       const column = index % 3;
       const row = Math.floor(index / 3);
       const x = 26 + column * 199;
@@ -1476,17 +1722,15 @@ export class RbmkPhysicalConsole {
       context.fillText(label, x + 91, y + 23, 170);
     });
     context.textAlign = 'left';
-    const local = Math.max(0, Math.min(1, state.power / 120));
     context.strokeStyle = '#4e4b40';
     context.lineWidth = 2;
     context.beginPath();
-    for (let x = 25; x <= 615; x += 8) {
-      const phase = (x - 25) / 590;
-      const y =
-        394 - local * 31 * (0.45 + Math.sin(phase * 24 + insertion / 30) * 0.2);
-      if (x === 25) context.moveTo(x, y);
+    this.history.forEach((sample, index) => {
+      const x = 25 + (index / Math.max(1, this.history.length - 1)) * 590;
+      const y = 412 - Math.max(0, Math.min(1, sample.power / 120)) * 34;
+      if (!index) context.moveTo(x, y);
       else context.lineTo(x, y);
-    }
+    });
     context.stroke();
   }
 }
