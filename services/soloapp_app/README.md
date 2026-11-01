@@ -22,3 +22,7 @@ before activating that revision. Mac uses its own S3 and database; publishing
 there does not modify production. See [docs/architecture.md](docs/architecture.md)
 for topology and limitations. No SQLite accounts or standalone upstream launcher
 are used by the integrated deployment.
+
+The planet and reactor control room are connected by a synchronized automatic
+door. PostgreSQL commits opening and passage before clients change rooms; both
+door views close after passage. See [door behavior and tests](docs/door.md).

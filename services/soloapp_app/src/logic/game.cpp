@@ -172,9 +172,11 @@ void Game::message(const drogon::WebSocketConnectionPtr &socket, const std::stri
         refresh();
         return;
     }
-    if ((v["type"] == "reactor_command" || v["type"] == "reactor_snapshot") && s.reactor) {
+    if (v["type"] == "door_request" ||
+        ((v["type"] == "reactor_command" || v["type"] == "reactor_snapshot") && s.reactor)) {
         v["from"] = Json::UInt64(s.id);
         v["user_id"] = s.user;
+        refresh(); // Include the last pose/map before processing a door request.
         std::lock_guard<std::mutex> lock(mutex_);
         if (reactorMessages_.size() < 128)
             reactorMessages_.push_back(std::move(v));
@@ -258,6 +260,7 @@ void Game::received(Frame frame) {
             welcome["user_id"] = s.user;
             welcome["world_protocol"] = 2;
             welcome["reactor_protocol"] = 1;
+            welcome["door_protocol"] = 1;
             welcome["rtc_config"]["iceServers"] = Json::Value(Json::arrayValue);
             welcome["peers"] = Json::Value(Json::arrayValue);
             for (auto id : peers)
@@ -294,6 +297,13 @@ void Game::received(Frame frame) {
         for (const auto &signal : frame.signals)
             if (signal["to"].asUInt64() == s.id)
                 send(s.socket, signal);
+        if (frame.door["revision"].asUInt64() != s.doorRevision) {
+            send(s.socket, frame.door);
+            s.doorRevision = frame.door["revision"].asUInt64();
+        }
+        for (const auto &reply : frame.doorReplies)
+            if (reply["to"].asUInt64() == s.id)
+                send(s.socket, reply);
         if (s.reactor) {
             const auto version = frame.reactor["version"].asUInt64();
             if (version != s.reactorVersion) {

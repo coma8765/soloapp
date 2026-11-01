@@ -1,3 +1,4 @@
+import { fetchAsset } from './asset-cache.js';
 import { Terrain, WATER_RADIUS, clamp } from '../shared/world.js';
 import { PlanetScene, FishView } from './scene.js';
 import { Player } from './player.js';
@@ -41,7 +42,7 @@ async function start() {
   );
   const scene = new B.Scene(engine);
   scene.useRightHandedSystem = true;
-  const response = await fetch(
+  const response = await fetchAsset(
     new URL('../assets/world.json', import.meta.url),
   );
   if (!response.ok) throw Error('Данные мира недоступны');
@@ -367,8 +368,10 @@ async function start() {
   if (
     location.hostname === '127.0.0.1' &&
     new URL(location.href).searchParams.has('physical-test')
-  )
+  ) {
+    reactor.enter();
     togglePhysical();
+  }
   const marine = new MarineLife(
     scene,
     terrain,
@@ -496,6 +499,13 @@ async function start() {
   let previous = performance.now(),
     hudAt = 0,
     reactorWasActive = false;
+  if (
+    location.hostname === '127.0.0.1' &&
+    new URL(location.href).searchParams.has('door-audit')
+  ) {
+    const { runDoorChecks } = await import('./door-checks.js');
+    window.doorChecks = runDoorChecks(window.planetApp);
+  }
   engine.runRenderLoop(() => {
     const now = performance.now(),
       dt = Math.min((now - previous) / 1000, 0.05);
