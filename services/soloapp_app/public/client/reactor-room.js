@@ -2,6 +2,7 @@ import { orientation, vec } from './scene.js';
 import { REACTOR_MAP } from '../shared/room.js';
 import { RbmkModel } from './rbmk-model.js';
 import { RBMK_CONTROLS, RBMK_PANEL_PARTS } from './rbmk-data.js';
+import { RbmkPhysicalConsole } from './rbmk-console.js';
 
 const B = window.BABYLON;
 export { REACTOR_MAP } from '../shared/room.js';
@@ -119,7 +120,7 @@ export class ReactorRoom {
         new URL(`../assets/reactor/${filename}`, import.meta.url).href,
         this.scene,
         false,
-        false,
+        true,
         B.Texture.TRILINEAR_SAMPLINGMODE,
       );
       texture.anisotropicFilteringLevel = 8;
@@ -176,7 +177,7 @@ export class ReactorRoom {
     this.roomLight.setEnabled(false);
     this.buildExitPortal();
     this.buildHotspots();
-    this.buildStatusDisplay();
+    this.buildPhysicalConsole();
   }
 
   buildPlanetPortal() {
@@ -288,37 +289,12 @@ export class ReactorRoom {
     }
   }
 
-  buildStatusDisplay() {
-    const consoleMaterial = this.material('RBMK training console', '#30393b');
-    this.box(
-      'RBMK training console body',
-      [4.6, 1.15, 0.35],
-      [0, 1.55, -7.7],
-      consoleMaterial,
-    );
-    this.statusPlane = B.MeshBuilder.CreatePlane(
-      'RBMK live parameter display',
-      { width: 4.25, height: 2.2 },
-      this.scene,
-    );
-    this.statusPlane.parent = this.root;
-    this.statusPlane.position.set(0, 2.45, -7.49);
-    this.statusPlane.isPickable = false;
-    this.statusTexture = new B.DynamicTexture(
-      'RBMK live parameter texture',
-      { width: 1024, height: 530 },
-      this.scene,
-      true,
-    );
-    const material = this.material(
-      'RBMK live parameter material',
-      '#ffffff',
-      true,
-    );
-    material.diffuseTexture = this.statusTexture;
-    material.emissiveTexture = this.statusTexture;
-    material.backFaceCulling = false;
-    this.statusPlane.material = material;
+  buildPhysicalConsole() {
+    this.physicalConsole = new RbmkPhysicalConsole(this.scene, this.root, {
+      state: () => this.model.snapshot(),
+      control: (name, value) => this.commitControl(name, value),
+      action: (action) => this.commitAction(action),
+    });
     this.drawStatus(true);
   }
 
@@ -381,6 +357,27 @@ export class ReactorRoom {
       return true;
     }
     return false;
+  }
+
+  commitControl(name, rawValue) {
+    const value = this.model.setControl(name, rawValue);
+    if (value === undefined) return false;
+    this.share('control', { name, value });
+    this.record(
+      `${RBMK_CONTROLS[name].label}: ${this.formatControl(name, value)}`,
+    );
+    this.syncDialog();
+    this.drawStatus(true);
+    return true;
+  }
+
+  commitAction(action) {
+    if (!this.applyAction(action)) return false;
+    this.share('action', { action });
+    this.record(this.actionLabel(action));
+    this.syncDialog();
+    this.drawStatus(true);
+    return true;
   }
 
   receiveNetworkMessage(peerId, message) {
@@ -460,7 +457,7 @@ export class ReactorRoom {
       const input = event.target.closest('[data-rbmk-control]');
       if (!input) return;
       const name = input.dataset.rbmkControl;
-      const value = this.model.setControl(
+      this.commitControl(
         name,
         input.type === 'checkbox'
           ? input.checked
@@ -468,51 +465,67 @@ export class ReactorRoom {
             ? Number(input.value)
             : input.value,
       );
-      if (value === undefined) return;
-      this.share('control', { name, value });
-      this.record(
-        `${RBMK_CONTROLS[name].label}: ${this.formatControl(name, value)}`,
-      );
-      this.syncDialog();
-      this.drawStatus(true);
     });
     actions.addEventListener('click', (event) => {
       const action =
         event.target.closest('[data-rbmk-action]')?.dataset.rbmkAction;
-      if (!this.applyAction(action)) return;
-      this.share('action', { action });
-      this.record(this.actionLabel(action));
-      this.syncDialog();
-      this.drawStatus(true);
+      this.commitAction(action);
     });
     this.canvas.addEventListener('pointermove', (event) => {
-      if (!this.active || !this.hints || event.target !== this.canvas) return;
+      if (!this.active || event.target !== this.canvas) return;
       const hit = this.scene.pick(
         this.scene.pointerX,
         this.scene.pointerY,
-        (mesh) => !!mesh.metadata?.rbmkPart,
+        (mesh) =>
+          !!(
+            mesh.metadata?.rbmkPart ||
+            mesh.metadata?.rbmkControl ||
+            mesh.metadata?.rbmkAction
+          ),
       );
-      const part = hit?.pickedMesh?.metadata?.rbmkPart;
-      if (part) this.openPart(part);
-      this.canvas.style.cursor = part ? 'help' : '';
+      const mesh = hit?.pickedMesh;
+      const part = mesh?.metadata?.rbmkPart;
+      if (this.hints && part) this.openPart(part);
+      this.canvas.style.cursor = mesh
+        ? mesh.metadata.rbmkControl || mesh.metadata.rbmkAction
+          ? 'pointer'
+          : this.hints
+            ? 'help'
+            : ''
+        : '';
     });
     this.canvas.addEventListener(
       'click',
       (event) => {
-        if (!this.active || !this.hints) return;
+        if (!this.active) return;
         const hit = this.scene.pick(
           this.scene.pointerX,
           this.scene.pointerY,
-          (mesh) => !!mesh.metadata?.rbmkPart,
+          (mesh) =>
+            !!(
+              mesh.metadata?.rbmkPart ||
+              mesh.metadata?.rbmkControl ||
+              mesh.metadata?.rbmkAction
+            ),
         );
-        const part = hit?.pickedMesh?.metadata?.rbmkPart;
-        if (part) {
+        const mesh = hit?.pickedMesh;
+        if (this.physicalConsole.activate(mesh)) {
+          event.stopImmediatePropagation();
+          return;
+        }
+        const part = mesh?.metadata?.rbmkPart;
+        if (this.hints && part) {
           event.stopImmediatePropagation();
           this.openPart(part);
         }
       },
       true,
     );
+    this.scene.onPointerObservable.add((pointerInfo) => {
+      if (!this.active || pointerInfo.type !== B.PointerEventTypes.POINTERPICK)
+        return;
+      this.physicalConsole.activate(pointerInfo.pickInfo?.pickedMesh);
+    });
   }
 
   setHints(enabled) {
@@ -525,6 +538,7 @@ export class ReactorRoom {
       mesh.isPickable = this.hints;
       mesh.material.alpha = this.hints ? 0.13 : 0.025;
     }
+    this.physicalConsole.setHints(this.hints);
     if (this.hints) {
       document.exitPointerLock?.();
       this.player.keys.clear();
@@ -733,55 +747,6 @@ export class ReactorRoom {
   }
 
   drawStatus(force = false) {
-    const now = performance.now();
-    if (!force && now - this.lastStatusDraw < 150) return;
-    this.lastStatusDraw = now;
-    const s = this.model.snapshot();
-    const context = this.statusTexture.getContext();
-    context.fillStyle = '#071918';
-    context.fillRect(0, 0, 1024, 530);
-    context.strokeStyle = '#4fae78';
-    context.lineWidth = 5;
-    context.strokeRect(8, 8, 1008, 514);
-    context.fillStyle = '#87ffc0';
-    context.font = 'bold 42px monospace';
-    context.fillText('РБМК · УЧЕБНАЯ МОДЕЛЬ', 40, 62);
-    context.font = '34px monospace';
-    const rows = [
-      [`N, %`, s.power.toFixed(1)],
-      [`P КМПЦ, МПа`, s.pressure.toFixed(2)],
-      [
-        `H БС Л/П, мм`,
-        `${Math.round(s.drumLevelLeft)}/${Math.round(s.drumLevelRight)}`,
-      ],
-      [`ОЗР, ст.`, s.orm.toFixed(1)],
-      [
-        `G КМПЦ Л/П, %`,
-        `${s.measuredFlowLeft.toFixed(0)}/${s.measuredFlowRight.toFixed(0)}`,
-      ],
-      [`Nэл, МВт`, s.electricalPower.toFixed(0)],
-    ];
-    rows.forEach(([label, value], index) => {
-      const x = index < 3 ? 40 : 530;
-      const y = 130 + (index % 3) * 62;
-      context.fillStyle = '#8aaea0';
-      context.fillText(label, x, y);
-      context.fillStyle = '#d8ffe5';
-      context.textAlign = 'right';
-      context.fillText(value, x + 410, y);
-      context.textAlign = 'left';
-    });
-    context.fillStyle = s.alarms.length ? '#ff6b55' : '#73d892';
-    context.font = 'bold 30px monospace';
-    const alarm = s.alarms[0] || 'НОРМАЛЬНАЯ ЭКСПЛУАТАЦИЯ';
-    context.fillText(alarm.slice(0, 52), 40, 430);
-    context.fillStyle = '#789c8c';
-    context.font = '24px monospace';
-    context.fillText(
-      'Оценочная динамика для тренажёра · не проектные данные',
-      40,
-      490,
-    );
-    this.statusTexture.update();
+    this.physicalConsole?.sync(force);
   }
 }
