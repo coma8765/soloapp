@@ -41,3 +41,11 @@ add_test(NAME door COMMAND door_test)
 # Explicit integration binary: run against a disposable database with schema.sql.
 add_executable(world_store_test tests/world_store_test.cpp)
 target_link_libraries(world_store_test PRIVATE world_store)
+
+add_executable(engineer_test tests/engineer_test.cpp)
+target_include_directories(engineer_test PRIVATE src/logic)
+target_link_libraries(engineer_test PRIVATE Drogon::Drogon)
+add_test(NAME engineer COMMAND engineer_test)
+add_executable(engineer_pipeline_probe tests/engineer_pipeline_probe.cpp src/logic/professor.cpp)
+target_include_directories(engineer_pipeline_probe PRIVATE src ../../libs)
+target_link_libraries(engineer_pipeline_probe PRIVATE Drogon::Drogon OpenSSL::Crypto)

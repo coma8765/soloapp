@@ -339,10 +339,19 @@ export class ReactorInstructor {
       this.present(this.session.state);
   }
 
+  setConversationActive(active) {
+    if (this.conversationActive === active) return;
+    this.conversationActive = active;
+    if (active) this.stop();
+    else if (this.room.active && this.session?.state)
+      this.present(this.session.state);
+  }
+
   canReplyToVisitor() {
     return (
       this.enabled &&
       !this.announcementActive &&
+      !this.conversationActive &&
       !this.workerReply &&
       !this.speaking &&
       !this.session?.voices.size &&
@@ -363,6 +372,7 @@ export class ReactorInstructor {
   }
 
   present(state) {
+    if (this.conversationActive) return;
     // One speech owner: a short local worker reply temporarily yields to chat
     // and announcements, then resumes the current shared instructor sentence.
     if (

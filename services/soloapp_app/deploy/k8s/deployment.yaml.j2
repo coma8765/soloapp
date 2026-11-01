@@ -1,3 +1,4 @@
+{% set engineer = whoami_config.engineer | default({}) %}
 apiVersion: v1
 kind: List
 items:
@@ -42,6 +43,14 @@ items:
           - {name: LISTEN_ADDRESS, value: '0.0.0.0'}
           - {name: LLAMA_URL, value: 'http://llama.soloapp.svc.cluster.local:8180'}
           - {name: TTS_URL, value: 'http://tts.soloapp.svc.cluster.local:8179'}
+          - name: ENGINEER_CORPUS
+            value: {{ engineer.corpus | default('vver1200-research') | to_json }}
+          - name: ENGINEER_SEARCH_URL
+            value: {{ engineer.search_url | default('') | to_json }}
+          - name: OLLAMA_URL
+            value: {{ engineer.ollama_url | default('') | to_json }}
+          - name: OLLAMA_MODEL
+            value: {{ engineer.ollama_model | default('') | to_json }}
           ports: [{name: http, containerPort: {{ whoami_config.port }}}]
           resources: {{ whoami_config.resources | to_json }}
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
@@ -107,3 +116,13 @@ items:
           projected:
             sources:
             - serviceAccountToken: {path: token, expirationSeconds: 600, audience: soloapp-lockbox}
+
+{% if engineer.egress | default([]) %}
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata: {name: whoami-to-engineer-services, namespace: soloapp}
+  spec:
+    podSelector: {matchLabels: {app: whoami}}
+    policyTypes: [Egress]
+    egress: {{ engineer.egress | to_json }}
+{% endif %}

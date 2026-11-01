@@ -87,5 +87,14 @@ export const operations = {
       200
     ],
     "websocket": false
+  },
+  "engineer_respond": {
+    "path": "/api/v1/soloapp_app/v1/engineer/respond",
+    "method": "POST",
+    "timeout": 180000,
+    "success": [
+      200
+    ],
+    "websocket": false
   }
 };
