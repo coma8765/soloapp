@@ -234,7 +234,9 @@ jobs:
       - name: Verify synthesis without network or writable filesystem
         run: docker run --rm --network none --read-only --cap-drop=ALL -v "$PWD/services/tts/tests/smoke.py:/smoke.py:ro" --entrypoint python3 soloapp-tts-test /smoke.py
       - name: Build offline Whisper runtime
-        run: docker build -t soloapp-whisper-test -f services/whisper/deploy/Dockerfile .
+        run: |
+          docker buildx create --name whisper-builder --use
+          docker buildx build --load -t soloapp-whisper-test -f services/whisper/deploy/Dockerfile .
       - name: Verify real Whisper offline model within pod resource limits
         run: docker run --rm --network none --read-only --cap-drop=ALL --memory=2560m --cpus=2 -v "$PWD/services/whisper/tests/smoke.py:/smoke.py:ro" --entrypoint python3 soloapp-whisper-test /smoke.py
       - name: Export immutable Whisper image
