@@ -23,6 +23,17 @@ for service in "${services[@]}"; do
   dockerfile="services/$service/deploy/Dockerfile"
   # Keep the deployed image identity for digest-based rollback compatibility.
   if [ "$service" = whoami ]; then dockerfile=services/soloapp_app/deploy/Dockerfile; fi
+  if [ "$service" = whisper ] && [ -n "${WHISPER_BASE_CACHE:-}" ]; then
+    base_options=()
+    if [ "${REFRESH_WHISPER_BASE:-false}" = true ]; then
+      base_options+=(--pull --no-cache-filter model,runtime-base)
+    elif [ -f "$WHISPER_BASE_CACHE/index.json" ]; then
+      base_options+=(--cache-from "type=local,src=$WHISPER_BASE_CACHE")
+    fi
+    docker buildx build --platform linux/amd64 --target runtime-base \
+      "${base_options[@]}" --cache-to "type=local,dest=$WHISPER_BASE_CACHE,mode=min" \
+      -f "$dockerfile" .
+  fi
   docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
     --target runtime --label "org.opencontainers.image.revision=$sha" --label "org.opencontainers.image.version=${RELEASE_VERSION:-$sha}" \
     -f "$dockerfile" \
