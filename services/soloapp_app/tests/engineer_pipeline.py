@@ -75,7 +75,9 @@ class Handler(BaseHTTPRequestHandler):
             calls.append(("ollama", request))
             assert request["stream"] is False
             assert request["model"]
-            assert "https://example.org/manual" in request["messages"][1]["content"]
+            evidence = json.loads(request["messages"][1]["content"])
+            assert evidence["sources"][0]["text"] == source["source_text"]
+            assert "source_url" not in evidence["sources"][0]
             self.respond(
                 state.get("model_status", 200),
                 {"message": {"content": "Стержни СУЗ поглощают нейтроны."}},
@@ -123,6 +125,8 @@ try:
     result = run()
     assert result["status"] == 200, result
     assert result["body"]["sources"], result
+    if not args.live_search:
+        assert result["body"]["sources"][0]["source_url"] == "https://example.org/manual"
     assert base64.b64decode(result["body"]["audio_base64"]) == wav
     if not args.live_search:
         assert next(v for name, v in calls if name == "search")["q"] == ["стержни суз"], calls

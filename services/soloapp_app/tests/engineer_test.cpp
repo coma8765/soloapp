@@ -70,6 +70,8 @@ int main() {
     require(request["model"] == "model" && request["stream"] == false, "Wrong Ollama request");
     require(request["messages"][0]["role"] == "system" && request["messages"][1]["role"] == "user",
             "Evidence role changed");
+    require(request["messages"][1]["content"].asString().find("source_url") == std::string::npos,
+            "Provenance leaked into paraphrasing context");
     require(std::string(fallback) == "Будьте серъёзнее или задавайте более осознанные вопросы",
             "Fallback changed");
     std::cout << "Engineer corpus isolation, provenance, bounds, UTF-8 and model request: OK\n";
