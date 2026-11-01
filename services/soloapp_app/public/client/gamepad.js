@@ -191,6 +191,7 @@ export class GamepadControls {
     }
     if (down.some(Boolean) || left.x || left.y || right.x || right.y)
       this.active = true;
+    if (pressed(10)) this.toggleQuality?.();
     if (pressed(9) || pressed(2)) {
       if (this.panel.visible) this.closePanel();
       else {
@@ -260,6 +261,6 @@ export class GamepadControls {
     this.panel.controllerActive = this.active;
     this.status.textContent = this.panel.visible
       ? 'DualSense · крестовина / L — выбор · ✕ — подтвердить · ○ — назад'
-      : 'Геймпад · L/R — ходьба/обзор · L1+R1 — физическая комната · A/✕ — нажать';
+      : 'Геймпад · L/R — ходьба/обзор · L3 — графика · L1+R1 — комната · A/✕ — нажать';
   }
 }
