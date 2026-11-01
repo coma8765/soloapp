@@ -39,6 +39,38 @@ int run_test(int argc, char **argv) {
     const auto one = participant(1, "synthetic-user-1"), two = participant(2, "synthetic-user-2");
     first.exchange(one, {});
     auto joined = second.exchange(two, {});
+    // PostgreSQL JSON decoding can change unsigned IDs to signed JSON integers.
+    // Exercise the same 48-bit IDs and UInt64 signal targets as live WebSockets.
+    auto checkSignals = [&](planet::WorldStore &sender, planet::WorldStore &receiver,
+                            const Json::Value &senderPlayers, const Json::Value &receiverPlayers) {
+        for (const char *type : {"sdp", "ice"}) {
+            Json::Value signal;
+            signal["type"] = type;
+            signal["from"] = Json::UInt64(senderPlayers[0]["id"].asUInt64());
+            signal["to"] = Json::UInt64(receiverPlayers[0]["id"].asUInt64());
+            signal["payload"] = "synthetic-negotiation";
+            auto sent = sender.exchange(senderPlayers, {signal});
+            auto received = &sender == &receiver ? sent : receiver.exchange(receiverPlayers, {});
+            if (received.signals.size() != 1 || received.signals[0]["type"] != type ||
+                received.signals[0]["from"].asUInt64() != signal["from"].asUInt64() ||
+                received.signals[0]["to"].asUInt64() != signal["to"].asUInt64() ||
+                received.signals[0]["payload"] != signal["payload"])
+                throw std::runtime_error("SDP/ICE signal was lost or misrouted");
+            if (!receiver.exchange(receiverPlayers, {}).signals.empty())
+                throw std::runtime_error("SDP/ICE signal delivered twice");
+        }
+    };
+    auto peerOne = one, peerTwo = two;
+    peerOne[0]["id"] = Json::UInt64(0x123456789abcULL);
+    peerTwo[0]["id"] = Json::UInt64(0x23456789abcdULL);
+    first.exchange(peerOne, {});
+    second.exchange(peerTwo, {});
+    checkSignals(first, second, peerOne, peerTwo);
+    checkSignals(second, first, peerTwo, peerOne);
+    checkSignals(first, first, peerOne, peerOne);
+    first.exchange(one, {});
+    second.exchange(two, {});
+    std::cout << "PASS: bidirectional cross-node and same-node SDP/ICE delivery\n";
     Json::Value command;
     command["type"] = "reactor_command";
     command["from"] = 2;
