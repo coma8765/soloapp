@@ -43,7 +43,9 @@ spec:
         imagePullPolicy: {{ keycloak_config.image_pull_policy }}
         env:
         - {name: KC_HOSTNAME, value: 'https://{{ public_domain }}/id'}
-        - {name: KC_CACHE_EMBEDDED_NETWORK_BIND_ADDRESS, value: '0.0.0.0'}
+        - name: KC_CACHE_EMBEDDED_NETWORK_BIND_ADDRESS
+          valueFrom:
+            fieldRef: {fieldPath: status.podIP}
         - {name: KC_CACHE_EMBEDDED_NETWORK_EXTERNAL_ADDRESS, value: '{{ private_ip }}'}
         - {name: KC_CACHE_EMBEDDED_NETWORK_EXTERNAL_PORT, value: '7800'}
         - {name: KC_CACHE_EMBEDDED_NODE_NAME, value: 'keycloak-{{ inventory_hostname }}'}
