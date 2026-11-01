@@ -22,6 +22,7 @@ parser.add_argument("--image", default="localhost/soloapp-chief-test")
 parser.add_argument("--live-search", action="store_true")
 parser.add_argument("--live-model", action="store_true")
 parser.add_argument("--model", default="qwen2.5:3b")
+parser.add_argument("--question", default="Для чего нужны стержни СУЗ?")
 args = parser.parse_args()
 state = {}
 calls = []
@@ -68,9 +69,7 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(int(self.headers["Content-Length"]))
         if self.path == "/transcribe":
             calls.append(("whisper", len(raw)))
-            self.respond(
-                200, {"words": [{"word": state.get("question", "Для чего нужны стержни СУЗ?")}]}
-            )
+            self.respond(200, {"words": [{"word": state.get("question", args.question)}]})
         elif self.path == "/api/chat":
             request = json.loads(raw)
             calls.append(("ollama", request))
