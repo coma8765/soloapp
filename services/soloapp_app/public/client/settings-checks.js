@@ -72,7 +72,9 @@ try {
   check(
     (await avatar.ready) &&
       avatar.id === 'scientist' &&
-      avatar.joints.size === 7,
+      ['Head', 'thigh_l', 'calf_r', 'lowerarm_l', 'foot_r'].every((name) =>
+        avatar.joints.has(name),
+      ),
     'По умолчанию загружен учёный с рабочим скелетом без fallback',
   );
   avatar.update(0, 0, 0, true);
@@ -371,6 +373,7 @@ try {
   // B must still work when settings have disabled locomotion.
   const xr = {
     roomShortcut: new RoomShortcut(),
+    qualityShortcut: new RoomShortcut(),
     active: true,
     player,
     authPanel: panel,
