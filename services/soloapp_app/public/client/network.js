@@ -30,6 +30,31 @@ export class Network {
     this.worldAttempt = 0;
     this.generation = 0;
     this.worldTick = -1;
+    player.networkPeople = () => this.collisionPeople();
+  }
+
+  collisionPeople(now = performance.now()) {
+    const people = [];
+    for (const [id, remote] of this.remotes) {
+      if (
+        id === this.id ||
+        !remote.state ||
+        (remote.state.map || 'planet') !== this.player.worldMap ||
+        now - remote.last > 3000
+      )
+        continue;
+      // Collide with the interpolated body the participant actually sees.
+      const { x, y, z } = remote.node.position;
+      people.push({
+        x,
+        y,
+        z,
+        radius: 0.35,
+        // Equal spawn positions must separate in opposite directions on peers.
+        separationSign: this.id < id ? -1 : 1,
+      });
+    }
+    return people;
   }
 
   send(message) {

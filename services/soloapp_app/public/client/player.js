@@ -1,6 +1,7 @@
 import { orientation, vec } from './scene.js';
 import { LocalAvatar } from './local-avatar.js';
 import { resolveRoomMovement } from './room-collision.js';
+import { resolvePlanetPeople } from './player-collision.js';
 import { DEFAULT_AVATAR } from './avatar-catalog.js';
 import { WATER_RADIUS, clamp } from '../shared/world.js';
 import {
@@ -16,6 +17,7 @@ export class Player {
     this.worldMap = 'planet';
     this.roomColliders = [];
     this.roomPeople = () => [];
+    this.networkPeople = () => [];
     this.movementConstraints = [];
     this.structures = [];
     this.scene = scene;
@@ -204,10 +206,16 @@ export class Player {
         next,
         this.roomColliders,
         0.35,
-        this.roomPeople(),
+        [
+          ...this.roomPeople(),
+          ...this.networkPeople().filter(
+            (person) => Math.abs(person.y - next.y) < 1.75,
+          ),
+        ],
       );
       this.radialSpeed = 0;
     } else {
+      next = resolvePlanetPeople(before, next, this.networkPeople());
       // Tree trunks use the same 0.18 m collider and 0.35 m player radius.
       for (const tree of this.planet.trees) {
         const axis = tree.normalizeToNew(),
