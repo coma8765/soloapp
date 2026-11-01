@@ -361,6 +361,8 @@ export class ReactorRoom {
   interactiveMesh(mesh) {
     return !!(
       mesh?.isEnabled() &&
+      mesh.isVisible &&
+      mesh.isPickable &&
       (mesh.metadata?.rbmkInstructor ||
         mesh.metadata?.physicalSystem ||
         mesh.metadata?.rbmkPart ||
@@ -381,11 +383,47 @@ export class ReactorRoom {
 
   activateCenter() {
     if (!this.active || this.uiOpen) return false;
-    return this.activatePhysical(
-      this.scene.pickWithRay(this.scene.activeCamera.getForwardRay(8), (mesh) =>
-        this.interactiveMesh(mesh),
-      )?.pickedMesh,
+    return this.activatePhysical(this.pickInteraction(true)?.pickedMesh);
+  }
+
+  pickInteraction(center = document.pointerLockElement === this.canvas, event) {
+    const predicate = (mesh) => this.interactiveMesh(mesh);
+    if (center)
+      return this.scene.pickWithRay(
+        this.scene.activeCamera.getForwardRay(8),
+        predicate,
+      );
+    const rect = this.canvas.getBoundingClientRect();
+    return this.scene.pick(
+      event ? event.clientX - rect.left : this.scene.pointerX,
+      event ? event.clientY - rect.top : this.scene.pointerY,
+      predicate,
     );
+  }
+
+  updateHover() {
+    if (!this.active) return null;
+    const center =
+      document.pointerLockElement === this.canvas ||
+      (!this.uiOpen && document.body.classList.contains('playing'));
+    const mesh =
+      !this.player.xr && (center || this.pointerOverCanvas)
+        ? this.pickInteraction(center)?.pickedMesh
+        : null;
+    this.physicalConsole.setHovered(mesh);
+    this.canvas.style.cursor =
+      !center && mesh
+        ? mesh.metadata.rbmkInstructor ||
+          mesh.metadata.rbmkControl ||
+          mesh.metadata.rbmkAction ||
+          mesh.metadata.rbmkJournal ||
+          mesh.metadata.physicalSystem
+          ? 'pointer'
+          : this.hints
+            ? 'help'
+            : ''
+        : '';
+    return mesh;
   }
 
   togglePhysical() {
@@ -793,41 +831,23 @@ export class ReactorRoom {
     });
     this.canvas.addEventListener('pointermove', (event) => {
       if (!this.active || event.target !== this.canvas) return;
-      const hit = this.scene.pick(
-        this.scene.pointerX,
-        this.scene.pointerY,
-        (mesh) => this.interactiveMesh(mesh),
-      );
-      const mesh = hit?.pickedMesh;
+      this.pointerOverCanvas = true;
+      const mesh = this.updateHover();
       const part = mesh?.metadata?.rbmkPart;
-      this.physicalConsole.setHovered(mesh);
       if (this.hints && part) this.openPart(part);
-      this.canvas.style.cursor = mesh
-        ? mesh.metadata.rbmkInstructor ||
-          mesh.metadata.rbmkControl ||
-          mesh.metadata.rbmkAction ||
-          mesh.metadata.rbmkJournal
-          ? 'pointer'
-          : this.hints
-            ? 'help'
-            : ''
-        : '';
     });
+    this.canvas.addEventListener('pointerleave', () => {
+      this.pointerOverCanvas = false;
+      this.updateHover();
+    });
+    // Camera motion (including walking/gamepad look) need not emit pointermove.
+    // Refresh after the camera update so highlight and activation use one ray.
+    this.scene.onBeforeRenderObservable.add(() => this.updateHover());
     this.canvas.addEventListener(
       'click',
       (event) => {
-        if (!this.active) return;
-        const hit =
-          document.pointerLockElement === this.canvas
-            ? this.scene.pickWithRay(
-                this.scene.activeCamera.getForwardRay(8),
-                (mesh) => this.interactiveMesh(mesh),
-              )
-            : this.scene.pick(
-                this.scene.pointerX,
-                this.scene.pointerY,
-                (mesh) => this.interactiveMesh(mesh),
-              );
+        if (!this.active || this.player.xr || event.button !== 0) return;
+        const hit = this.pickInteraction(undefined, event);
         const mesh = hit?.pickedMesh;
         if (
           mesh?.metadata?.rbmkInstructor ||
@@ -848,11 +868,9 @@ export class ReactorRoom {
       },
       true,
     );
-    this.scene.onPointerObservable.add((pointerInfo) => {
-      if (!this.active || pointerInfo.type !== B.PointerEventTypes.POINTERPICK)
-        return;
-      this.activatePhysical(pointerInfo.pickInfo?.pickedMesh);
-    });
+    // DOM click owns mouse/touch activation; selectXR owns XR activation.
+    // Babylon POINTERPICK uses cursor coordinates even under pointer lock and
+    // fires before click, so subscribing here would select a second/wrong key.
   }
 
   setHints(enabled) {
@@ -1027,6 +1045,7 @@ export class ReactorRoom {
     if (!this.active) return;
     this.instructor.leave();
     this.setHints(false);
+    this.physicalConsole.setHovered(null);
     this.journal.blur();
     this.server.leave();
     document.body.classList.remove('at-journal');
