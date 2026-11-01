@@ -509,7 +509,8 @@ export class ReactorRoom {
             ),
         );
         const mesh = hit?.pickedMesh;
-        if (this.physicalConsole.activate(mesh)) {
+        if (mesh?.metadata?.rbmkControl || mesh?.metadata?.rbmkAction) {
+          this.physicalConsole.activate(mesh);
           event.stopImmediatePropagation();
           return;
         }
