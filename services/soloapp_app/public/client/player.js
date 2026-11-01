@@ -2,7 +2,12 @@ import { orientation, vec } from './scene.js';
 import { LocalAvatar } from './local-avatar.js';
 import { DEFAULT_AVATAR } from './avatar-catalog.js';
 import { WATER_RADIUS, clamp } from '../shared/world.js';
-import { ROOM_MAP, ROOM_PLAYER_LIMIT, roomSpawn } from '../shared/room.js';
+import {
+  ROOM_MAP,
+  ROOM_PLAYER_LIMIT,
+  roomSpawn,
+  isReactorMap,
+} from '../shared/room.js';
 const B = window.BABYLON;
 export class Player {
   constructor(scene, terrain, planet, canvas, avatarId) {
@@ -114,6 +119,7 @@ export class Player {
     this.update(0);
   }
   toggleOverview() {
+    if (isReactorMap(this.worldMap)) return;
     this.overview = !this.overview;
     document.exitPointerLock?.();
     this.scene.activeCamera = this.overview ? this.overviewCamera : this.camera;

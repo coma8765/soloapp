@@ -1,4 +1,5 @@
 import { clamp } from '../shared/world.js';
+import { RoomShortcut } from './physical-room-input.js';
 
 export function stick(x = 0, y = 0, deadzone = 0.18) {
   x = Number.isFinite(x) ? clamp(x, -1, 1) : 0;
@@ -13,6 +14,7 @@ export class GamepadControls {
   constructor(player, panel, xr, status) {
     Object.assign(this, { player, panel, xr, status });
     this.previous = [];
+    this.roomShortcut = new RoomShortcut();
     this.needsNeutral = true;
     this.active = false;
     this.padKey = null;
@@ -40,6 +42,7 @@ export class GamepadControls {
   }
 
   release() {
+    this.roomShortcut.reset();
     this.player.gamepadMove = null;
     this.previous = [];
     this.needsNeutral = true;
@@ -181,6 +184,11 @@ export class GamepadControls {
       return;
     }
     const pressed = (index) => !!down[index] && !this.previous[index];
+    if (this.roomShortcut.poll(!!down[4] && !!down[5], !this.panel.visible)) {
+      this.togglePhysical?.();
+      this.previous = down;
+      return;
+    }
     if (down.some(Boolean) || left.x || left.y || right.x || right.y)
       this.active = true;
     if (pressed(9) || pressed(2)) {
@@ -226,6 +234,7 @@ export class GamepadControls {
       }
     } else {
       this.direction = '';
+      if (pressed(0)) this.activateWorld?.();
       if (pressed(3) && !this.xr.active && !this.player.overview)
         this.player.third = !this.player.third;
       if (pressed(11) && !this.xr.active) this.player.toggleOverview();
@@ -251,6 +260,6 @@ export class GamepadControls {
     this.panel.controllerActive = this.active;
     this.status.textContent = this.panel.visible
       ? 'DualSense · крестовина / L — выбор · ✕ — подтвердить · ○ — назад'
-      : 'DualSense · L — идти · R — смотреть · □ / Options — меню · △ — вид';
+      : 'Геймпад · L/R — ходьба/обзор · L1+R1 — физическая комната · A/✕ — нажать';
   }
 }

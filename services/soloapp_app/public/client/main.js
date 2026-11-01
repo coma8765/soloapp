@@ -19,6 +19,7 @@ import { ProfessorRecorder } from './professor-recorder.js';
 import { Laboratory } from './laboratory.js';
 import { ReactorRoom } from './reactor-room.js';
 import { setupFullscreen } from './fullscreen.js';
+import { keyboardRoomShortcut } from './physical-room-input.js';
 const $ = (id) => document.getElementById(id);
 async function start() {
   setupFullscreen($('fullscreen'), $('display-status'));
@@ -293,6 +294,50 @@ async function start() {
     $('gamepad-status'),
   );
   const touch = new TouchControls(player, authPanel, xr, $('world'), voice);
+  const togglePhysical = () => {
+    if (
+      room.serverId ||
+      lobby.countdown ||
+      authPanel.settingsOpen ||
+      document.hidden
+    )
+      return false;
+    $('auth-dialog').close();
+    lobby.visible = false;
+    authPanel.controllerFocus = '';
+    document.activeElement?.blur();
+    const changed = reactor.togglePhysical();
+    authPanel.sync();
+    authPanel.recenter = true;
+    if (xr.active) xr.sync();
+    $('physical-room').setAttribute(
+      'aria-pressed',
+      String(!!reactor.physicalView),
+    );
+    return changed;
+  };
+  $('physical-room').onclick = togglePhysical;
+  gamepad.togglePhysical = togglePhysical;
+  gamepad.activateWorld = () => reactor.activateCenter();
+  xr.togglePhysical = togglePhysical;
+  window.addEventListener('keydown', (event) => {
+    if (keyboardRoomShortcut(event)) {
+      event.preventDefault();
+      togglePhysical();
+    } else if (
+      event.code === 'KeyE' &&
+      !event.repeat &&
+      player.inputEnabled &&
+      !event.target.closest?.('input,textarea,select,button,[contenteditable]')
+    ) {
+      reactor.activateCenter();
+    }
+  });
+  if (
+    location.hostname === '127.0.0.1' &&
+    new URL(location.href).searchParams.has('physical-test')
+  )
+    togglePhysical();
   const marine = new MarineLife(
     scene,
     terrain,
@@ -387,6 +432,16 @@ async function start() {
   };
   if (
     location.hostname === '127.0.0.1' &&
+    reactor.physicalView &&
+    new URL(location.href).searchParams.has('physical-audit')
+  ) {
+    const { runPhysicalSystemChecks } = await import(
+      './physical-system-checks.js'
+    );
+    window.physicalSystemChecks = runPhysicalSystemChecks(window.planetApp);
+  }
+  if (
+    location.hostname === '127.0.0.1' &&
     new URL(location.href).searchParams.has('reactor-audit')
   ) {
     const { startRbmkPhysicalAudit } = await import('./rbmk-physical-audit.js');
@@ -470,14 +525,18 @@ async function start() {
         network.status + (network.id ? ' · #' + network.id : '');
       $('overview').disabled = reactor.active;
       $('overview').querySelector('span').textContent = reactor.active
-        ? 'Учебный БЩУ'
+        ? reactor.physicalView
+          ? 'Физическая система'
+          : 'Учебный БЩУ'
         : room.serverId
           ? 'Обзор комнаты'
           : 'Вся планета';
       $('world').setAttribute(
         'aria-label',
         reactor.active
-          ? 'Учебный блочный щит управления РБМК'
+          ? reactor.physicalView
+            ? 'Комната физических процессов РБМК'
+            : 'Учебный блочный щит управления РБМК'
           : room.serverId
             ? 'Белая комната'
             : 'Трёхмерная микропланета',
@@ -500,7 +559,7 @@ async function start() {
           `${Math.round(fps)} FPS · белая комната\n${network.peers.size + 1} / 8 игроков · RTT ${network.ping ?? '—'} мс\n${network.worldTransport} · tick ${network.worldTick}`;
       if (reactor.active)
         $('stats').textContent =
-          `${Math.round(fps)} FPS · учебный БЩУ РБМК\nОбщая детерминированная модель\nКоманда · ${reactor.teamSize()} участ.`;
+          `${Math.round(fps)} FPS · ${reactor.physicalView ? 'физическая система' : 'учебный БЩУ РБМК'}\nОбщая детерминированная модель\nКоманда · ${reactor.teamSize()} участ.`;
       $('players').textContent = reactor.active
         ? ''
         : [...network.remotes]
@@ -543,8 +602,18 @@ async function start() {
           ? 'Обзор комнаты · Tab — вернуться'
           : `Белая комната · ${player.third ? 'третье' : 'первое'} лицо`;
       if (reactor.active)
-        $('location').textContent =
-          'Учебный БЩУ · включите подсказки и наведите курсор на панель';
+        $('location').textContent = reactor.physicalView
+          ? 'Физическая система · P / L1+R1 / оба grip — в БЩУ · E / A / триггер — нажать'
+          : 'Учебный БЩУ · P / L1+R1 / оба grip — физическая система';
+      $('physical-room').setAttribute(
+        'aria-pressed',
+        String(!!reactor.physicalView),
+      );
+      $('physical-room').textContent = reactor.physicalView
+        ? 'P · Вернуться в БЩУ'
+        : 'P · Физическая система';
+      $('physical-room').disabled =
+        !!room.serverId || !!lobby.countdown || authPanel.settingsOpen;
     }
     scene.render();
   });

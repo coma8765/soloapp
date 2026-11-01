@@ -1,4 +1,5 @@
 const B = window.BABYLON;
+import { RoomShortcut, xrRoomShortcut } from './physical-room-input.js';
 export class XRView {
   constructor(scene, player, planet, button, hudText) {
     this.scene = scene;
@@ -10,6 +11,7 @@ export class XRView {
     this.armed = true;
     this.aDown = false;
     this.visible = true;
+    this.roomShortcut = new RoomShortcut();
     this.ready = this.init();
   }
   async init() {
@@ -31,6 +33,9 @@ export class XRView {
       // The XR camera uses tracked floor-relative poses; the parent supplies the planet frame.
       this.helper.camera.compensateOnFirstFrame = false;
       this.helper.sessionManager.onXRSessionInit.add((session) => {
+        session.addEventListener('inputsourceschange', () =>
+          this.roomShortcut.reset(),
+        );
         session.addEventListener('select', (event) => {
           this.authPanel?.selectXR(
             event,
@@ -128,6 +133,7 @@ export class XRView {
     this.hud.setEnabled(false);
   }
   enter() {
+    this.roomShortcut.reset();
     this.active = true;
     this.planet.setXRQuality(true);
     this.player.xr = true;
@@ -151,6 +157,7 @@ export class XRView {
     }
   }
   exit() {
+    this.roomShortcut.reset();
     for (const line of this.reactor?.xrRays?.values() || [])
       line.setEnabled(false);
     if (this.active) {
@@ -176,8 +183,19 @@ export class XRView {
     if (!this.active) return null;
     const session = this.helper.sessionManager.session;
     if (session.visibilityState !== 'visible') {
+      this.roomShortcut.reset();
       this.armed = true;
       this.aDown = false;
+      return B.Vector3.Zero();
+    }
+    if (
+      this.roomShortcut.poll(
+        xrRoomShortcut(session.inputSources),
+        this.player.inputEnabled && !this.authPanel?.visible,
+      )
+    ) {
+      this.togglePhysical?.();
+      this.sync();
       return B.Vector3.Zero();
     }
     let x = 0,
