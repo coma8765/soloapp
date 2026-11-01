@@ -522,6 +522,7 @@ export class ReactorRoom {
       this.receiveNetworkMessage(peerId, message);
     network.onReactorServerMessage = (message) => {
       if (message.type === 'reactor_disconnect') {
+        this.workers.sync.disconnect();
         this.door.sync.disconnect();
         this.server.disconnect();
         return;
@@ -530,6 +531,10 @@ export class ReactorRoom {
         this.door.sync.connect(message.doorProtocol, message.userId);
       if (message.type === 'door_state' || message.type === 'door_ack') {
         this.door.sync.receive(message);
+        return;
+      }
+      if (message.type === 'workers_state' || message.type === 'workers_ack') {
+        this.workers.sync.receive(message);
         return;
       }
       if (!this.active) return;

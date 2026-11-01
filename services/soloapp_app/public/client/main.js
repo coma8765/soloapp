@@ -4,6 +4,7 @@ import { PlanetScene, FishView } from './scene.js';
 import { Player } from './player.js';
 import { Network } from './network.js';
 import { renderParticipants } from './participants.js';
+import { WorkerControls } from './worker-controls.js';
 import { NatureAudio } from './audio.js';
 import { VoiceChat } from './voice.js';
 import { XRView } from './xr.js';
@@ -166,6 +167,11 @@ async function start() {
   );
   professors.sync = professorRecorder.shared = new LakeProfessorSync(network);
   reactor.connectNetwork(network);
+  const workerControls = new WorkerControls(
+    $('participant-metrics'),
+    reactor.workers,
+    network,
+  );
   engineer = new EngineerConversation(reactor, voice, () => auth.token);
   lobby = new Lobby(
     auth,
@@ -596,6 +602,7 @@ async function start() {
       hudAt = now + 250;
       fps = engine.getFps();
       renderParticipants($('participant-metrics'), network.participants, now);
+      workerControls.update();
       $('connection').textContent =
         network.status + (network.email ? ' · ' + network.email : '');
       $('overview').disabled = reactor.active;

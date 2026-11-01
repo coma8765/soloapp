@@ -4,6 +4,7 @@
 #include "json.hpp"
 #include "lake_professors.hpp"
 #include "odb/primary_pool.hpp"
+#include "workers.hpp"
 #include <algorithm>
 #include <filesystem>
 #include <memory>
@@ -96,6 +97,9 @@ Frame WorldStore::exchange(const Json::Value &local, const std::vector<Json::Val
     frame.professorReplies =
         LakeProfessorsAuthority::update(reactor["professors"], frame.players, reactorMessages, now);
     frame.professors = LakeProfessorsAuthority::publicState(reactor["professors"], now);
+    frame.workersReplies =
+        WorkersAuthority::update(reactor["workers"], frame.players, reactorMessages);
+    frame.workers = WorkersAuthority::publicState(reactor["workers"]);
     frame.reactor = reactor_.publicState(reactor);
     // One database clock for room NPCs, including late joiners across replicas.
     frame.reactor["serverTime"] = Json::Int64(now);

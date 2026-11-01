@@ -1,3 +1,4 @@
+import { WorkerCountSync } from './worker-controls.js';
 import { LocalAvatar } from './local-avatar.js';
 import { npcLabel } from './npc-label.js';
 import { REACTOR_MAP } from '../shared/room.js';
@@ -20,18 +21,15 @@ export class ReactorWorkers {
     this.room = room;
     this.clock = new WorkerClock();
     this.proximity = new WorkerProximity();
-    this.workers = Array.from({ length: WORKER_COUNT }, (_, index) => {
-      const avatar = new LocalAvatar(room.scene, 'scientist');
-      avatar.root.name = `Room worker ${index + 1}`;
-      avatar.root.parent = room.root;
-      const label = npcLabel(room.scene, avatar.root, `Работник ${index + 1}`);
-      const bubble = npcLabel(room.scene, avatar.root, WORKER_REPLY, 2.65, 3.6);
-      bubble.setEnabled(false);
-      return { avatar, label, bubble, replyUntil: 0 };
-    });
+    this.sync = new WorkerCountSync((message) => room.network?.send(message));
+    this.workers = Array.from({ length: WORKER_COUNT }, (_, index) =>
+      this.create(index),
+    );
+    this.nextArrival = 0;
     this.ready = Promise.all(this.workers.map(({ avatar }) => avatar.ready));
     this.furniture = room.root.getChildMeshes().filter((mesh) => {
       if (
+        mesh.isDescendantOf(room.exitPortal) ||
         mesh.isDescendantOf(room.instructor.avatar.root) ||
         this.workers.some((w) => mesh.isDescendantOf(w.avatar.root))
       )
@@ -49,10 +47,118 @@ export class ReactorWorkers {
     this.furniture = this.navigation.obstacles.map(
       (box) => this.furniture[box.sourceIndex],
     );
+    this.gate = { x: 0, z: room.exitPortal.position.z + 0.65 };
+    this.approach = this.navigation.nearest({
+      x: 0,
+      z: room.exitPortal.position.z - 1.2,
+    });
     room.player.roomPeople = () =>
       this.visible && this.initialized
         ? this.workers.map((w) => this.person(w.avatar.root.position))
         : [];
+  }
+
+  create(index) {
+    const avatar = new LocalAvatar(this.room.scene, 'scientist');
+    avatar.root.name = `Room worker ${index + 1}`;
+    avatar.root.parent = this.room.root;
+    const label = npcLabel(
+      this.room.scene,
+      avatar.root,
+      `Работник ${index + 1}`,
+    );
+    const bubble = npcLabel(
+      this.room.scene,
+      avatar.root,
+      WORKER_REPLY,
+      2.65,
+      3.6,
+    );
+    bubble.setEnabled(false);
+    return {
+      index,
+      avatar,
+      label,
+      bubble,
+      replyUntil: 0,
+      path: [],
+      replanAt: 0,
+    };
+  }
+
+  remove(worker) {
+    // Stop any queued reply before disposing its speaker.
+    if (this.room.instructor.speechAvatar === worker.avatar)
+      this.room.instructor.finishWorkerReply();
+    worker.avatar.setSpeaking(false);
+    worker.label.dispose(false, true);
+    worker.bubble.dispose(false, true);
+    worker.avatar.root.dispose(false, true);
+    this.workers = this.workers.filter((w) => w !== worker);
+    this.proximity.reset();
+  }
+
+  reconcile(time, participants) {
+    for (const worker of this.workers) {
+      const leaving = worker.index >= this.sync.count;
+      if (worker.leaving !== leaving) {
+        if (
+          !leaving &&
+          worker.leaving &&
+          worker.avatar.root.position.z > this.approach.z
+        )
+          worker.entering = true;
+        worker.leaving = leaving;
+        worker.path = [];
+        worker.goalKey = null;
+        worker.replanAt = 0;
+      }
+    }
+    // Only one departing worker approaches the threshold; the others keep
+    // walking until their turn instead of deadlocking shoulder-to-shoulder.
+    if (!this.departing?.leaving || !this.workers.includes(this.departing))
+      this.departing = this.workers
+        .filter((w) => w.leaving)
+        .sort(
+          (a, b) =>
+            Math.hypot(
+              a.avatar.root.position.x - this.approach.x,
+              a.avatar.root.position.z - this.approach.z,
+            ) -
+            Math.hypot(
+              b.avatar.root.position.x - this.approach.x,
+              b.avatar.root.position.z - this.approach.z,
+            ),
+        )[0];
+    const missing = Array.from({ length: this.sync.count }, (_, i) => i).find(
+      (i) => !this.workers.some((w) => w.index === i),
+    );
+    if (missing === undefined || time < this.nextArrival) return;
+    // Departures have priority at the narrow common doorway.
+    if (
+      this.workers.some(
+        (w) =>
+          w.leaving &&
+          Math.hypot(
+            w.avatar.root.position.x,
+            w.avatar.root.position.z - this.gate.z,
+          ) < 2.8,
+      )
+    )
+      return;
+    const people = participants.concat(
+      this.workers.map((w) => this.person(w.avatar.root.position)),
+    );
+    if (!this.navigation.clear(this.gate, this.approach, people)) return;
+    const { door } = this.room;
+    if (!door.sync.open) door.sync.request('open', REACTOR_MAP);
+    if (!door.sync.open || door.amount < 0.95) return;
+    const worker = this.create(missing);
+    worker.avatar.root.position.set(this.gate.x, 0, this.gate.z);
+    worker.entering = true;
+    this.workers.push(worker);
+    this.proximity.reset();
+    this.nextArrival = time + 1400;
   }
 
   get visible() {
@@ -80,8 +186,15 @@ export class ReactorWorkers {
 
   initialize(sharedTime, participants) {
     const occupied = [...participants];
-    for (const [index, worker] of this.workers.entries()) {
-      const pose = workerPose(index, sharedTime, this.navigation);
+    // A room entered later starts at the persisted count; live changes walk
+    // through the door. Re-entry never replays old additions/removals.
+    for (const worker of this.workers)
+      if (worker.index >= this.sync.count) this.remove(worker);
+    for (let index = 0; index < this.sync.count; index++)
+      if (!this.workers.some((w) => w.index === index))
+        this.workers.push(this.create(index));
+    for (const worker of this.workers) {
+      const pose = workerPose(worker.index, sharedTime, this.navigation);
       const free = this.navigation.nearest(pose, occupied);
       if (!free) continue;
       worker.avatar.root.position.set(free.x, 0, free.z);
@@ -89,6 +202,8 @@ export class ReactorWorkers {
         B.Quaternion.RotationYawPitchRoll(pose.yaw, 0, 0),
       );
       worker.path = [];
+      worker.goalKey = null;
+      worker.entering = worker.leaving = false;
       worker.replanAt = 0;
       occupied.push(this.person(free));
     }
@@ -112,7 +227,52 @@ export class ReactorWorkers {
         people,
       ),
     );
-    const destination = workerDestination(index, time, this.navigation);
+    let destination = workerDestination(index, time, this.navigation);
+    const departing = worker === this.departing;
+    if (departing || worker.entering) {
+      const atApproach =
+        Math.hypot(position.x - this.approach.x, position.z - this.approach.z) <
+        0.15;
+      if (worker.entering && !departing && atApproach) worker.entering = false;
+      else {
+        const beyondApproach =
+          position.z > this.approach.z - 0.15 && Math.abs(position.x) < 0.2;
+        destination = {
+          key: departing ? 'exit' : 'enter',
+          target: this.approach,
+        };
+        if (departing && (atApproach || beyondApproach)) {
+          const { door } = this.room;
+          if (!door.sync.open) door.sync.request('open', REACTOR_MAP);
+          if (
+            door.sync.open &&
+            door.amount >= 0.95 &&
+            this.navigation.clear(position, this.gate, people)
+          ) {
+            destination = {
+              key: 'cross-exit',
+              target: this.gate,
+              direct: true,
+            };
+          } else {
+            worker.path = [];
+            worker.goalKey = null;
+            return { x: position.x, z: position.z, speed: 0 };
+          }
+        } else if (
+          worker.entering &&
+          position.z > this.room.exitPortal.position.z - 0.5
+        ) {
+          const { door } = this.room;
+          if (!door.sync.open) door.sync.request('open', REACTOR_MAP);
+          if (!door.sync.open || door.amount < 0.95) {
+            worker.path = [];
+            worker.goalKey = null;
+            return { x: position.x, z: position.z, speed: 0 };
+          }
+        }
+      }
+    }
     const needsRoute = worker.path.length
       ? !this.navigation.clear(position, worker.path[0], people)
       : Math.hypot(
@@ -124,9 +284,9 @@ export class ReactorWorkers {
       (needsRoute && time >= worker.replanAt)
     ) {
       worker.goalKey = destination.key;
-      worker.path = this.navigation
-        .path(position, destination.target, people)
-        .slice(1);
+      worker.path = destination.direct
+        ? [destination.target]
+        : this.navigation.path(position, destination.target, people).slice(1);
       worker.replanAt = time + 1200 + index * 130;
     }
     const before = position.clone();
@@ -174,6 +334,7 @@ export class ReactorWorkers {
   }
 
   update(dt) {
+    this.sync.tick();
     const visible = this.visible;
     if (!visible) {
       for (const worker of this.workers) {
@@ -195,9 +356,26 @@ export class ReactorWorkers {
       ? 0
       : Math.min(0.1, Math.max(0, (sharedTime - this.lastTime) / 1000));
     this.lastTime = sharedTime;
-    const poses = this.workers.map((worker, index) => {
+    this.reconcile(sharedTime, participants);
+    for (const worker of this.workers) {
+      if (
+        worker.leaving &&
+        Math.hypot(
+          worker.avatar.root.position.x - this.gate.x,
+          worker.avatar.root.position.z - this.gate.z,
+        ) < 0.08
+      )
+        this.remove(worker);
+    }
+    const poses = this.workers.map((worker) => {
       worker.avatar.root.setEnabled(true);
-      const pose = this.move(worker, index, elapsed, sharedTime, participants);
+      const pose = this.move(
+        worker,
+        worker.index,
+        elapsed,
+        sharedTime,
+        participants,
+      );
       worker.avatar.update(dt, pose.speed, 0, visible);
       worker.bubble.setEnabled(visible && now < worker.replyUntil);
       return pose;

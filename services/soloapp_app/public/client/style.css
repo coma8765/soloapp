@@ -997,3 +997,25 @@ nav > span {
   background: #102c32ed;
   padding: 8px;
 }
+
+#worker-controls {
+  margin-top: 10px;
+}
+#worker-controls [role='group'] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0;
+}
+#worker-controls button {
+  min-width: 26px;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+#worker-controls button[aria-pressed='true'] {
+  background: #c6df86;
+  color: #102c32;
+}
+#worker-controls small {
+  display: block;
+}
