@@ -97,10 +97,14 @@ class RbmkPhysicalAudit {
     mesh.computeWorldMatrix(true);
     const target = mesh.getAbsolutePosition();
     const player = this.app.player;
-    player.position.set(target.x, 0, target.z + 2.55);
-    player.forward.set(0, 0, -1);
+    const outward = mesh.getDirection(B.Axis.Z);
+    outward.y = 0;
+    outward.normalize();
+    player.position.copyFrom(target.add(outward.scale(1.35)));
+    player.position.y = 0;
     const eye = player.position.add(B.Vector3.Up().scale(1.65));
     const direction = target.subtract(eye);
+    player.forward.set(direction.x, 0, direction.z).normalize();
     player.pitch = Math.atan2(
       direction.y,
       Math.hypot(direction.x, direction.z),

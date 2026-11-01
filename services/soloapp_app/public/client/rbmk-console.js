@@ -51,6 +51,18 @@ const ACTION_LABELS = Object.freeze({
   reset: 'ИСХОДНЫЙ',
 });
 
+const COLORS = Object.freeze({
+  cabinet: '#737b7d',
+  cabinetDark: '#596164',
+  trim: '#9aa1a0',
+  bezel: '#252b2c',
+  schematic: '#4c3830',
+  cream: '#d8cfad',
+  yellow: '#caa83c',
+  green: '#477965',
+  cyan: '#4b7778',
+});
+
 function partById(id) {
   return RBMK_PANEL_PARTS.find((part) => part.id === id);
 }
@@ -74,15 +86,18 @@ export class RbmkPhysicalConsole {
     this.lastDraw = 0;
     this.lastActivation = 0;
     this.onActivation = null;
+    this.hintsEnabled = false;
+    this.hoveredButton = null;
     this.build();
   }
 
-  material(name, color, emissive = false) {
+  material(name, color, emissive = false, alpha = 1) {
     const material = new B.StandardMaterial(name, this.scene);
     material.diffuseColor = B.Color3.FromHexString(color);
-    material.specularColor.set(0.14, 0.14, 0.14);
+    material.specularColor.set(0.16, 0.16, 0.16);
+    material.alpha = alpha;
     if (emissive) {
-      material.emissiveColor = material.diffuseColor.scale(0.65);
+      material.emissiveColor = material.diffuseColor.scale(0.55);
       material.disableLighting = true;
     }
     return material;
@@ -101,7 +116,15 @@ export class RbmkPhysicalConsole {
     return mesh;
   }
 
-  texturePlane(name, width, height, textureSize, position, parent = this.root) {
+  texturePlane(
+    name,
+    width,
+    height,
+    textureSize,
+    position,
+    parent = this.root,
+    rotation = null,
+  ) {
     const texture = new B.DynamicTexture(
       `${name} texture`,
       textureSize,
@@ -120,101 +143,412 @@ export class RbmkPhysicalConsole {
     );
     plane.parent = parent;
     plane.position.copyFromFloats(...position);
+    if (rotation) plane.rotation.copyFromFloats(...rotation);
     plane.material = material;
     plane.isPickable = false;
     return { plane, texture };
   }
 
   build() {
-    const steel = this.material('RBMK physical console steel', '#60696b');
-    const bezel = this.material('RBMK physical console bezels', '#242b2d');
-    const edge = this.material('RBMK physical console edges', '#8a9190');
-    this.box(
-      'RBMK physical rear cabinet',
-      [18.2, 5.5, 0.62],
-      [0, 2.75, -9],
-      steel,
+    this.steel = this.material('RBMK console grey enamel', COLORS.cabinet);
+    this.darkSteel = this.material(
+      'RBMK console dark enamel',
+      COLORS.cabinetDark,
     );
-    this.box(
-      'RBMK physical rear cabinet top',
-      [18.5, 0.14, 0.8],
-      [0, 5.53, -8.92],
-      edge,
-    );
-    this.box(
-      'RBMK physical console plinth',
-      [18.2, 0.18, 1.8],
-      [0, 0.09, -7.85],
-      bezel,
-    );
-
-    RBMK_INSTRUMENT_PANELS.forEach((panel, index) => {
-      const x = -7.2 + index * 2.88;
-      this.box(
-        `RBMK instrument bezel ${panel.id}`,
-        [2.72, 1.92, 0.22],
-        [x, 4.23, -8.62],
-        bezel,
-      );
-      const screen = this.texturePlane(
-        `RBMK live instrument ${panel.id}`,
-        2.54,
-        1.72,
-        { width: 640, height: 430 },
-        [x, 4.23, -8.495],
-      );
-      screen.panel = panel;
-      screen.plane.metadata = { rbmkPart: partById(panel.part) };
-      this.screens.push(screen);
-      this.hintMeshes.push(screen.plane);
-    });
-
-    RBMK_PHYSICAL_CONTROL_GROUPS.forEach((group, index) => {
-      const x = -6.75 + index * 4.5;
-      this.buildControlGroup(group, x, steel, bezel, edge);
-    });
+    this.trim = this.material('RBMK console aluminium trim', COLORS.trim);
+    this.bezel = this.material('RBMK console black bezels', COLORS.bezel);
+    this.cream = this.material('RBMK console ivory keys', COLORS.cream);
+    this.yellow = this.material('RBMK console yellow keys', COLORS.yellow);
+    this.green = this.material('RBMK console green keys', COLORS.green);
+    this.red = this.material('RBMK console red signal keys', '#a9473c');
+    this.buildWallBank();
+    this.buildDeskBank();
   }
 
-  buildControlGroup(group, centerX, steel, bezel, edge) {
-    const groupRoot = new B.TransformNode(
-      `RBMK control group ${group.id}`,
+  arcNode(name, index, count, radius, step, y = 0) {
+    const angle = (index - (count - 1) / 2) * step;
+    const node = new B.TransformNode(name, this.scene);
+    node.parent = this.root;
+    node.position.set(Math.sin(angle) * radius, y, -Math.cos(angle) * radius);
+    node.rotation.y = -angle;
+    return node;
+  }
+
+  buildWallBank() {
+    for (let index = 0; index < 7; index++) {
+      const bay = this.arcNode(
+        `RBMK wall bay ${index + 1}`,
+        index,
+        7,
+        10.35,
+        0.215,
+      );
+      this.box(
+        `RBMK wall cabinet ${index + 1}`,
+        [2.2, 5.25, 0.34],
+        [0, 3.02, 0],
+        this.steel,
+        bay,
+      );
+      this.box(
+        `RBMK wall header ${index + 1}`,
+        [2.1, 0.24, 0.09],
+        [0, 5.55, 0.22],
+        this.darkSteel,
+        bay,
+      );
+      this.makeTextPlate(
+        `RBMK bay code ${index + 1}`,
+        `2H20Z2${25 + index}`,
+        1.7,
+        0.19,
+        [0, 5.55, 0.275],
+        bay,
+        '#5b6263',
+        '#d0ad43',
+        30,
+      );
+      this.buildAnnunciators(bay, index);
+      this.buildSchematic(bay, index);
+      this.buildLabelRows(bay, index);
+      if (index < RBMK_INSTRUMENT_PANELS.length)
+        this.buildLiveScreen(bay, RBMK_INSTRUMENT_PANELS[index]);
+      else this.buildRecorderCluster(bay);
+    }
+  }
+
+  buildAnnunciators(parent, seed) {
+    const colors = [this.cream, this.cream, this.yellow, this.green, this.red];
+    for (let row = 0; row < 4; row++) {
+      for (let column = 0; column < 8; column++) {
+        const color = colors[(column + row * 3 + seed) % colors.length];
+        this.box(
+          `RBMK annunciator ${seed}-${row}-${column}`,
+          [0.215, 0.12, 0.065],
+          [-0.79 + column * 0.225, 5.29 - row * 0.14, 0.22],
+          color,
+          parent,
+        );
+      }
+    }
+  }
+
+  buildChannelMatrix(parent, seed) {
+    const board = this.box(
+      `RBMK channel matrix board ${seed}`,
+      [2.0, 1.34, 0.12],
+      [0, 4.18, 0.22],
+      this.darkSteel,
+      parent,
+    );
+    board.metadata = { rbmkPart: partById('core-map') };
+    this.hintMeshes.push(board);
+    const colors = [this.cream, this.cream, this.yellow, this.green, this.red];
+    for (let row = 0; row < 8; row++) {
+      for (let column = 0; column < 12; column++) {
+        const indicator = B.MeshBuilder.CreateCylinder(
+          `RBMK channel indicator ${row}-${column}`,
+          { diameter: 0.105, height: 0.055, tessellation: 16 },
+          this.scene,
+        );
+        indicator.parent = parent;
+        indicator.position.set(-0.82 + column * 0.15, 4.67 - row * 0.14, 0.31);
+        indicator.rotation.x = Math.PI / 2;
+        indicator.material = colors[(row * 5 + column + seed) % colors.length];
+        indicator.isPickable = false;
+      }
+    }
+  }
+
+  buildCoreMapBoard(parent, seed) {
+    const board = this.box(
+      `RBMK core map board ${seed}`,
+      [2.0, 1.34, 0.12],
+      [0, 4.18, 0.22],
+      this.darkSteel,
+      parent,
+    );
+    board.metadata = { rbmkPart: partById('core-map') };
+    this.hintMeshes.push(board);
+    for (let row = -4; row <= 4; row++) {
+      for (let column = -6; column <= 6; column++) {
+        if ((column / 6) ** 2 + (row / 4.4) ** 2 > 1) continue;
+        const edge = Math.abs(column) > 4 || Math.abs(row) > 2;
+        this.box(
+          `RBMK core cartogram cell ${row}-${column}`,
+          [0.105, 0.09, 0.055],
+          [column * 0.13, 4.18 + row * 0.12, 0.31],
+          edge
+            ? this.cream
+            : (row + column + seed) % 9 === 0
+              ? this.green
+              : this.yellow,
+          parent,
+        );
+      }
+    }
+  }
+
+  buildSchematic(parent, seed) {
+    if (seed === 0) {
+      this.buildChannelMatrix(parent, seed);
+      return;
+    }
+    if (seed === 1) {
+      this.buildCoreMapBoard(parent, seed);
+      return;
+    }
+    this.box(
+      `RBMK schematic bezel ${seed}`,
+      [2.0, 1.34, 0.12],
+      [0, 4.18, 0.22],
+      this.bezel,
+      parent,
+    );
+    for (let row = 0; row < 2; row++) {
+      for (let column = 0; column < 2; column++) {
+        const board = this.texturePlane(
+          `RBMK mnemonic diagram ${seed}-${row}-${column}`,
+          0.89,
+          0.55,
+          { width: 360, height: 220 },
+          [-0.47 + column * 0.94, 4.48 - row * 0.6, 0.29],
+          parent,
+        );
+        const context = board.texture.getContext();
+        context.fillStyle = COLORS.schematic;
+        context.fillRect(0, 0, 360, 220);
+        context.strokeStyle = '#eee7cf';
+        context.fillStyle = '#eee7cf';
+        context.lineWidth = 5;
+        context.font = 'bold 13px monospace';
+        context.fillText(`2H${seed + 1}${row}${column}`, 10, 20);
+        for (let line = 0; line < 3; line++) {
+          const y = 54 + line * 57;
+          context.beginPath();
+          context.moveTo(14, y);
+          context.lineTo(82 + seed * 3, y);
+          context.lineTo(112, y + (line % 2 ? 22 : -22));
+          context.lineTo(210, y + (line % 2 ? 22 : -22));
+          context.lineTo(244, y);
+          context.lineTo(346, y);
+          context.stroke();
+          for (let symbol = 0; symbol < 3; symbol++)
+            context.strokeRect(47 + symbol * 112, y - 11, 22, 22);
+        }
+        board.texture.update();
+        board.plane.metadata = {
+          rbmkPart: partById(seed % 2 ? 'instrumentation' : 'annunciators'),
+        };
+        this.hintMeshes.push(board.plane);
+      }
+    }
+  }
+
+  buildLabelRows(parent, seed) {
+    for (let row = 0; row < 6; row++) {
+      for (let column = 0; column < 7; column++) {
+        const active = (seed * 7 + row * 3 + column) % 11 === 0;
+        this.box(
+          `RBMK engraved label ${seed}-${row}-${column}`,
+          [0.245, 0.065, 0.055],
+          [-0.75 + column * 0.25, 3.42 - row * 0.09, 0.22],
+          active ? this.yellow : this.cream,
+          parent,
+        );
+      }
+    }
+  }
+
+  buildLiveScreen(parent, panel) {
+    this.box(
+      `RBMK instrument rack ${panel.id}`,
+      [1.76, 1.18, 0.16],
+      [0, 2.35, 0.24],
+      this.trim,
+      parent,
+    );
+    const screen = this.texturePlane(
+      `RBMK analog instrument panel ${panel.id}`,
+      1.62,
+      1.02,
+      { width: 640, height: 430 },
+      [0, 2.35, 0.35],
+      parent,
+    );
+    screen.panel = panel;
+    screen.plane.metadata = { rbmkPart: partById(panel.part) };
+    this.screens.push(screen);
+    this.hintMeshes.push(screen.plane);
+    for (let handle = 0; handle < 3; handle++) {
+      const knob = B.MeshBuilder.CreateCylinder(
+        `RBMK instrument selector ${panel.id}-${handle}`,
+        { diameter: 0.08, height: 0.055, tessellation: 16 },
+        this.scene,
+      );
+      knob.parent = parent;
+      knob.position.set(-0.2 + handle * 0.2, 1.78, 0.36);
+      knob.rotation.x = Math.PI / 2;
+      knob.material = this.bezel;
+      knob.isPickable = false;
+    }
+  }
+
+  buildRecorderCluster(parent) {
+    for (let row = 0; row < 2; row++) {
+      for (let column = 0; column < 2; column++) {
+        const x = -0.43 + column * 0.86;
+        const y = 2.57 - row * 0.69;
+        this.box(
+          `RBMK recorder ${row}-${column}`,
+          [0.76, 0.58, 0.17],
+          [x, y, 0.25],
+          this.bezel,
+          parent,
+        );
+        const chart = this.texturePlane(
+          `RBMK recorder chart ${row}-${column}`,
+          0.62,
+          0.43,
+          { width: 300, height: 210 },
+          [x, y, 0.36],
+          parent,
+        );
+        const context = chart.texture.getContext();
+        context.fillStyle = '#d8cfad';
+        context.fillRect(0, 0, 300, 210);
+        context.strokeStyle = '#8d866f';
+        context.lineWidth = 1;
+        for (let grid = 0; grid <= 12; grid++) {
+          context.beginPath();
+          context.moveTo(grid * 25, 0);
+          context.lineTo(grid * 25, 210);
+          context.moveTo(0, grid * 18);
+          context.lineTo(300, grid * 18);
+          context.stroke();
+        }
+        context.strokeStyle = '#8d352f';
+        context.lineWidth = 3;
+        context.beginPath();
+        for (let point = 0; point <= 30; point++) {
+          const px = point * 10;
+          const py =
+            105 +
+            Math.sin(point * 0.48 + row + column * 2) * 32 +
+            Math.cos(point * 0.17 + column) * 14;
+          if (!point) context.moveTo(px, py);
+          else context.lineTo(px, py);
+        }
+        context.stroke();
+        chart.texture.update();
+      }
+    }
+  }
+
+  buildDeskBank() {
+    RBMK_PHYSICAL_CONTROL_GROUPS.forEach((group, index) => {
+      const desk = this.arcNode(
+        `RBMK desk section ${group.id}`,
+        index + 1,
+        6,
+        7,
+        0.44,
+      );
+      this.box(
+        `RBMK desk cabinet ${group.id}`,
+        [3.05, 1.02, 1.78],
+        [0, 0.51, 0],
+        this.darkSteel,
+        desk,
+      );
+      const deck = new B.TransformNode(
+        `RBMK sloped deck ${group.id}`,
+        this.scene,
+      );
+      deck.parent = desk;
+      deck.position.set(0, 1.08, 0);
+      deck.rotation.x = 0.24;
+      this.box(
+        `RBMK sloped console plate ${group.id}`,
+        [3.02, 0.16, 2.05],
+        [0, 0, 0],
+        this.steel,
+        deck,
+      );
+      this.makeTextPlate(
+        `RBMK desk title ${group.id}`,
+        group.title,
+        2.72,
+        0.18,
+        [0, 0.115, -0.86],
+        deck,
+        '#5b6263',
+        '#eee6c9',
+        23,
+        [-Math.PI / 2, 0, 0],
+      );
+      this.buildControlGroup(deck, group);
+      this.buildDecorativeKeys(deck, index);
+    });
+    this.buildSideDesk(0, 'left');
+    this.buildSideDesk(5, 'right');
+  }
+
+  buildSideDesk(index, side) {
+    const desk = this.arcNode(`RBMK auxiliary desk ${side}`, index, 6, 7, 0.44);
+    this.box(
+      `RBMK auxiliary cabinet ${side}`,
+      [3.05, 1.02, 1.78],
+      [0, 0.51, 0],
+      this.darkSteel,
+      desk,
+    );
+    const deck = new B.TransformNode(
+      `RBMK auxiliary sloped deck ${side}`,
       this.scene,
     );
-    groupRoot.parent = this.root;
-    groupRoot.position.set(centerX, 0, 0);
+    deck.parent = desk;
+    deck.position.set(0, 1.08, 0);
+    deck.rotation.x = 0.24;
     this.box(
-      `RBMK control board ${group.id}`,
-      [4.18, 3.02, 0.42],
-      [0, 1.61, -7.95],
-      steel,
-      groupRoot,
+      `RBMK auxiliary console plate ${side}`,
+      [3.02, 0.16, 2.05],
+      [0, 0, 0],
+      this.steel,
+      deck,
     );
-    this.box(
-      `RBMK control board header ${group.id}`,
-      [4.02, 0.34, 0.12],
-      [0, 2.93, -7.69],
-      bezel,
-      groupRoot,
+    this.makeTextPlate(
+      `RBMK auxiliary desk title ${side}`,
+      side === 'left' ? 'КОНТРОЛЬ КАНАЛОВ' : 'СИГНАЛИЗАЦИЯ И СВЯЗЬ',
+      2.72,
+      0.18,
+      [0, 0.115, -0.86],
+      deck,
+      '#5b6263',
+      '#eee6c9',
+      23,
+      [-Math.PI / 2, 0, 0],
     );
-    const header = this.texturePlane(
-      `RBMK control group title ${group.id}`,
-      3.88,
-      0.26,
-      { width: 512, height: 64 },
-      [0, 2.93, -7.62],
-      groupRoot,
-    );
-    const headerContext = header.texture.getContext();
-    headerContext.fillStyle = '#182022';
-    headerContext.fillRect(0, 0, 512, 64);
-    headerContext.fillStyle = '#e8dfbd';
-    headerContext.font = 'bold 24px monospace';
-    headerContext.textAlign = 'center';
-    headerContext.fillText(group.title, 256, 41);
-    header.texture.update();
-    header.plane.metadata = { rbmkPart: partById(group.part) };
-    this.hintMeshes.push(header.plane);
+    for (let row = 0; row < 7; row++) {
+      for (let column = 0; column < 12; column++) {
+        const material =
+          (row + column + index) % 17 === 0
+            ? this.yellow
+            : (row * 2 + column + index) % 11 === 0
+              ? this.green
+              : this.cream;
+        this.box(
+          `RBMK ${side} matrix key ${row}-${column}`,
+          [0.13, 0.05, 0.1],
+          [-0.72 + column * 0.13, 0.125, -0.54 + row * 0.18],
+          material,
+          deck,
+        );
+      }
+    }
+  }
 
+  buildControlGroup(parent, group) {
     const items = [
       ...group.controls.map((name) => ({ type: 'control', name })),
       ...(group.actions || []).map((name) => ({ type: 'action', name })),
@@ -222,48 +556,40 @@ export class RbmkPhysicalConsole {
     items.forEach((item, index) => {
       const column = index % 2;
       const row = Math.floor(index / 2);
-      const x = column ? 1.02 : -1.02;
-      const y = 2.48 - row * 0.68;
+      const x = column ? 0.72 : -0.72;
+      const z = -0.52 + row * 0.42;
       if (item.type === 'control')
-        this.buildControlCell(groupRoot, item.name, x, y, group.part, bezel);
-      else this.buildActionCell(groupRoot, item.name, x, y, group.part, edge);
+        this.buildControlCell(parent, item.name, x, z, group.part);
+      else this.buildActionCell(parent, item.name, x, z, group.part);
     });
   }
 
-  buildControlCell(parent, name, x, y, fallbackPart, bezel) {
+  buildControlCell(parent, name, x, z, fallbackPart) {
     const schema = RBMK_CONTROLS[name];
     const part =
       RBMK_PANEL_PARTS.find((candidate) =>
         candidate.controls?.includes(name),
       ) || partById(fallbackPart);
-    this.box(
-      `RBMK control recess ${name}`,
-      [1.86, 0.58, 0.12],
-      [x, y, -7.68],
-      bezel,
-      parent,
-    );
     const readout = this.texturePlane(
       `RBMK control readout ${name}`,
-      1.7,
-      0.29,
+      1.12,
+      0.18,
       { width: 400, height: 72 },
-      [x, y + 0.125, -7.605],
+      [x, 0.105, z - 0.12],
       parent,
+      [-Math.PI / 2, 0, 0],
     );
     readout.name = name;
     readout.plane.metadata = { rbmkPart: part };
     this.readouts.push(readout);
     this.hintMeshes.push(readout.plane);
-
     if (schema.type === 'checkbox') {
       this.createButton(
         parent,
         `RBMK toggle ${name}`,
-        'ВКЛ / ОТКЛ',
-        [x, y - 0.15, -7.56],
-        [0.78, 0.2, 0.2],
-        '#426d68',
+        [x, 0.17, z + 0.11],
+        [0.42, 0.1, 0.18],
+        COLORS.cyan,
         { rbmkControl: { name, mode: 'toggle' }, rbmkPart: part },
       );
       return;
@@ -273,85 +599,174 @@ export class RbmkPhysicalConsole {
     this.createButton(
       parent,
       `RBMK decrease ${name}`,
-      '−',
-      [x - 0.43, y - 0.15, -7.56],
-      [0.55, 0.2, 0.2],
-      '#485356',
+      [x - 0.2, 0.17, z + 0.11],
+      [0.28, 0.1, 0.18],
+      '#7a7770',
       { rbmkControl: { name, delta: -delta }, rbmkPart: part },
     );
     this.createButton(
       parent,
       `RBMK increase ${name}`,
-      '+',
-      [x + 0.43, y - 0.15, -7.56],
-      [0.55, 0.2, 0.2],
-      '#397077',
+      [x + 0.2, 0.17, z + 0.11],
+      [0.28, 0.1, 0.18],
+      '#638b82',
       { rbmkControl: { name, delta }, rbmkPart: part },
     );
   }
 
-  buildActionCell(parent, action, x, y, fallbackPart, edge) {
+  buildActionCell(parent, action, x, z, fallbackPart) {
     const part =
-      action === 'scram'
+      action === 'scram' || action === 'clear'
         ? partById('az5')
+        : partById(fallbackPart);
+    const color =
+      action === 'scram'
+        ? '#b9362f'
         : action === 'clear'
-          ? partById('az5')
-          : partById(fallbackPart);
-    this.box(
-      `RBMK action guard ${action}`,
-      [1.86, 0.58, 0.12],
-      [x, y, -7.68],
-      edge,
+          ? '#c19d3e'
+          : '#4d7a64';
+    this.makeTextPlate(
+      `RBMK action label ${action}`,
+      ACTION_LABELS[action],
+      1.02,
+      0.17,
+      [x, 0.106, z - 0.12],
       parent,
+      '#676d6d',
+      '#f1e8c9',
+      29,
+      [-Math.PI / 2, 0, 0],
     );
     this.createButton(
       parent,
       `RBMK physical action ${action}`,
-      ACTION_LABELS[action],
-      [x, y, -7.5],
-      action === 'scram' ? [1.05, 0.38, 0.28] : [1.28, 0.3, 0.22],
-      action === 'scram'
-        ? '#c92f24'
-        : action === 'clear'
-          ? '#be9a35'
-          : '#447d62',
+      [x, 0.19, z + 0.11],
+      action === 'scram' ? [0.52, 0.14, 0.24] : [0.48, 0.11, 0.2],
+      color,
       { rbmkAction: action, rbmkPart: part },
     );
   }
 
-  createButton(parent, name, text, position, size, color, metadata) {
-    const material = this.material(`${name} material`, color, true);
+  buildDecorativeKeys(parent, seed) {
+    for (let row = 0; row < 3; row++) {
+      for (let column = 0; column < 9; column++) {
+        const material =
+          (row * 9 + column + seed) % 13 === 0
+            ? this.yellow
+            : (row + column + seed) % 7 === 0
+              ? this.green
+              : this.cream;
+        this.box(
+          `RBMK auxiliary key ${seed}-${row}-${column}`,
+          [0.13, 0.055, 0.11],
+          [-0.55 + column * 0.14, 0.125, 0.62 + row * 0.13],
+          material,
+          parent,
+        );
+      }
+    }
+    for (let index = 0; index < 5; index++) {
+      const guard = this.box(
+        `RBMK guarded switch ${seed}-${index}`,
+        [0.18, 0.16, 0.18],
+        [-0.48 + index * 0.24, 0.18, 0.42],
+        this.material(
+          `RBMK guard material ${seed}-${index}`,
+          '#d9cfad',
+          false,
+          0.42,
+        ),
+        parent,
+      );
+      guard.visibility = 0.78;
+    }
+  }
+
+  makeTextPlate(
+    name,
+    label,
+    width,
+    height,
+    position,
+    parent,
+    background,
+    foreground,
+    font,
+    rotation = null,
+  ) {
+    const plate = this.texturePlane(
+      name,
+      width,
+      height,
+      { width: 768, height: 96 },
+      position,
+      parent,
+      rotation,
+    );
+    const context = plate.texture.getContext();
+    context.fillStyle = background;
+    context.fillRect(0, 0, 768, 96);
+    context.fillStyle = foreground;
+    context.font = `bold ${font}px monospace`;
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(label, 384, 49, 744);
+    plate.texture.update();
+    return plate;
+  }
+
+  createButton(parent, name, position, size, color, metadata) {
+    const material = this.material(`${name} hit material`, color, true, 0.018);
     const button = this.box(name, size, position, material, parent);
     button.isPickable = true;
-    button.metadata = {
-      ...metadata,
-      restZ: position[2],
-      pressedUntil: 0,
-      baseColor: color,
-    };
-    const label = this.texturePlane(
-      `${name} label`,
-      Math.max(0.28, size[0] - 0.08),
-      Math.max(0.11, size[1] - 0.04),
-      { width: 256, height: 64 },
-      [0, 0, size[2] / 2 + 0.006],
+    const capMaterial = this.material(`${name} cap material`, color, true);
+    const cap = this.box(
+      `${name} visible cap`,
+      [size[0] * 0.56, Math.max(0.055, size[1] * 0.7), size[2] * 0.62],
+      [0, 0, 0],
+      capMaterial,
       button,
     );
-    const context = label.texture.getContext();
-    context.fillStyle = color;
-    context.fillRect(0, 0, 256, 64);
-    context.fillStyle = '#fff9df';
-    context.font = `bold ${text.length > 8 ? 22 : 34}px monospace`;
-    context.textAlign = 'center';
-    context.fillText(text, 128, text.length > 8 ? 40 : 44);
-    label.texture.update();
-    label.plane.isPickable = false;
+    button.metadata = {
+      ...metadata,
+      restY: position[1],
+      pressedUntil: 0,
+      baseColor: color,
+      cap,
+    };
     this.buttons.push(button);
     return button;
   }
 
   setHints(enabled) {
+    this.hintsEnabled = !!enabled;
     for (const mesh of this.hintMeshes) mesh.isPickable = !!enabled;
+    for (const button of this.buttons) {
+      const base = B.Color3.FromHexString(button.metadata.baseColor);
+      button.material.alpha = enabled ? 0.18 : 0.018;
+      button.metadata.cap.material.emissiveColor = base.scale(
+        enabled ? 0.95 : 0.55,
+      );
+    }
+  }
+
+  setHovered(mesh) {
+    const next =
+      mesh?.metadata?.rbmkControl || mesh?.metadata?.rbmkAction ? mesh : null;
+    if (next === this.hoveredButton) return;
+    if (this.hoveredButton) {
+      const previous = this.hoveredButton;
+      previous.scaling.setAll(1);
+      const base = B.Color3.FromHexString(previous.metadata.baseColor);
+      previous.metadata.cap.material.emissiveColor = base.scale(
+        this.hintsEnabled ? 0.95 : 0.55,
+      );
+    }
+    this.hoveredButton = next;
+    if (next) {
+      next.scaling.setAll(1.08);
+      next.metadata.cap.material.emissiveColor.set(0.95, 0.92, 0.7);
+    }
   }
 
   activate(mesh) {
@@ -377,7 +792,7 @@ export class RbmkPhysicalConsole {
     } else return false;
     this.lastActivation = now;
     mesh.metadata.pressedUntil = now + 150;
-    mesh.position.z = mesh.metadata.restZ - 0.07;
+    mesh.position.y = mesh.metadata.restY - 0.055;
     this.sync(true);
     this.onActivation?.({
       mesh,
@@ -393,15 +808,18 @@ export class RbmkPhysicalConsole {
     for (const button of this.buttons) {
       if (button.metadata.pressedUntil && now >= button.metadata.pressedUntil) {
         button.metadata.pressedUntil = 0;
-        button.position.z = button.metadata.restZ;
+        button.position.y = button.metadata.restY;
       }
       const control = button.metadata.rbmkControl;
       if (!control || control.mode !== 'toggle') continue;
       const active = !!state.controls[control.name];
-      button.material.diffuseColor = B.Color3.FromHexString(
+      button.metadata.cap.material.diffuseColor = B.Color3.FromHexString(
         active ? '#43a66c' : '#654a43',
       );
-      button.material.emissiveColor = button.material.diffuseColor.scale(0.65);
+      button.metadata.cap.material.emissiveColor =
+        button.metadata.cap.material.diffuseColor.scale(
+          this.hintsEnabled ? 0.95 : 0.55,
+        );
     }
   }
 
@@ -419,15 +837,37 @@ export class RbmkPhysicalConsole {
     const name = readout.name;
     const value = state.controls[name];
     const context = readout.texture.getContext();
-    context.fillStyle = '#111718';
+    context.fillStyle = '#d9d1b6';
     context.fillRect(0, 0, 400, 72);
-    context.fillStyle = '#c6bea2';
-    context.font = 'bold 20px monospace';
-    context.fillText(CONTROL_SHORT_LABELS[name], 10, 25);
-    context.fillStyle = '#83f2b1';
-    context.font = 'bold 23px monospace';
-    context.textAlign = 'right';
-    context.fillText(formatControl(name, value).slice(0, 24), 390, 56);
+    context.strokeStyle = '#453f36';
+    context.lineWidth = 5;
+    context.strokeRect(3, 3, 394, 66);
+    context.fillStyle = '#292b29';
+    context.font = 'bold 15px monospace';
+    context.textAlign = 'center';
+    context.fillText(CONTROL_SHORT_LABELS[name], 200, 17, 382);
+    const left = 22;
+    const right = 378;
+    const y = 45;
+    context.strokeStyle = '#302f29';
+    context.lineWidth = 2;
+    context.beginPath();
+    context.moveTo(left, y);
+    context.lineTo(right, y);
+    for (let tick = 0; tick <= 20; tick++) {
+      const x = left + ((right - left) * tick) / 20;
+      context.moveTo(x, y - (tick % 5 ? 6 : 11));
+      context.lineTo(x, y + (tick % 5 ? 5 : 9));
+    }
+    context.stroke();
+    const pointer = left + (right - left) * this.controlNormalized(name, value);
+    context.fillStyle = '#8f2f26';
+    context.beginPath();
+    context.moveTo(pointer, 29);
+    context.lineTo(pointer - 7, 63);
+    context.lineTo(pointer + 7, 63);
+    context.closePath();
+    context.fill();
     context.textAlign = 'left';
     readout.texture.update();
     readout.renderedValue = value;
@@ -442,6 +882,57 @@ export class RbmkPhysicalConsole {
     return state[key];
   }
 
+  controlNormalized(name, value) {
+    const schema = RBMK_CONTROLS[name];
+    if (schema.type === 'checkbox') return value ? 1 : 0;
+    if (schema.type === 'select') {
+      const options = Object.keys(schema.options);
+      return (
+        Math.max(0, options.indexOf(value)) / Math.max(1, options.length - 1)
+      );
+    }
+    return Math.max(
+      0,
+      Math.min(1, (value - schema.min) / (schema.max - schema.min)),
+    );
+  }
+
+  readingNormalized(state, key, raw) {
+    if (key.startsWith('control:'))
+      return this.controlNormalized(key.slice(8), raw);
+    const ranges = {
+      power: [0, 120],
+      reactivity: [-5, 5],
+      orm: [0, 35],
+      pressure: [0, 9],
+      flowLeft: [0, 120],
+      flowRight: [0, 120],
+      measuredFlowLeft: [0, 120],
+      measuredFlowRight: [0, 120],
+      drumLevelLeft: [-1200, 600],
+      drumLevelRight: [-1200, 600],
+      coolantInventory: [0, 120],
+      voidPercent: [0, 40],
+      coolantTemperature: [250, 320],
+      fuelTemperature: [0, 1100],
+      graphiteTemperature: [0, 900],
+      steamFlow: [0, 120],
+      electricalPower: [0, 1000],
+      frequency: [48, 52],
+    };
+    if (key === 'turbineLoads')
+      return (
+        (this.controlNormalized('turbineLoad1', state.controls.turbineLoad1) +
+          this.controlNormalized('turbineLoad2', state.controls.turbineLoad2)) /
+        2
+      );
+    const [minimum, maximum] = ranges[key] || [0, 100];
+    return Math.max(
+      0,
+      Math.min(1, (Number(raw) - minimum) / (maximum - minimum)),
+    );
+  }
+
   drawInstrument(screen, state) {
     screen.renderedState = {
       controls: { ...state.controls },
@@ -452,54 +943,59 @@ export class RbmkPhysicalConsole {
     };
     screen.renderedAt = this.lastDraw;
     const context = screen.texture.getContext();
-    context.fillStyle = '#071515';
+    context.fillStyle = '#d6cfb7';
     context.fillRect(0, 0, 640, 430);
-    context.strokeStyle = '#40765d';
-    context.lineWidth = 5;
+    context.strokeStyle = '#302f29';
+    context.lineWidth = 8;
     context.strokeRect(7, 7, 626, 416);
-    context.fillStyle = '#9ff7ba';
-    context.font = 'bold 30px monospace';
-    context.fillText(screen.panel.title, 24, 48);
+    context.fillStyle = '#545957';
+    context.fillRect(14, 14, 612, 48);
+    context.fillStyle = '#e8dfc2';
+    context.font = 'bold 24px monospace';
+    context.textAlign = 'center';
+    context.fillText(screen.panel.title, 320, 47, 585);
+    context.textAlign = 'left';
     if (screen.panel.kind === 'annunciator') {
       this.drawAnnunciator(context, state);
       screen.texture.update();
       return;
     }
-    screen.panel.readings.forEach(([label, key, unit, digits], index) => {
+    screen.panel.readings.forEach(([label, key], index) => {
       const raw = this.readingValue(state, key);
-      const value = typeof raw === 'number' ? raw.toFixed(digits) : raw;
-      const y = 100 + index * 63;
-      context.fillStyle = '#729589';
-      context.font = '22px monospace';
-      context.fillText(label, 24, y);
-      context.fillStyle = '#e5ffe9';
-      context.font = 'bold 29px monospace';
-      context.textAlign = 'right';
-      context.fillText(`${value} ${unit}`, 614, y);
-      context.textAlign = 'left';
-      const normalized =
-        typeof raw === 'number'
-          ? Math.max(
-              0,
-              Math.min(
-                1,
-                Math.abs(raw) /
-                  (key === 'pressure'
-                    ? 9
-                    : key.includes('Temperature')
-                      ? 1100
-                      : 120),
-              ),
-            )
-          : 0;
-      context.fillStyle = '#172723';
-      context.fillRect(24, y + 13, 590, 10);
-      context.fillStyle = state.alarms.length ? '#d9a23e' : '#3f9d68';
-      context.fillRect(24, y + 13, 590 * normalized, 10);
+      const normalized = this.readingNormalized(state, key, raw);
+      const y = 91 + index * 61;
+      const left = 235;
+      const right = 605;
+      context.fillStyle = '#363834';
+      context.font = 'bold 17px monospace';
+      context.fillText(label, 25, y + 10, 195);
+      context.fillStyle = '#eee7cf';
+      context.fillRect(left - 8, y - 19, right - left + 16, 47);
+      context.strokeStyle = '#34342f';
+      context.lineWidth = 2;
+      context.strokeRect(left - 8, y - 19, right - left + 16, 47);
+      context.beginPath();
+      context.moveTo(left, y + 5);
+      context.lineTo(right, y + 5);
+      for (let tick = 0; tick <= 20; tick++) {
+        const x = left + ((right - left) * tick) / 20;
+        context.moveTo(x, y - (tick % 5 ? 4 : 11));
+        context.lineTo(x, y + (tick % 5 ? 11 : 17));
+      }
+      context.stroke();
+      const pointer = left + (right - left) * normalized;
+      context.strokeStyle = '#9c342c';
+      context.lineWidth = 5;
+      context.beginPath();
+      context.moveTo(pointer, y - 15);
+      context.lineTo(pointer, y + 23);
+      context.stroke();
     });
-    context.fillStyle = state.scrammed ? '#ff5d4b' : '#5bc984';
-    context.font = 'bold 24px monospace';
-    context.fillText(state.scrammed ? 'АЗ СРАБОТАЛА' : 'АЗ ВЗВЕДЕНА', 24, 405);
+    context.fillStyle = state.scrammed ? '#b54132' : '#667c62';
+    context.fillRect(24, 393, 24, 18);
+    context.fillStyle = '#3b3a34';
+    context.font = 'bold 15px monospace';
+    context.fillText(state.scrammed ? 'АЗ-5' : 'ГОТОВНОСТЬ АЗ', 58, 408);
     screen.texture.update();
   }
 
@@ -509,47 +1005,55 @@ export class RbmkPhysicalConsole {
         state.controls.automaticRodInsertion +
         state.controls.shortenedRodInsertion) /
       3;
-    for (let row = 0; row < 8; row++) {
-      for (let column = 0; column < 8; column++) {
-        const radial = Math.hypot(column - 3.5, row - 3.5) / 5;
-        const local = Math.max(
-          0,
-          Math.min(
-            1.2,
-            (state.power / 100) *
-              (1 - radial * 0.34) *
-              (1 - insertion / 430) *
-              (1 + Math.sin(row * 1.7 + column * 0.9) * 0.06),
-          ),
-        );
-        const red = Math.round(45 + local * 175);
-        const green = Math.round(55 + (1 - Math.abs(local - 0.65)) * 145);
-        context.fillStyle = `rgb(${red},${green},58)`;
-        context.fillRect(24 + column * 29, 82 + row * 29, 23, 23);
-      }
-    }
-    context.fillStyle = '#789b8f';
-    context.font = '18px monospace';
-    context.fillText('КАРТА ЭНЕРГОВЫДЕЛЕНИЯ', 24, 337);
-    context.fillStyle = '#e8ffe9';
-    context.font = 'bold 20px monospace';
-    context.fillText(state.scenario.label.slice(0, 29), 282, 90);
-    const alarms = state.alarms.length
-      ? state.alarms.slice(0, 7)
-      : ['СИГНАЛОВ НЕТ'];
-    alarms.forEach((alarm, index) => {
-      context.fillStyle = state.alarms.length ? '#ff765f' : '#64d78d';
-      context.font = `${index ? '' : 'bold '}18px monospace`;
-      context.fillText(alarm.slice(0, 31), 282, 133 + index * 35);
+    const lamps = [
+      ['АЗ-5', state.scrammed, 'red'],
+      ['N >', state.power > 105, 'red'],
+      ['P КМПЦ', state.pressure > 7.8 || state.pressure < 6.4, 'yellow'],
+      ['G ЛЕВ', state.flowLeft < 75, 'yellow'],
+      ['G ПРАВ', state.flowRight < 75, 'yellow'],
+      ['БС-Л', state.drumLevelLeft < -450, 'yellow'],
+      ['БС-П', state.drumLevelRight < -450, 'yellow'],
+      ['САОР', state.controls.eccsAvailable, 'green'],
+      ['ВПРЫСК', state.controls.emergencyInjection, 'green'],
+      ['ГЦН-Л', state.controls.pumpsLeft < 4, 'yellow'],
+      ['ГЦН-П', state.controls.pumpsRight < 4, 'yellow'],
+      ['ТГ-1', !state.controls.generatorBreaker1, 'yellow'],
+      ['ТГ-2', !state.controls.generatorBreaker2, 'yellow'],
+      ['ОЗР', state.orm < 15, 'red'],
+      ['T ТОПЛ.', state.fuelTemperature > 900, 'red'],
+      ['УТЕЧКА', state.coolantInventory < 92, 'red'],
+      ['АР', state.controls.automaticRegulator, 'green'],
+      ['ГОТОВН.', !state.scrammed, 'green'],
+    ];
+    lamps.forEach(([label, active, color], index) => {
+      const column = index % 3;
+      const row = Math.floor(index / 3);
+      const x = 26 + column * 199;
+      const y = 82 + row * 50;
+      const activeColor =
+        color === 'red' ? '#bc493b' : color === 'green' ? '#62866b' : '#c7a44d';
+      context.fillStyle = active ? activeColor : '#837f70';
+      context.fillRect(x, y, 182, 34);
+      context.strokeStyle = '#403d35';
+      context.lineWidth = 3;
+      context.strokeRect(x, y, 182, 34);
+      context.fillStyle = active ? '#f3e9c7' : '#36352f';
+      context.font = 'bold 15px monospace';
+      context.textAlign = 'center';
+      context.fillText(label, x + 91, y + 23, 170);
     });
-    context.fillStyle = state.controls.eccsAvailable ? '#64d78d' : '#ff765f';
-    context.font = 'bold 19px monospace';
-    context.fillText(
-      `САОР ${state.controls.eccsAvailable ? 'ГОТОВА' : 'НЕДОСТУПНА'} · ВПРЫСК ${
-        state.controls.emergencyInjection ? 'ВКЛ' : 'ОТКЛ'
-      }`,
-      282,
-      392,
-    );
+    context.textAlign = 'left';
+    const local = Math.max(0, Math.min(1, state.power / 120));
+    context.strokeStyle = '#4e4b40';
+    context.lineWidth = 2;
+    context.beginPath();
+    for (let x = 25; x <= 615; x += 8) {
+      const phase = (x - 25) / 590;
+      const y =
+        394 - local * 31 * (0.45 + Math.sin(phase * 24 + insertion / 30) * 0.2);
+      if (x === 25) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    }
+    context.stroke();
   }
 }
