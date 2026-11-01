@@ -1,4 +1,5 @@
 import { smooth, WATER_RADIUS } from '../shared/world.js';
+import { isReactorMap, ROOM_MAP } from '../shared/room.js';
 export class NatureAudio {
   constructor(terrain) {
     this.terrain = terrain;
@@ -15,11 +16,14 @@ export class NatureAudio {
       if (!C) return;
       this.context = new C();
       this.master = this.context.createGain();
+      this.master.gain.value = this.muted ? 0 : 1;
       this.master.connect(this.context.destination);
+      this.natureGain = this.context.createGain();
+      this.natureGain.connect(this.master);
       this.filter = this.context.createBiquadFilter();
       this.filter.type = 'lowpass';
       this.filter.frequency.value = 16000;
-      this.filter.connect(this.master);
+      this.filter.connect(this.natureGain);
       for (const kind of ['wind', 'water', 'grass', 'wading']) {
         const source = this.context.createBufferSource(),
           gain = this.context.createGain();
@@ -32,6 +36,16 @@ export class NatureAudio {
         source.start();
         this.layers.push({ source, gain });
       }
+      // A quiet mains hum, independent of the outdoor/underwater filter.
+      const source = this.context.createBufferSource();
+      const gain = this.context.createGain();
+      source.buffer = this.makeSound('hum', 2);
+      source.loop = true;
+      source.connect(gain);
+      gain.connect(this.master);
+      gain.gain.value = 0;
+      source.start();
+      this.hum = { source, gain };
     }
     await this.context.resume();
     this.ready = true;
@@ -50,6 +64,12 @@ export class NatureAudio {
       low += (noise - low) * 0.12;
       slow += (noise - slow) * 0.018;
       let v = 0;
+      if (kind === 'hum')
+        v =
+          0.2 * Math.sin(2 * Math.PI * 50 * t) +
+          0.45 * Math.sin(2 * Math.PI * 100 * t) +
+          0.15 * Math.sin(2 * Math.PI * 150 * t) +
+          0.05 * Math.sin(2 * Math.PI * 200 * t);
       if (kind === 'wind')
         v =
           (low * 0.7 + slow * 1.8) *
@@ -98,7 +118,8 @@ export class NatureAudio {
           Math.pow(Math.max(0, 1 - t / seconds), 2);
       data[i] = Math.max(-1, Math.min(1, v));
     }
-    if (kind !== 'splash') {
+    // The hum contains whole cycles and loops from zero without a crossfade.
+    if (kind !== 'splash' && kind !== 'hum') {
       const n = rate * 0.25;
       for (let i = 0; i < n; i++) {
         const a = i / (n - 1);
@@ -121,9 +142,12 @@ export class NatureAudio {
     if (!this.ready) return;
     const ctx = this.context,
       t = ctx.currentTime;
-    if (player.worldMap === 'white-room') {
-      for (const layer of this.layers)
-        layer.gain.gain.setTargetAtTime(0, t, 0.18);
+    const reactor = isReactorMap(player.worldMap);
+    const indoor = reactor || player.worldMap === ROOM_MAP;
+    // Mute the entire nature bus, including any splash already in progress.
+    this.natureGain.gain.setTargetAtTime(indoor ? 0 : 1, t, 0.08);
+    this.hum.gain.gain.setTargetAtTime(reactor ? 0.03 : 0, t, 0.18);
+    if (indoor) {
       this.wasWet = false;
       return;
     }
