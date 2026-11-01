@@ -1,4 +1,5 @@
 import { LocalAvatar } from './local-avatar.js';
+import { npcLabel } from './npc-label.js';
 import { isReactorMap } from '../shared/room.js';
 import {
   InstructorSession,
@@ -137,6 +138,7 @@ export class ReactorInstructor {
     this.avatar.root.name = 'Scientist instructor';
     this.avatar.root.parent = room.root;
     this.avatar.root.position.set(3.95, 0, 7.5);
+    this.nameLabel = npcLabel(room.scene, this.avatar.root, 'Главный инженер');
     room.box(
       'Instructor standing collider',
       [0.65, 1.8, 0.65],
@@ -190,7 +192,7 @@ export class ReactorInstructor {
     this.panel.append(this.button, link, this.subtitle);
     document.body.append(this.panel);
     this.caption(
-      'Учёный у копировального аппарата · вводный инструктаж через 5 секунд после входа.',
+      'Главный инженер у копировального аппарата · вводный инструктаж через 5 секунд после входа.',
     );
   }
 
@@ -201,7 +203,7 @@ export class ReactorInstructor {
     ctx.fillRect(0, 0, 1024, 512);
     ctx.fillStyle = '#e9efcc';
     ctx.font = 'bold 34px sans-serif';
-    ctx.fillText('УЧЁНЫЙ · ВВОДНЫЙ ИНСТРУКТАЖ', 30, 50);
+    ctx.fillText('ГЛАВНЫЙ ИНЖЕНЕР · ИНСТРУКТАЖ', 30, 50);
     ctx.font = '27px sans-serif';
     let line = '',
       y = 105;
@@ -262,7 +264,7 @@ export class ReactorInstructor {
     this.session?.reset();
     this.lastRequest = -Infinity;
     this.caption(
-      'Инструктаж начнётся через 5 секунд. Учёный стоит у копировального аппарата за пультами справа.',
+      'Инструктаж начнётся через 5 секунд. Главный инженер стоит у копировального аппарата за пультами справа.',
     );
     this.send({ kind: 'request' });
   }
@@ -337,15 +339,50 @@ export class ReactorInstructor {
       this.present(this.session.state);
   }
 
-  present(state) {
+  canReplyToVisitor() {
+    return (
+      this.enabled &&
+      !this.announcementActive &&
+      !this.workerReply &&
+      !this.speaking &&
+      !this.session?.voices.size &&
+      this.session?.state?.kind !== 'listening'
+    );
+  }
+
+  replyToVisitor(text) {
+    if (!this.canReplyToVisitor()) return;
+    this.present({ kind: 'worker', text });
+  }
+
+  finishWorkerReply() {
+    if (!this.workerReply) return;
     this.stop();
+    if (this.room.active && this.session?.state)
+      this.present(this.session.state);
+  }
+
+  present(state) {
+    // One speech owner: a short local worker reply temporarily yields to chat
+    // and announcements, then resumes the current shared instructor sentence.
+    if (
+      this.enabled &&
+      this.workerReply &&
+      !['worker', 'listening'].includes(state.kind)
+    )
+      return;
+    this.stop();
+    if (state.kind === 'worker') {
+      this.workerReply = true;
+      this.workerTimeout = setTimeout(() => this.finishWorkerReply(), 4500);
+    }
     this.caption(state.text || 'Инструктор · продолжаем вводное занятие…');
     if (
       !this.enabled ||
       this.announcementActive ||
       this.room.physicalView ||
       document.hidden ||
-      !['intro', 'comment'].includes(state.kind)
+      !['intro', 'comment', 'worker'].includes(state.kind)
     )
       return;
     const synth = window.speechSynthesis;
@@ -372,7 +409,8 @@ export class ReactorInstructor {
       if (this.utterance !== utterance) return;
       clearTimeout(this.startTimeout);
       this.utterance = null;
-      this.session.finished(state.revision);
+      if (state.kind === 'worker') this.finishWorkerReply();
+      else this.session.finished(state.revision);
     };
     utterance.onerror = () => {
       if (this.utterance === utterance)
@@ -397,6 +435,8 @@ export class ReactorInstructor {
   }
 
   stop() {
+    clearTimeout(this.workerTimeout);
+    this.workerReply = false;
     clearTimeout(this.startTimeout);
     const utterance = this.utterance;
     this.utterance = null;
