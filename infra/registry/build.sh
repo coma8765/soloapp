@@ -14,8 +14,9 @@ case "$scope" in
   client-gateway) services=(client-gateway) ;;
   keycloak) services=(keycloak) ;;
   whisper) services=(whisper) ;;
-  all) services=(auth whoami web client-notify client-gateway keycloak whisper) ;;
-  *) echo 'Expected auth, app-api, web, client-notify, client-gateway, keycloak, whisper or all' >&2; exit 2 ;;
+  tts) services=(tts) ;;
+  all) services=(auth whoami web client-notify client-gateway keycloak whisper tts) ;;
+  *) echo 'Expected auth, app-api, web, client-notify, client-gateway, keycloak, whisper, tts or all' >&2; exit 2 ;;
 esac
 for service in "${services[@]}"; do
   dockerfile="services/$service/deploy/Dockerfile"

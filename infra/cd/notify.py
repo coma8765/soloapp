@@ -18,6 +18,7 @@ SERVICES = (
     "client-gateway",
     "keycloak",
     "whisper",
+    "tts",
 )
 
 

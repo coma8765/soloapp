@@ -29,6 +29,7 @@ SCOPES = (
     "client-gateway",
     "keycloak",
     "whisper",
+    "tts",
     "all",
 )
 IMAGE_SERVICES = {
@@ -40,7 +41,17 @@ IMAGE_SERVICES = {
     "client-gateway": ("client-gateway",),
     "keycloak": ("keycloak",),
     "whisper": ("whisper",),
-    "all": ("auth", "whoami", "web", "client-notify", "client-gateway", "keycloak", "whisper"),
+    "tts": ("tts",),
+    "all": (
+        "auth",
+        "whoami",
+        "web",
+        "client-notify",
+        "client-gateway",
+        "keycloak",
+        "whisper",
+        "tts",
+    ),
 }
 WORKLOADS = {
     "auth": "auth",
@@ -51,6 +62,7 @@ WORKLOADS = {
     "client-gateway": "client-gateway",
     "keycloak": "keycloak",
     "whisper": "whisper",
+    "tts": "tts",
 }
 
 
@@ -70,6 +82,7 @@ def deployment_operation(mode):
         "push-client-gateway",
         "push-keycloak",
         "push-whisper",
+        "push-tts",
     ):
         return mode, None
     raise ValueError("Invalid CD operation")

@@ -1,0 +1,9 @@
+- name: Deploy private TTS service
+  ansible.builtin.include_tasks: "{{ project_root }}/infra/kubernetes/tasks/apply.yaml"
+  vars:
+    manifest_source: "{{ project_root }}/services/tts/deploy/k8s/deployment.yaml.j2"
+    manifest_name: tts
+- name: Wait for TTS readiness
+  ansible.builtin.command: k3s kubectl -n soloapp rollout status deployment/tts --timeout=600s
+  changed_when: false
+  when: not ansible_check_mode

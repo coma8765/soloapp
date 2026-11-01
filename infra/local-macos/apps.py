@@ -147,6 +147,13 @@ def manifests():
             ).render(whisper_image="soloapp-local/whisper:dev")
         )
     )
+    docs += list(
+        yaml.safe_load_all(
+            jinja2.Template(
+                (PROJECT / "services/tts/deploy/k8s/deployment.yaml.j2").read_text()
+            ).render(tts_image="soloapp-local/tts:dev", tts_overrides=CONFIG.get("tts", {}))
+        )
+    )
     ports = {"auth": 19082, "whoami": 8080, "client-gateway": 8080, "client-notify": 8080}
     images = {"whoami": "soloapp_app"}
     for app, port in ports.items():
@@ -161,6 +168,7 @@ def manifests():
             "CHAT_ALLOWED_ORIGIN": f"https://{CONFIG['lan']['ip']}"
             + ("" if CONFIG["lan"]["https_port"] == 443 else f":{CONFIG['lan']['https_port']}"),
             "INTERNAL_PORT": "8443",
+            "TTS_URL": "http://tts.soloapp.svc.cluster.local:8179",
         }
         app_ports = {"http": port}
         if app == "client-gateway":
