@@ -18,6 +18,7 @@ import { MarineLife } from './marine.js';
 import { ProfessorRecorder } from './professor-recorder.js';
 import { Laboratory } from './laboratory.js';
 import { ReactorRoom } from './reactor-room.js';
+import { ShiftClock } from './shift-clock.js';
 import { setupFullscreen } from './fullscreen.js';
 import { keyboardRoomShortcut } from './physical-room-input.js';
 const $ = (id) => document.getElementById(id);
@@ -70,6 +71,13 @@ async function start() {
     new URL(location.href).searchParams.has('reactor-test')
   )
     reactor.enter();
+  const shiftClock = new ShiftClock(reactor, sound);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) shiftClock.update(Date.now(), false);
+  });
+  window.addEventListener('pagehide', () =>
+    shiftClock.update(Date.now(), false),
+  );
   const professorRecorder = new ProfessorRecorder(
     () => {
       $('professor-status').textContent =
@@ -261,8 +269,17 @@ async function start() {
   $('explore').textContent = 'Начать исследование ↗';
   const unlock = () => {
     voice.unlock();
-    sound.start().catch(() => {});
+    sound
+      .start()
+      .then(() => shiftClock.prepareAudio())
+      .catch(() => {});
   };
+  // Unlock on desktop/touch and on the click used to enter immersive VR.
+  window.addEventListener('pointerdown', unlock);
+  window.addEventListener('keydown', (event) => {
+    if (!event.repeat) unlock();
+  });
+  $('vr').addEventListener('click', unlock);
   const explore = () => {
     document.activeElement?.blur();
     if (player.overview) player.toggleOverview();
@@ -417,6 +434,7 @@ async function start() {
     network,
     xr,
     sound,
+    shiftClock,
     voice,
     authPanel,
     quality,
@@ -454,6 +472,13 @@ async function start() {
     const { startRbmkJournalAudit } = await import('./rbmk-journal-audit.js');
     startRbmkJournalAudit(window.planetApp);
   }
+  if (
+    location.hostname === '127.0.0.1' &&
+    new URL(location.href).searchParams.has('shift-clock-audit')
+  ) {
+    const { startShiftClockChecks } = await import('./shift-clock-checks.js');
+    startShiftClockChecks(window.planetApp);
+  }
   let previous = performance.now(),
     hudAt = 0,
     reactorWasActive = false;
@@ -473,6 +498,12 @@ async function start() {
     touch.update();
     player.update(dt, xr.input());
     reactor.update(dt);
+    shiftClock.update(
+      Date.now(),
+      !document.hidden &&
+        (!xr.active ||
+          xr.helper.sessionManager.session.visibilityState === 'visible'),
+    );
     if (reactor.active !== reactorWasActive) {
       reactorWasActive = reactor.active;
       professorRecorder.clear();
