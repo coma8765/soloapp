@@ -3,6 +3,7 @@ import { Terrain, WATER_RADIUS, clamp } from '../shared/world.js';
 import { PlanetScene, FishView } from './scene.js';
 import { Player } from './player.js';
 import { Network } from './network.js';
+import { renderParticipants } from './participants.js';
 import { NatureAudio } from './audio.js';
 import { VoiceChat } from './voice.js';
 import { XRView } from './xr.js';
@@ -226,18 +227,20 @@ async function start() {
   };
   let fps = 0;
   function info() {
+    if (network.participants.admin)
+      return `УЧАСТНИКИ · ping до сервера / FPS\n${network.participants.text()}`;
     if (reactor.active) return reactor.statusText();
     if (room.serverId)
-      return `БЕЛАЯ КОМНАТА\n${Math.round(fps)} FPS\n${network.status} · ID ${network.id || '—'}\nИгроки ${network.peers.size + 1} / 8\n${network.worldTransport} · RTT ${network.ping ?? '—'} мс\ntick ${network.worldTick}\nГолос · ${voice.enabled ? 'микрофон вкл' : 'микрофон выкл'} · X`;
+      return `БЕЛАЯ КОМНАТА\n${Math.round(fps)} FPS\n${network.status} · ${network.email || 'Гость'}\nИгроки ${network.peers.size + 1} / 8\n${network.worldTransport} · RTT ${network.ping ?? '—'} мс\ntick ${network.worldTick}\nГолос · ${voice.enabled ? 'микрофон вкл' : 'микрофон выкл'} · X`;
     const depth = Math.max(0, WATER_RADIUS - player.position.length());
-    return `MICRO / PLANET\n${Math.round(fps)} FPS · ${scene.getActiveMeshes().length} meshes\n${network.status} · ID ${network.id || '—'}\nИгроки ${network.peers.size + 1} / 8 · RTT ${network.ping ?? '—'} мс\nWebRTC RX ${network.rx}\nРыбы · ${network.worldTransport} · tick ${fish.sequence}\n${depth > 0.05 ? 'Глубина ' + depth.toFixed(1) + ' м' : 'На суше'}\nЗвук ${sound.muted ? 'выключен' : 'включён'}\nГолос · ${voice.enabled ? 'микрофон вкл' : 'микрофон выкл'} · X\nПрофессор · ${professorRecorder.enabled ? (professorRecorder.target === null ? 'вне зоны' : 'слушает') : professorRecorder.pending ? 'подключение' : 'ожидание'}${professorRecorder.error ? '\n' + professorRecorder.error : ''}${[
+    return `MICRO / PLANET\n${Math.round(fps)} FPS · ${scene.getActiveMeshes().length} meshes\n${network.status} · ${network.email || 'Гость'}\nИгроки ${network.peers.size + 1} / 8 · RTT ${network.ping ?? '—'} мс\nWebRTC RX ${network.rx}\nРыбы · ${network.worldTransport} · tick ${fish.sequence}\n${depth > 0.05 ? 'Глубина ' + depth.toFixed(1) + ' м' : 'На суше'}\nЗвук ${sound.muted ? 'выключен' : 'включён'}\nГолос · ${voice.enabled ? 'микрофон вкл' : 'микрофон выкл'} · X\nПрофессор · ${professorRecorder.enabled ? (professorRecorder.target === null ? 'вне зоны' : 'слушает') : professorRecorder.pending ? 'подключение' : 'ожидание'}${professorRecorder.error ? '\n' + professorRecorder.error : ''}${[
       ...network.remotes,
     ]
       .slice(0, 3)
       .map(
         ([id, r]) =>
-          '\n#' +
-          id +
+          '\n' +
+          network.participantName(id) +
           ' · ' +
           (
             Math.acos(
@@ -589,8 +592,9 @@ async function start() {
     if (now > hudAt) {
       hudAt = now + 250;
       fps = engine.getFps();
+      renderParticipants($('participant-metrics'), network.participants, now);
       $('connection').textContent =
-        network.status + (network.id ? ' · #' + network.id : '');
+        network.status + (network.email ? ' · ' + network.email : '');
       $('overview').disabled = reactor.active;
       $('overview').querySelector('span').textContent = reactor.active
         ? reactor.physicalView
@@ -651,12 +655,14 @@ async function start() {
               )
                 notes.push('сзади');
               if (now - r.last > 3000) notes.push('нет свежей позиции');
-              return `#${id} · ${(room.serverId ? B.Vector3.Distance(player.position, r.node.position) : distance).toFixed(1)} м · ${now - peer?.pingAt < 5000 ? (peer?.ping ?? '—') : '—'} мс${notes.length ? '\n' + notes.join(' · ') : ''}`;
+              return `${network.participantName(id)} · ${(room.serverId ? B.Vector3.Distance(player.position, r.node.position) : distance).toFixed(1)} м · ${now - peer?.pingAt < 5000 ? (peer?.ping ?? '—') : '—'} мс${notes.length ? '\n' + notes.join(' · ') : ''}`;
             })
             .concat(
               [...network.peers.keys()]
                 .filter((id) => !network.remotes.has(id))
-                .map((id) => '#' + id + ' · ожидание позиции'),
+                .map(
+                  (id) => network.participantName(id) + ' · ожидание позиции',
+                ),
             )
             .join('\n');
       const depth = Math.max(0, WATER_RADIUS - player.position.length());

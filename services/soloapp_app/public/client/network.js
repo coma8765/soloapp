@@ -1,3 +1,4 @@
+import { Participants } from './participants.js';
 import { signalPath } from './api.js';
 import { validState } from '../shared/world.js';
 import { vec } from './scene.js';
@@ -17,6 +18,8 @@ export class Network {
       voice,
     });
     this.rtcConfig = { iceServers: [] };
+    this.participants = new Participants();
+    this.email = '';
     this.remotes = new Map();
     this.peers = new Map();
     this.id = 0;
@@ -40,7 +43,15 @@ export class Network {
     return false;
   }
 
+  participantName(id = this.id) {
+    return (id === this.id && this.email) || this.participants.label(id);
+  }
+
   clearPeers() {
+    this.participants.reset();
+    this.email = '';
+    this.ping = null;
+    this.pingAt = 0;
     this.voice?.disconnect();
     for (const peer of this.peers.values()) peer.pc.close();
     this.peers.clear();
@@ -146,6 +157,7 @@ export class Network {
     }
     if (type === 'welcome') {
       this.id = message.id;
+      this.email = typeof message.email === 'string' ? message.email : '';
       this.rtcConfig = message.rtc_config || { iceServers: [] };
       if (this.voice) {
         this.voice.relayConfigured =
@@ -171,6 +183,21 @@ export class Network {
       });
       if (this.worldProtocol === 1) this.startWorld();
       else this.worldTransport = 'WSS · общий мир';
+    }
+    if (type === 'participants') {
+      this.participants.accept(message);
+      for (const [id, remote] of this.remotes)
+        remote.avatar.setLabel?.(this.participantName(id));
+    }
+    if (type === 'telemetry_probe' && typeof message.nonce === 'string') {
+      const fps = globalThis.document?.hidden
+        ? null
+        : this.scene.getEngine().getFps();
+      this.send({
+        type: 'telemetry_reply',
+        nonce: message.nonce,
+        fps: Number.isFinite(fps) && fps >= 0 && fps <= 1000 ? fps : null,
+      });
     }
     if (type === 'fish') {
       this.fish.snapshot(message);
@@ -198,6 +225,7 @@ export class Network {
       this.onReactorServerMessage?.(message);
     if (type === 'joined') this.addPeer(message.id);
     if (type === 'left') {
+      this.participants.players.delete(message.id);
       this.voice?.remove(message.id);
       this.peers.get(message.id)?.pc.close();
       this.peers.delete(message.id);
@@ -447,7 +475,12 @@ export class Network {
         ? remote?.avatarId || DEFAULT_AVATAR
         : findAvatar(state.avatarId)?.id || DEFAULT_AVATAR;
     if (!remote) {
-      const avatar = new LocalAvatar(this.scene, avatarId, id);
+      const avatar = new LocalAvatar(
+        this.scene,
+        avatarId,
+        id,
+        this.participantName(id),
+      );
       remote = { avatar, avatarId, node: avatar.root, sequence: -1, last: 0 };
       this.remotes.set(id, remote);
     }

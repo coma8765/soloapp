@@ -16,6 +16,7 @@ class ReactorAuthority {
     Json::Value profile_;
     bool validControl(const std::string &name, const Json::Value &value) const;
     bool validSnapshot(const Json::Value &state) const;
-    std::string command(Json::Value &data, const Json::Value &message, long long now) const;
+    std::string command(Json::Value &data, const Json::Value &message, long long now,
+                        const std::string &actor) const;
 };
 } // namespace planet

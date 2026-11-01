@@ -283,33 +283,47 @@ export function avatar(scene, id, local = false) {
   marker.position.set(0, 1.5, -0.45);
   marker.material = body.material;
   marker.isPickable = false;
-  if (!local) avatarLabel(scene, id).parent = root;
+  if (!local) avatarLabel(scene).parent = root;
   return root;
 }
-export function avatarLabel(scene, id) {
+export function avatarLabel(scene, name = 'Участник') {
   const plane = B.MeshBuilder.CreatePlane(
-    'id-label',
-    { width: 1.4, height: 0.45 },
+    'participant-label',
+    { width: 2.8, height: 0.35 },
     scene,
   );
   plane.position.y = 2.2;
   plane.billboardMode = B.Mesh.BILLBOARDMODE_ALL;
   const tex = new B.DynamicTexture(
-    'label',
-    { width: 256, height: 64 },
+    'participant-label',
+    { width: 1024, height: 128 },
     scene,
     false,
   );
   tex.hasAlpha = true;
-  tex.drawText(
-    'Игрок ' + id,
-    null,
-    43,
-    'bold 30px sans-serif',
-    '#ffffff',
-    '#173038cc',
-    true,
-  );
+  let previous;
+  plane.metadata = {
+    setText(value) {
+      if (previous === value) return;
+      previous = value;
+      const c = tex.getContext();
+      c.font = 'bold 48px sans-serif';
+      const size = Math.min(
+        48,
+        (960 / Math.max(1, c.measureText(value).width)) * 48,
+      );
+      tex.drawText(
+        value,
+        null,
+        82,
+        `bold ${size}px sans-serif`,
+        '#ffffff',
+        '#173038cc',
+        true,
+      );
+    },
+  };
+  plane.metadata.setText(name);
   const mat = new B.StandardMaterial('label', scene);
   mat.diffuseTexture = tex;
   mat.emissiveColor = B.Color3.White();

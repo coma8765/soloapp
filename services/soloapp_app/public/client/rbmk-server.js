@@ -147,13 +147,13 @@ export class RbmkServerSync {
     }
   }
 
-  status() {
+  status(label = () => 'Участник') {
     if (!this.required)
       return 'Локальное упражнение · серверное хранение выключено';
     if (!this.online || !this.ready)
       return this.error || 'Ожидание состояния PostgreSQL';
     return (
-      `PostgreSQL · снимок ${this.version} · команды ${this.revision} · расчёт: #${this.writer}` +
+      `PostgreSQL · снимок ${this.version} · команды ${this.revision} · расчёт: ${label(this.writer)}` +
       (this.pending.size
         ? ` · ожидают подтверждения: ${this.pending.size}`
         : '') +

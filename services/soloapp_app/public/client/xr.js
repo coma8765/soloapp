@@ -313,7 +313,7 @@ export class XRView {
       `VR · ${this.highQuality ? 'детально' : 'плавно'} · Y / L3 — графика\n${this.hudText()}`
         .split('\n')
         .slice(0, 11)
-        .forEach((s, i) => c.fillText(s, 24, 43 + i * 35));
+        .forEach((s, i) => c.fillText(s, 24, 43 + i * 35, 720));
       this.texture.update();
     }
   }

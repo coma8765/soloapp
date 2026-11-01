@@ -11,6 +11,7 @@ class OdbRepository final : public Repository {
                            const solo::db::PoolConfig &pool = {});
     bool CreateUser(const UserRecord &) override;
     std::optional<UserRecord> FindUser(const std::string &) override;
+    std::optional<UserRecord> FindUserById(const std::string &) override;
     void CreateSession(const std::string &, const std::string &) override;
     std::optional<std::string> FindSession(const std::string &) override;
     void DeleteSession(const std::string &) override;

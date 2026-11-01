@@ -38,6 +38,12 @@ Frame WorldStore::exchange(const Json::Value &local, const std::vector<Json::Val
         for (auto player : decode(portal.players)) {
             ids.insert(player["id"].asUInt64());
             player["owner"] = portal.id;
+            // Sample age uses each process's steady clock plus elapsed DB time
+            // since the remote portal heartbeat, never wall-clock skew across sites.
+            auto &sample = player["telemetry"];
+            if (sample["age_ms"].isNumeric())
+                sample["age_ms"] =
+                    sample["age_ms"].asDouble() + std::max(0LL, now - portal.pulse_ms);
             frame.players.append(player);
         }
     }

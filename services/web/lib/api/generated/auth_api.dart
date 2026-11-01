@@ -23,6 +23,20 @@ class ApiUserId {
   };
 }
 
+class ApiProfile {
+  const ApiProfile({required this.userId, required this.username});
+  final String userId;
+  final String username;
+  factory ApiProfile.fromJson(Map<String, dynamic> json) => ApiProfile(
+    userId: json['user_id'] as String,
+    username: json['username'] as String,
+  );
+  Map<String, dynamic> toJson() => {
+    'user_id': userId,
+    'username': username,
+  };
+}
+
 class ApiStatus {
   const ApiStatus({required this.status});
   final String status;
@@ -101,12 +115,12 @@ class AuthApi {
       accessToken: accessToken,
     );
   }
-  Future<ApiUserId> authMe(String accessToken) async {
+  Future<ApiProfile> authMe(String accessToken) async {
     final data = await transport.request('GET', '/api/v1/auth/v1/me',
       expectedStatus: 200,
       timeout: const Duration(seconds: 15),
       accessToken: accessToken,
     );
-    return ApiUserId.fromJson(data);
+    return ApiProfile.fromJson(data);
   }
 }
