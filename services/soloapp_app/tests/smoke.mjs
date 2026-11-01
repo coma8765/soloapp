@@ -89,12 +89,27 @@ try {
       position: [0, 36, 0],
       rotation: [0, 0, 0, 1],
       pitch: 0,
+      avatarId: 'scientist',
     }),
   );
   const remote = await b.next(
     (v) => v.type === 'player_state' && v.from === wa.id,
   );
   assert.deepEqual(remote.state.position, [0, 36, 0]);
+  assert.equal(remote.state.avatarId, 'scientist');
+  a.ws.send(
+    JSON.stringify({
+      ...remote.state,
+      type: 'state',
+      sequence: 2,
+      avatarId: 'female',
+    }),
+  );
+  const switched = await b.next(
+    (v) =>
+      v.type === 'player_state' && v.from === wa.id && v.state.sequence === 2,
+  );
+  assert.equal(switched.state.avatarId, 'female');
   console.log(
     JSON.stringify({
       accounts: 2,

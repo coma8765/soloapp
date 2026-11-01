@@ -1,7 +1,13 @@
-import { AvatarPreferences, AVATAR_STORAGE_KEY } from './avatar-catalog.js';
+import {
+  AvatarPreferences,
+  AVATARS,
+  AVATAR_STORAGE_KEY,
+} from './avatar-catalog.js';
+import { Network } from './network.js';
 import { LocalAvatar } from './local-avatar.js';
 import { AccountPanel } from './account-panel.js';
 import { XRView } from './xr.js';
+import { RoomShortcut } from './physical-room-input.js';
 const B = window.BABYLON;
 const output = document.getElementById('results');
 function check(condition, message) {
@@ -26,19 +32,28 @@ try {
   const storage = memory(),
     preferences = new AvatarPreferences(() => storage);
   check(
-    preferences.id === 'male' && !preferences.saved,
+    preferences.id === 'scientist' && !preferences.saved,
     'Без сохранения выбран аватар по умолчанию',
   );
   storage.setItem(AVATAR_STORAGE_KEY, 'unknown');
   check(
-    new AvatarPreferences(() => storage).id === 'male',
+    new AvatarPreferences(() => storage).id === 'scientist',
     'Неизвестный ID в хранилище безопасно игнорируется',
   );
+  for (const id of ['male', 'female', 'uraraka', 'scientist']) {
+    storage.setItem(AVATAR_STORAGE_KEY, id);
+    check(
+      new AvatarPreferences(() => storage).id === id,
+      'Ранее сохранённый выбор сохраняет приоритет: ' + id,
+    );
+  }
   const denied = new AvatarPreferences(() => {
     throw Error('Storage denied');
   });
   check(
-    denied.id === 'male' && !denied.save('female') && denied.id === 'female',
+    denied.id === 'scientist' &&
+      !denied.save('female') &&
+      denied.id === 'female',
     'Запрет localStorage оставляет выбор на время сессии',
   );
 
@@ -54,7 +69,68 @@ try {
   camera.minZ = 0.05;
   new B.HemisphericLight('light', new B.Vector3(0, 1, 0), scene);
   const avatar = new LocalAvatar(scene);
-  check(await avatar.ready, 'Мужской GLB загружен');
+  check(
+    (await avatar.ready) &&
+      avatar.id === 'scientist' &&
+      avatar.joints.size === 7,
+    'По умолчанию загружен учёный с рабочим скелетом без fallback',
+  );
+  avatar.update(0, 0, 0, true);
+  scene.render();
+  const scientistBounds = avatar.model.getHierarchyBoundingVectors(true);
+  check(
+    Math.abs(scientistBounds.min.y) < 0.001 &&
+      Math.abs(scientistBounds.max.y - 1.8) < 0.001 &&
+      !avatar.fallback.isEnabled(),
+    'Учёный стоит на земле и нормализован до 1,8 м',
+  );
+  for (const mesh of avatar.container.meshes.filter(
+    (mesh) => mesh.getTotalVertices() > 0,
+  )) {
+    await mesh.material.forceCompilationAsync(mesh);
+    check(
+      !mesh.material.getEffect()?.getCompilationError() &&
+        mesh.material.getActiveTextures().every((texture) => texture.isReady()),
+      'Материал и текстуры учёного: ' + mesh.name,
+    );
+  }
+  const idle = avatar.joints.get('thigh_l').node.rotationQuaternion.clone();
+  avatar.update(0.2, 3, 0.4, true);
+  check(
+    Math.abs(
+      B.Quaternion.Dot(
+        idle,
+        avatar.joints.get('thigh_l').node.rotationQuaternion,
+      ),
+    ) < 0.999,
+    'Скелет учёного получает анимацию ходьбы',
+  );
+  const network = new Network(scene, { worldMap: 'planet' });
+  const state = {
+    sequence: 1,
+    position: [0, 36, 0],
+    rotation: [0, 0, 0, 1],
+    pitch: 0,
+  };
+  network.apply(42, state);
+  const remote = network.remotes.get(42).avatar;
+  check(
+    (await remote.ready) && remote.id === 'scientist',
+    'Удалённый игрок без выбора получает учёного',
+  );
+  for (const id of ['female', 'scientist']) {
+    network.apply(42, { ...state, sequence: ++state.sequence, avatarId: id });
+    check(
+      (await remote.ready) && remote.id === id,
+      'Удалённый игрок переключает модель: ' + id,
+    );
+  }
+  network.apply(42, { ...state, sequence: ++state.sequence });
+  check(
+    remote.id === 'scientist',
+    'Снимок без avatarId сохраняет модель удалённого игрока',
+  );
+  remote.root.dispose();
   const player = { avatar, keys: new Set(), inputEnabled: true };
   const auth = {
     token: null,
@@ -98,7 +174,7 @@ try {
     avatar.id === 'female' &&
       avatar.skeleton.bones.length === 65 &&
       previous.meshes.every((mesh) => mesh.isDisposed()),
-    'Женский аватар заменяет мужской и освобождает прежнюю модель',
+    'Женский аватар заменяет учёного и освобождает прежнюю модель',
   );
   for (const mesh of avatar.container.meshes.filter(
     (mesh) => mesh.getTotalVertices() > 0,
@@ -264,10 +340,19 @@ try {
   );
   panel.chooseAvatar('male');
   panel.sync();
+  for (const definition of AVATARS) {
+    const choice = panel.targets.find(
+      (item) => item.id === 'avatar-' + definition.id,
+    );
+    check(
+      choice && choice.y + choice.h < 735,
+      'Выбор не перекрывает статус и кнопки: ' + definition.id,
+    );
+  }
   const row = panel.targets.find((item) => item.id === 'avatar-uraraka');
   check(
     row.y + row.h < 735,
-    'Третий аватар помещается в 3D-панель и не перекрывает статус или кнопки',
+    'Последний аватар помещается в 3D-панель и не перекрывает статус или кнопки',
   );
   const localTarget = new B.TransformNode('test-settings-target', scene);
   localTarget.parent = panel.mesh;
@@ -281,10 +366,11 @@ try {
   panel.selectXR({ frame, inputSource: source }, {}, origin);
   check(
     panel.draft === 'uraraka',
-    'VR-луч выбирает третий пункт списка аватаров',
+    'VR-луч выбирает последний пункт списка аватаров',
   );
   // B must still work when settings have disabled locomotion.
   const xr = {
+    roomShortcut: new RoomShortcut(),
     active: true,
     player,
     authPanel: panel,

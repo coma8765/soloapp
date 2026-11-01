@@ -45,6 +45,8 @@ export class LocalAvatar {
         container.dispose();
         return false;
       }
+      // Authored morph clips must not compete with the player's procedural pose.
+      for (const animation of container.animationGroups) animation.stop();
       const skeleton = container.skeletons[0];
       const rigged = definition.rigged !== false;
       if (rigged && !skeleton) throw Error('Avatar has no skeleton');
@@ -60,7 +62,7 @@ export class LocalAvatar {
       const joints = new Map();
       for (const name of rigged ? names : []) {
         const node = skeleton.bones
-          .find((bone) => bone.name === name)
+          .find((bone) => bone.name === (definition.bones?.[name] ?? name))
           ?.getTransformNode();
         if (!node?.rotationQuaternion)
           throw Error('Missing avatar joint: ' + name);
@@ -88,6 +90,7 @@ export class LocalAvatar {
         if (mesh.skeleton) mesh.alwaysSelectAsActiveMesh = true;
       }
       this.joints = rigged ? joints : null;
+      this.armRestAngle = definition.armRestAngle ?? 1.35;
       this.model = model;
       this.skeleton = skeleton;
       this.container = container;
@@ -121,8 +124,8 @@ export class LocalAvatar {
 
   pose(pitch) {
     const swing = Math.sin(this.phase) * this.stride;
-    this.rotate('upperarm_l', swing * 0.4, -1.35);
-    this.rotate('upperarm_r', -swing * 0.4, 1.35);
+    this.rotate('upperarm_l', swing * 0.4, -this.armRestAngle);
+    this.rotate('upperarm_r', -swing * 0.4, this.armRestAngle);
     this.rotate('thigh_l', -swing * 0.55);
     this.rotate('thigh_r', swing * 0.55);
     this.rotate('calf_l', Math.max(0, swing) * 0.7);

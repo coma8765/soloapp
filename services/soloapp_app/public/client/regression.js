@@ -176,17 +176,18 @@ export async function verifyLocalAvatar(player, check) {
     'Локальная GLB-модель загружена без fallback',
   );
   const avatar = player.avatar;
-  check(avatar.skeleton.bones.length === 65, 'Humanoid-скелет: 65 костей');
+  check(
+    avatar.skeleton && avatar.joints.size === 7,
+    'Скелет аватара: семь управляемых суставов',
+  );
   check(!avatar.fallback.isEnabled(), 'Капсула скрыта после загрузки модели');
   const meshes = avatar.container.meshes.filter(
     (mesh) => mesh.getTotalVertices() > 0,
   );
   check(
-    meshes.length === 3 &&
-      meshes.every(
-        (mesh) => mesh.skeleton === avatar.skeleton && !mesh.isPickable,
-      ),
-    'Тело, глаза и брови привязаны к скелету и не перехватывают выбор объектов',
+    meshes.some((mesh) => mesh.skeleton === avatar.skeleton) &&
+      meshes.every((mesh) => !mesh.isPickable),
+    'Модель использует скелет и не перехватывает выбор объектов',
   );
   for (const mesh of meshes) {
     await mesh.material.forceCompilationAsync(mesh);
