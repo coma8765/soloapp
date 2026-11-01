@@ -1,5 +1,6 @@
 FROM --platform=$BUILDPLATFORM golang:1.23-bookworm AS build
 RUN apt-get update && apt-get install -y --no-install-recommends gcc-x86-64-linux-gnu && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends libc6-dev-amd64-cross && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY . .
 RUN GOOS=linux GOARCH=amd64 CC=x86_64-linux-gnu-gcc CGO_ENABLED=1 go build -mod=vendor -ldflags '-s -w -extldflags=-Wl,--unresolved-symbols=ignore-in-object-files' -o /nvidia-device-plugin ./cmd/nvidia-device-plugin
