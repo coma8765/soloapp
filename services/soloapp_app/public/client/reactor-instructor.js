@@ -13,6 +13,7 @@ export class ReactorInstructor {
   constructor(room) {
     this.room = room;
     this.enabled = true;
+    this.announcementActive = false;
     this.commandRevision = 0;
     this.lastActivation = -Infinity;
     this.lastRequest = -Infinity;
@@ -328,11 +329,20 @@ export class ReactorInstructor {
     );
   }
 
+  setAnnouncementActive(active) {
+    if (this.announcementActive === active) return;
+    this.announcementActive = active;
+    if (active) this.stop();
+    else if (this.room.active && this.session?.state)
+      this.present(this.session.state);
+  }
+
   present(state) {
     this.stop();
     this.caption(state.text || 'Инструктор · продолжаем вводное занятие…');
     if (
       !this.enabled ||
+      this.announcementActive ||
       this.room.physicalView ||
       document.hidden ||
       !['intro', 'comment'].includes(state.kind)

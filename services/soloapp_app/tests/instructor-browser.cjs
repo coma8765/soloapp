@@ -193,6 +193,17 @@ const { chromium } = require('playwright');
       await a.evaluate(() => planetApp.reactor.instructor.enabled),
       false,
     );
+    // Shift announcement takes local audio priority, then the sentence resumes.
+    await a.evaluate(() => {
+      const i = planetApp.reactor.instructor;
+      i.toggle();
+      i.setAnnouncementActive(true);
+      if (currentSpeech !== null)
+        throw Error('Instructor overlaps shift announcement');
+      i.setAnnouncementActive(false);
+      if (!currentSpeech)
+        throw Error('Instructor did not resume after announcement');
+    });
     // Old server-history records and duplicates do not produce new comments.
     assert.equal(
       await a.evaluate(() => {
