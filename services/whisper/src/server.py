@@ -9,6 +9,7 @@ browser requests so no CORS/private-network permissions are needed in VR.
 import argparse
 import io
 import json
+import os
 import threading
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -130,7 +131,10 @@ def main():
 
     segments, _ = model.transcribe(np.zeros(16000, dtype=np.float32), language="ru")
     list(segments)
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(recognize, args.model.name))
+    server = ThreadingHTTPServer(
+        (args.host, args.port),
+        make_handler(recognize, os.environ.get("WHISPER_MODEL_ID", args.model.name)),
+    )
     print(f"Local Whisper ready at http://127.0.0.1:{args.port}; audio is never saved", flush=True)
     try:
         server.serve_forever()

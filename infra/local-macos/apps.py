@@ -144,7 +144,10 @@ def manifests():
         yaml.safe_load_all(
             jinja2.Template(
                 (PROJECT / "services/whisper/deploy/k8s/deployment.yaml.j2").read_text()
-            ).render(whisper_image="soloapp-local/whisper:dev")
+            ).render(
+                whisper_image="soloapp-local/whisper:dev",
+                whisper_overrides=CONFIG.get("whisper", {}),
+            )
         )
     )
     docs += list(
