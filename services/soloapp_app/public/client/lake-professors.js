@@ -1,3 +1,4 @@
+import { fetchAsset, loadAssetContainer } from './asset-cache.js';
 import { lakeProfessorSites } from './lake-sites.js';
 import { orientation, vec } from './scene.js';
 const B = window.BABYLON;
@@ -14,7 +15,7 @@ export class LakeProfessors {
   }
   async loadSites() {
     try {
-      const response = await fetch(
+      const response = await fetchAsset(
         new URL('../assets/lakes.json', import.meta.url).href,
       );
       if (!response.ok) throw Error('Не удалось загрузить берега озёр');
@@ -32,7 +33,7 @@ export class LakeProfessors {
     }
   }
   async loadTemplate() {
-    this.container = await B.LoadAssetContainerAsync(
+    this.container = await loadAssetContainer(
       new URL('../assets/professor/professor-einstein.glb', import.meta.url)
         .href,
       this.scene,

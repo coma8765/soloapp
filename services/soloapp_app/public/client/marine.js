@@ -1,3 +1,4 @@
+import { fetchAsset, loadAssetContainer } from './asset-cache.js';
 import { MARINE_SPECIES } from './marine-catalog.js';
 import { MarineCard } from './marine-card.js';
 import { WATER_RADIUS, clamp } from '../shared/world.js';
@@ -61,7 +62,7 @@ export class MarineLife {
 
   async load() {
     try {
-      const response = await fetch(
+      const response = await fetchAsset(
         new URL('../assets/lakes.json', import.meta.url),
       );
       if (!response.ok) throw Error('Карты озёр недоступны');
@@ -87,18 +88,16 @@ export class MarineLife {
         if (!this.models.has(species.id))
           this.models.set(
             species.id,
-            B.LoadAssetContainerAsync(species.model, this.scene).then(
-              (container) => {
-                this.containers.push(container);
-                for (const material of container.materials)
-                  if (material instanceof B.PBRMaterial) {
-                    material.metallic = 0;
-                    material.roughness = 0.68;
-                    material.environmentIntensity = 0.7;
-                  }
-                return container;
-              },
-            ),
+            loadAssetContainer(species.model, this.scene).then((container) => {
+              this.containers.push(container);
+              for (const material of container.materials)
+                if (material instanceof B.PBRMaterial) {
+                  material.metallic = 0;
+                  material.roughness = 0.68;
+                  material.environmentIntensity = 0.7;
+                }
+              return container;
+            }),
           );
         const container = await this.models.get(species.id);
         for (let slot = 0; slot < species.count; slot++)
