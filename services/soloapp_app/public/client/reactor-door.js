@@ -94,7 +94,7 @@ export class ReactorDoor {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 52px sans-serif';
-    ctx.fillText(view.exit ? 'НА ПЛАНЕТУ' : 'БЩУ · РБМК-1000', 512, 85);
+    ctx.fillText(view.exit ? 'НА ПЛАНЕТУ' : 'БЩУ · ВВЭР-1200', 512, 85);
     ctx.font = '30px sans-serif';
     ctx.fillStyle = '#cfe6c9';
     ctx.fillText(this.sync.status(), 512, 163);

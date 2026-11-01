@@ -42,7 +42,9 @@ export class RbmkServerSync {
     this.id = id;
     this.online = protocol === 1;
     this.version = -1;
-    this.error = this.online ? '' : 'Сервер не поддерживает хранение РБМК';
+    this.error = this.online
+      ? ''
+      : 'Сервер не поддерживает хранение состояния ВВЭР-1200';
     if (this.online) this.send({ type: 'reactor_join', active: true });
     this.changed?.();
   }
