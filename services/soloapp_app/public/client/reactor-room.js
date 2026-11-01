@@ -7,6 +7,7 @@ import { RbmkJournalStation } from './rbmk-journal-station.js';
 import { RbmkJournal } from './rbmk-journal.js';
 import { RbmkServerSync } from './rbmk-server.js';
 import { PhysicalSystemRoom } from './physical-system-room.js';
+import { ReactorInstructor } from './reactor-instructor.js';
 
 const B = window.BABYLON;
 export { REACTOR_MAP } from '../shared/room.js';
@@ -32,6 +33,7 @@ export class ReactorRoom {
     this.teamLog = [];
     this.materials = new Map();
     this.buildRoom();
+    this.instructor = new ReactorInstructor(this);
     this.server = new RbmkServerSync({
       send: (message) => this.network?.send(message),
       restore: (state) => {
@@ -55,6 +57,11 @@ export class ReactorRoom {
           c.kind === 'control' && RBMK_CONTROLS[c.name]
             ? `${RBMK_CONTROLS[c.name].label}: ${this.formatControl(c.name, record.value)}`
             : this.actionLabel(c.action);
+        this.instructor.serverControl(
+          record,
+          label,
+          this.actorLabel(record.from),
+        );
         this.journal.store.recordAction(
           label,
           this.actorLabel(record.from),
@@ -354,7 +361,8 @@ export class ReactorRoom {
   interactiveMesh(mesh) {
     return !!(
       mesh?.isEnabled() &&
-      (mesh.metadata?.physicalSystem ||
+      (mesh.metadata?.rbmkInstructor ||
+        mesh.metadata?.physicalSystem ||
         mesh.metadata?.rbmkPart ||
         mesh.metadata?.rbmkControl ||
         mesh.metadata?.rbmkAction ||
@@ -363,6 +371,10 @@ export class ReactorRoom {
   }
 
   activatePhysical(mesh) {
+    if (mesh?.metadata?.rbmkInstructor) {
+      this.instructor.activate();
+      return true;
+    }
     if (this.physicalView) return this.physicalRoom?.activate(mesh) || false;
     return this.journal.activate(mesh) || this.physicalConsole.activate(mesh);
   }
@@ -493,6 +505,8 @@ export class ReactorRoom {
 
   connectNetwork(network) {
     this.network = network;
+    network.onInstructorMessage = (peer, message) =>
+      this.instructor.receive(peer, message);
     network.onReactorMessage = (peerId, message) =>
       this.receiveNetworkMessage(peerId, message);
     network.onReactorServerMessage = (message) => {
@@ -503,7 +517,15 @@ export class ReactorRoom {
       if (!this.active) return;
       if (message.type === 'reactor_welcome')
         this.enableServer(message.id, message.protocol, message.userId);
-      else this.server.receive(message);
+      else {
+        if (
+          message.type === 'reactor_state' &&
+          !this.server.ready &&
+          Number.isSafeInteger(message.revision)
+        )
+          this.instructor.commandRevision = message.revision;
+        this.server.receive(message);
+      }
     };
     if (this.active && network.auth?.token) this.prepareServer();
   }
@@ -610,6 +632,10 @@ export class ReactorRoom {
     const value = this.model.setControl(name, rawValue);
     if (value === undefined) return false;
     this.share('control', { name, value });
+    this.instructor.control(
+      `${RBMK_CONTROLS[name].label}: ${this.formatControl(name, value)}`,
+      this.actorLabel(),
+    );
     this.record(
       `${RBMK_CONTROLS[name].label}: ${this.formatControl(name, value)}`,
     );
@@ -623,6 +649,7 @@ export class ReactorRoom {
       return !!this.server.request({ kind: 'action', action });
     if (!this.applyAction(action)) return false;
     this.share('action', { action });
+    this.instructor.control(this.actionLabel(action), this.actorLabel());
     this.record(this.actionLabel(action));
     this.syncDialog();
     this.drawStatus(true);
@@ -679,6 +706,10 @@ export class ReactorRoom {
       const value = this.model.setControl(message.name, message.value);
       if (value === undefined) return;
       const schema = RBMK_CONTROLS[message.name];
+      this.instructor.control(
+        `${schema.label}: ${this.formatControl(message.name, value)}`,
+        this.actorLabel(peerId),
+      );
       this.record(
         `${schema.label}: ${this.formatControl(message.name, value)}`,
         peerId,
@@ -686,6 +717,10 @@ export class ReactorRoom {
     } else if (message.kind === 'action') {
       if (!this.applyAction(message.action)) return;
       this.record(this.actionLabel(message.action), peerId);
+      this.instructor.control(
+        this.actionLabel(message.action),
+        this.actorLabel(peerId),
+      );
     } else return;
     this.syncDialog();
     this.drawStatus(true);
@@ -768,7 +803,8 @@ export class ReactorRoom {
       this.physicalConsole.setHovered(mesh);
       if (this.hints && part) this.openPart(part);
       this.canvas.style.cursor = mesh
-        ? mesh.metadata.rbmkControl ||
+        ? mesh.metadata.rbmkInstructor ||
+          mesh.metadata.rbmkControl ||
           mesh.metadata.rbmkAction ||
           mesh.metadata.rbmkJournal
           ? 'pointer'
@@ -794,6 +830,7 @@ export class ReactorRoom {
               );
         const mesh = hit?.pickedMesh;
         if (
+          mesh?.metadata?.rbmkInstructor ||
           mesh?.metadata?.physicalSystem ||
           mesh?.metadata?.rbmkControl ||
           mesh?.metadata?.rbmkAction ||
@@ -980,6 +1017,7 @@ export class ReactorRoom {
     if (this.elements.team) this.elements.team.hidden = false;
     document.body.classList.add('in-reactor');
     this.record('вход через портал');
+    this.instructor.enter();
     this.share('state-request');
     this.syncTeamPanel();
     this.drawStatus(true);
@@ -987,6 +1025,7 @@ export class ReactorRoom {
 
   leave() {
     if (!this.active) return;
+    this.instructor.leave();
     this.setHints(false);
     this.journal.blur();
     this.server.leave();
@@ -1023,6 +1062,7 @@ export class ReactorRoom {
   }
 
   update(dt) {
+    this.instructor.update(dt);
     this.cooldown = Math.max(0, this.cooldown - dt);
     if (!this.active) {
       if (
