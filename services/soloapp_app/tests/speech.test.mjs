@@ -1,5 +1,6 @@
 // Include shared instructor narration in the existing speech CI entry point.
 import './instructor.test.mjs';
+import './workers.test.mjs';
 import assert from 'node:assert/strict';
 import {
   PCMResampler,
