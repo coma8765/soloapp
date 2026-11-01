@@ -187,7 +187,27 @@ jobs:
           set -euo pipefail
           transfer_options=()
           if [ "$FORCE_IMAGE_TRANSFER" = true ]; then transfer_options+=(--force); fi
+          mirror_image() {
+            local site=$1 service=$2 host port
+            if [ "$site" = yc ]; then host=$YC_HOST; port=$YC_PORT; else host=$HOME_HOST; port=$HOME_PORT; fi
+            ssh -i "$RUNNER_TEMP/cd/$site" -p "$port" -o IdentitiesOnly=yes -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/cd/known_hosts" \
+              -o ForwardAgent=no -o ConnectTimeout=20 -o ServerAliveInterval=30 \
+              "soloapp-cd@$host" "mirror-$service $SHA"
+          }
           for service in $IMAGES; do
+            if [ "$FORCE_IMAGE_TRANSFER" != true ]; then
+              # Reuse a previously published immutable image, including partial releases.
+              # Both directions must verify successfully before skipping the new archive.
+              if mirror_image home "$service"; then
+                mirror_image yc "$service"
+                continue
+              fi
+              if mirror_image yc "$service"; then
+                mirror_image home "$service"
+                continue
+              fi
+            fi
             for site in yc home; do
               if [ "$site" = yc ]; then host=$YC_HOST; port=$YC_PORT; else host=$HOME_HOST; port=$HOME_PORT; fi
               if [ "$site" = home ] && [ "$FORCE_IMAGE_TRANSFER" != true ]; then
