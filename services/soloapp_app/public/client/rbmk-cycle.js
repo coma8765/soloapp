@@ -16,6 +16,8 @@ export function initialCycle() {
     producedEnergy: 0,
     massError: 0,
     energyError: 0,
+    initialMass: INITIAL_MASS,
+    initialEnergy: INITIAL_ENERGY,
     feed: [750, 750],
     steam: [750, 750],
     dump: [0, 0],
@@ -134,13 +136,13 @@ export function updateCycle(model, flows, dt) {
     );
   });
   c.producedEnergy += model.thermalPowerMW * dt;
-  c.massError = storedMass(model) + c.escapedMass - INITIAL_MASS;
+  c.massError = storedMass(model) + c.escapedMass - c.initialMass;
   c.energyError =
     storedEnergy(model) +
     c.escapedEnergy +
     c.rejectedEnergy +
     c.generatedEnergy -
     c.producedEnergy -
-    INITIAL_ENERGY;
+    c.initialEnergy;
   return electric;
 }

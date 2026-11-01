@@ -133,6 +133,44 @@ int main(int argc, char **argv) {
         check(planet::encode(restored["state"]) == planet::encode(data["state"]) &&
                   planet::encode(restored["journal"]) == planet::encode(data["journal"]),
               "restoring serialized authority must preserve state and journal");
+        auto legacy = data;
+        legacy["state"]["modelVersion"] = 3;
+        for (const char *name : {"fuelTemperatures", "voidFractions", "geometricLevels", "cycle"})
+            legacy["state"].removeMember(name);
+        legacy["state"]["loopMasses"][0] = 690000.0;
+        legacy["state"]["loopEnergies"][0] = 870000.0;
+        legacy["state"]["fuelTemperature"] = 710.0;
+        const auto original = legacy;
+        restarted.update(legacy, remaining, {}, 4300);
+        check(legacy["state"]["modelVersion"] == 4 &&
+                  legacy["previousModelState"] == original["state"] &&
+                  legacy["state"]["controls"] == original["state"]["controls"] &&
+                  legacy["state"]["elapsed"] == original["state"]["elapsed"] &&
+                  legacy["state"]["fuelTemperatures"][0] == 710.0 &&
+                  legacy["state"]["cycle"]["initialMass"] == 1910000.0 &&
+                  legacy["journal"] == original["journal"] &&
+                  legacy["commands"] == original["commands"] &&
+                  legacy["receipts"] == original["receipts"] &&
+                  legacy["revision"] == original["revision"] &&
+                  legacy["writerEpoch"].asUInt64() == original["writerEpoch"].asUInt64() + 1,
+              "v3 upgrade must preserve the exercise, audit and fence old writers");
+        const auto upgraded = legacy;
+        restarted.update(legacy, remaining, {}, 4400);
+        check(legacy == upgraded, "v3 migration must run only once");
+        auto invalidCycle = legacy["state"];
+        invalidCycle["cycle"]["returnMass"][0] = -1;
+        snapshot["from"] = 2;
+        snapshot["user_id"] = "b";
+        snapshot["writerEpoch"] = legacy["writerEpoch"];
+        snapshot["revision"] = legacy["revision"];
+        snapshot["state"] = invalidCycle;
+        authority.update(legacy, remaining, {snapshot}, 4500);
+        check(legacy == upgraded, "negative return inventory rejected");
+        invalidCycle = legacy["state"];
+        invalidCycle["cycle"].removeMember("initialEnergy");
+        snapshot["state"] = invalidCycle;
+        authority.update(legacy, remaining, {snapshot}, 4600);
+        check(legacy == upgraded, "incomplete cycle rejected");
         std::cout << "PASS: command order, reconnect idempotency, validation, writer fencing, "
                      "journal identity and restore\n";
     } catch (const std::exception &error) {

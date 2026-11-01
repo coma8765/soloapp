@@ -492,8 +492,12 @@ export class PhysicalSystemRoom {
       const schema = RBMK_CONTROLS[data.control];
       const current = this.room.model.controls[data.control];
       let value;
-      if (schema.type === 'checkbox') value = !current;
-      else if (schema.type === 'select') {
+      let operation;
+      if (schema.type === 'checkbox') {
+        value = !current;
+        operation = { mode: 'toggle' };
+      } else if (schema.type === 'select') {
+        operation = { delta: data.delta };
         const keys = Object.keys(schema.options);
         value =
           keys[
@@ -506,8 +510,9 @@ export class PhysicalSystemRoom {
             ? 50
             : 5;
         value = clamp(current + data.delta * step, schema.min, schema.max);
+        operation = { delta: data.delta * step };
       }
-      this.room.commitControl(data.control, value);
+      this.room.commitControl(data.control, value, operation);
     }
     this.update(0, true);
     return true;

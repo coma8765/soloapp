@@ -204,7 +204,7 @@ export class RbmkModel {
     this.elapsed += dt;
     const c = this.controls;
     const effects = this.scenarioEffects();
-    const equipment = updateEquipment(
+    updateEquipment(
       this.equipment,
       c,
       this.power,

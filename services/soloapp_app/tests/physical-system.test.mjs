@@ -58,6 +58,21 @@ test('one loop loses cooling without moving its heat source to the other loop', 
   assert(s.voidFractions[0] > s.voidFractions[1]);
 });
 
+test('conservation can start at a persisted migration boundary', () => {
+  const model = new RbmkModel();
+  model.loopMasses[0] = 690000;
+  model.loopEnergies[0] = 870000;
+  model.fuelTemperatures = [710, 710];
+  model.fuelTemperature = 710;
+  model.cycle.initialMass = storedMass(model);
+  model.cycle.initialEnergy = storedEnergy(model);
+  const restored = new RbmkModel();
+  assert(restored.restore(model.snapshot()));
+  const state = advance(restored, 10);
+  assert(Math.abs(state.cycle.massError) < 1e-4);
+  assert(Math.abs(state.cycle.energyError) < 1e-4);
+});
+
 test('sensor failure leaves the physical water and heat history unchanged', () => {
   const actual = new RbmkModel(),
     failed = new RbmkModel();
