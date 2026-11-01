@@ -106,3 +106,35 @@ test('sliding is swept against a second wall at a corner', (t) => {
   const p = f.move([0, 3], [5, 0], [f.mesh, wall]);
   assert(p.x < 1.351 && p.z >= 1.35, p.asArray().join(','));
 });
+
+test('participant and worker cannot cross each other, including a long frame', () => {
+  const person = { x: 0, z: 0, radius: 0.35 };
+  for (const [from, to] of [
+    [v(0, 3), v(0, -3)],
+    [v(3, 0), v(-3, 0)],
+  ]) {
+    const result = resolveRoomMovement(from, to, [], 0.35, [person]);
+    assert(result.length() >= 0.7 && result.length() < 0.701);
+    assert(B.Vector3.Dot(result, from) > 0, 'stops on the approaching side');
+    const retreat = resolveRoomMovement(result, from, [], 0.35, [person]);
+    assert(B.Vector3.Distance(retreat, from) < 1e-8);
+  }
+});
+
+test('sliding past a person also respects a nearby cabinet', (t) => {
+  const f = fixture(t);
+  const person = { x: 4, z: -0.8, radius: 0.35 };
+  const result = resolveRoomMovement(v(5, 1), v(1, -4), [f.mesh], 0.35, [
+    person,
+  ]);
+  const local = f.local(result);
+  assert(Math.abs(local.x) >= 1.85 || Math.abs(local.z) >= 1.35);
+  assert(Math.hypot(result.x - person.x, result.z - person.z) >= 0.7);
+});
+
+test('an overlapping restored pose is separated from a person', () => {
+  const result = resolveRoomMovement(v(0, 0), v(0, 0), [], 0.35, [
+    { x: 0, z: 0, radius: 0.35 },
+  ]);
+  assert(result.length() >= 0.7);
+});

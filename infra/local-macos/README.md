@@ -44,3 +44,57 @@ NODE_EXTRA_CA_CERTS=outputs/soloapp-local-ca.crt SOLOAPP_BASE_URL=https://<LAN-I
 Container images and the active web bundle must be available locally before
 losing Internet. Voice between clients on different NATs requires TURN; game
 coordinates and shared world snapshots use WSS through the same HTTPS entry.
+
+## Update the installed Mac contour
+
+From the repository root, use one command:
+
+```sh
+./infra/local-macos/update-local.sh
+```
+
+It fetches `origin/main` once, pins the resulting commit and creates an isolated
+checkout under `work/local-updates/<sha>`. The original checkout, uncommitted
+changes, Keychain credentials and persistent storage are preserved. The command
+starts the existing Colima profile, builds ARM64 application images locally,
+runs game C++/PostgreSQL and browser-module tests, publishes and verifies the
+versioned web bundle in local SeaweedFS, applies the game schema and app/network
+manifests, waits for backend readiness, then switches web. Failed commands stop
+the update; there is no automatic database rollback. Old release objects and
+images remain available.
+
+This updates auth, the game backend, gateway, client-notify, TTS, Llama and the web
+origin. It uses the installed native Whisper Metal service and restarts its
+launch agent if needed; it does not replace it with a CPU pod or upgrade the
+native Whisper installation. PostgreSQL, RabbitMQ and SeaweedFS binaries are not
+upgraded by this application update. This is for an already bootstrapped contour,
+not initial provisioning. The Mac Keychain must be unlocked. Python dependencies
+come from the existing `.venv-codegen`; Docker Buildx, Git, Node/npm, Colima and
+kubectl must already be installed. No YC/home commands are executed.
+
+Useful variants:
+
+```sh
+# Fetch and print the pinned revision, without building or deploying:
+./infra/local-macos/update-local.sh --plan
+
+# Check the running contour, including a synthetic audio question and spoken answer:
+./infra/local-macos/update-local.sh --check-only
+
+# Deploy a particular existing revision:
+./infra/local-macos/update-local.sh --revision ad876ab56b0610f433c97e0f2652e3d894166f15
+
+# After moving to another LAN; keeps HTTPS port 443 and the existing CA:
+./infra/local-macos/update-local.sh --lan-ip 192.168.184.90
+```
+
+Equivalent Make targets are `make -C infra/local-macos update`, `check`, and
+`update-plan`; pass optional update flags with `ARGS='--lan-ip 192.168.184.90'`.
+If launchd lost its LAN listener after reboot, the updater opens the standard
+macOS administrator dialog to reopen port 443. Enter the password only there.
+The final checks verify HTTPS certificates, registration/login, identity,
+shared-world WebSocket traffic and SDP/ICE, Whisper on Metal, and the full
+Whisper → Llama → TTS request through the application. They use synthetic
+accounts/audio and do not open the microphone. Real Safari/Quest playback and
+physical controllers still require a device check. Concurrent updates/checks are
+blocked by a local file lock.

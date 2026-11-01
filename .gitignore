@@ -38,3 +38,5 @@ __pycache__/
 /services/soloapp_app/public/**/*.gz
 
 /infra/local-macos/import-cached.sh
+
+/infra/local-macos/.update.lock

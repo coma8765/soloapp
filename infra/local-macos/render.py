@@ -201,6 +201,31 @@ def manifests():
             doc["spec"]["publishNotReadyAddresses"] = True
         if doc["kind"] == "StatefulSet" and doc["metadata"]["name"] in ["postgres", "rabbitmq"]:
             doc["spec"]["template"]["spec"]["securityContext"] = {"fsGroup": 999}
+    for doc in docs:
+        if doc["kind"] == "StatefulSet" and doc["metadata"]["name"] == "rabbitmq":
+            # Kubelet fsGroup can add group access on volume remount after reboot.
+            # Erlang requires the existing cookie to be readable only by its owner.
+            doc["spec"]["template"]["spec"]["initContainers"] = [
+                {
+                    "name": "cookie-permissions",
+                    "image": CONFIG["images"]["rabbitmq"],
+                    "command": [
+                        "sh",
+                        "-ec",
+                        "if [ -f /var/lib/rabbitmq/.erlang.cookie ]; then "
+                        "chmod 0400 /var/lib/rabbitmq/.erlang.cookie; fi",
+                    ],
+                    "securityContext": {
+                        "runAsUser": 999,
+                        "runAsGroup": 999,
+                        "runAsNonRoot": True,
+                        "allowPrivilegeEscalation": False,
+                        "readOnlyRootFilesystem": True,
+                        "capabilities": {"drop": ["ALL"]},
+                    },
+                    "volumeMounts": [{"name": "data", "mountPath": "/var/lib/rabbitmq"}],
+                }
+            ]
     # Default-deny. Only explicitly named application peers can reach storage.
     docs.append(
         {
