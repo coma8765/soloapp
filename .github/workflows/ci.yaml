@@ -21,6 +21,7 @@ jobs:
       - name: Validate codegen and policy
         run: |
           make check-codegen test-codegen check-dashboards test-alerts
+          .venv-codegen/bin/python -m unittest discover -s infra/local-macos/tests -v
           .venv-codegen/bin/python -m unittest discover -s services/llama/tests -v
           .venv-codegen/bin/python -m unittest discover -s infra/cd/tests -v
           .venv-codegen/bin/python -m unittest discover -s infra/headlamp/tests -p "test_*.py" -v
