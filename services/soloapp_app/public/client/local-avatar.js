@@ -1,3 +1,4 @@
+import { loadAssetContainer } from './asset-cache.js';
 import { avatar, avatarLabel } from './scene.js';
 import { DEFAULT_AVATAR, findAvatar } from './avatar-catalog.js';
 const B = window.BABYLON;
@@ -40,7 +41,7 @@ export class LocalAvatar {
     const scene = this.scene;
     let container;
     try {
-      container = await B.LoadAssetContainerAsync(definition.url, scene);
+      container = await loadAssetContainer(definition.url, scene);
       if (this.root.isDisposed() || generation !== this.generation) {
         container.dispose();
         return false;
