@@ -505,6 +505,7 @@ async function start() {
         (!xr.active ||
           xr.helper.sessionManager.session.visibilityState === 'visible'),
     );
+    reactor.instructor.setAnnouncementActive(!!shiftClock.source);
     if (reactor.active !== reactorWasActive) {
       reactorWasActive = reactor.active;
       professorRecorder.clear();
