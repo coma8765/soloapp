@@ -7,6 +7,7 @@ import { Network } from './network.js';
 import { LocalAvatar } from './local-avatar.js';
 import { AccountPanel } from './account-panel.js';
 import { XRView } from './xr.js';
+import { RoomShortcut } from './physical-room-input.js';
 const B = window.BABYLON;
 const output = document.getElementById('results');
 function check(condition, message) {
@@ -369,6 +370,7 @@ try {
   );
   // B must still work when settings have disabled locomotion.
   const xr = {
+    roomShortcut: new RoomShortcut(),
     active: true,
     player,
     authPanel: panel,
