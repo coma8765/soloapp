@@ -64,11 +64,14 @@ try:
     )
     for _ in range(100):
         check = subprocess.run(
-            DOCKER + ["exec", pg, "pg_isready", "-U", "postgres"], capture_output=True
+            DOCKER + ["exec", pg, "pg_isready", "-h", "127.0.0.1", "-U", "postgres"],
+            capture_output=True,
         )
         if check.returncode == 0:
             break
         time.sleep(0.2)
+    else:
+        raise RuntimeError("PostgreSQL did not become ready")
     for schema in [
         "services/auth/tests/schemas/authdb.sql",
         "services/soloapp_app/deploy/schema.sql",
@@ -78,6 +81,8 @@ try:
             "-i",
             pg,
             "psql",
+            "-h",
+            "127.0.0.1",
             "-U",
             "postgres",
             "-v",
