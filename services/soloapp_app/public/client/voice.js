@@ -10,6 +10,7 @@ export class VoiceChat {
     this.pending = false;
     this.generation = 0;
     this.error = '';
+    this.relayConfigured = false;
   }
 
   get enabled() {
@@ -34,7 +35,7 @@ export class VoiceChat {
     const failed = [...this.peers.values()].some(
       (p) => p.pc.connectionState === 'failed',
     );
-    return `Микрофон ${this.enabled ? 'включён' : 'выключен'} · собеседников ${connected}${this.muted ? ' · входящий звук выключен' : ''}${failed ? ' · нет связи: переподключитесь' : ''}`;
+    return `Микрофон ${this.enabled ? 'включён' : 'выключен'} · собеседников ${connected}${this.muted ? ' · входящий звук выключен' : ''}${failed ? (this.relayConfigured ? ' · нет связи: переподключитесь' : ' · прямая связь не установлена; сервер ретрансляции не настроен') : ''}`;
   }
 
   attach(id, pc, offerer) {
