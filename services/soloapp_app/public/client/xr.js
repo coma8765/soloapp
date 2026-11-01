@@ -31,13 +31,19 @@ export class XRView {
       // The XR camera uses tracked floor-relative poses; the parent supplies the planet frame.
       this.helper.camera.compensateOnFirstFrame = false;
       this.helper.sessionManager.onXRSessionInit.add((session) => {
-        session.addEventListener('select', (event) =>
+        session.addEventListener('select', (event) => {
           this.authPanel?.selectXR(
             event,
             this.helper.sessionManager.referenceSpace,
             this.origin,
-          ),
-        );
+          );
+          if (!this.authPanel?.visible)
+            this.reactor?.selectXR(
+              event,
+              this.helper.sessionManager.referenceSpace,
+              this.origin,
+            );
+        });
       });
       this.helper.sessionManager.onXRFrameObservable.add((frame) => {
         this.authPanel?.updateXR(
@@ -50,6 +56,12 @@ export class XRView {
           this.helper.sessionManager.referenceSpace,
           this.origin,
         );
+        if (!this.authPanel?.visible)
+          this.reactor?.updateXR(
+            frame,
+            this.helper.sessionManager.referenceSpace,
+            this.origin,
+          );
       });
       this.helper.onStateChangedObservable.add((state) => {
         if (state === B.WebXRState.IN_XR) this.enter();
@@ -139,6 +151,8 @@ export class XRView {
     }
   }
   exit() {
+    for (const line of this.reactor?.xrRays?.values() || [])
+      line.setEnabled(false);
     if (this.active) {
       this.planet.setXRQuality(false);
       this.planet.grass.thinInstanceCount = this.savedGrass;

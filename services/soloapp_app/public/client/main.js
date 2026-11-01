@@ -241,6 +241,7 @@ async function start() {
       .join('')}`;
   }
   xr = new XRView(scene, player, planet, $('vr'), info);
+  xr.reactor = reactor;
   xr.toggleMicrophone = () => void voice.toggle();
   $('vr-quality').onclick = () => {
     xr.highQuality = !xr.highQuality;
@@ -390,6 +391,14 @@ async function start() {
   ) {
     const { startRbmkPhysicalAudit } = await import('./rbmk-physical-audit.js');
     window.rbmkPhysicalAudit = startRbmkPhysicalAudit(window.planetApp);
+  }
+  if (
+    location.hostname === '127.0.0.1' &&
+    reactor.active &&
+    new URL(location.href).searchParams.has('reactor-journal-audit')
+  ) {
+    const { startRbmkJournalAudit } = await import('./rbmk-journal-audit.js');
+    startRbmkJournalAudit(window.planetApp);
   }
   let previous = performance.now(),
     hudAt = 0,

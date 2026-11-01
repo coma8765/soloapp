@@ -6,6 +6,8 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 function controlLabel(control) {
   const schema = RBMK_CONTROLS[control.name];
+  if (control.mode === 'set')
+    return `${schema.label} · ${control.value ? 'включить / открыть' : 'отключить / закрыть'}`;
   if (control.mode === 'toggle') return `${schema.label} · переключатель`;
   if (schema.type === 'select')
     return `${schema.label} · ${control.delta > 0 ? 'следующий' : 'предыдущий'}`;
@@ -18,12 +20,15 @@ function targetLabel(mesh) {
   if (mesh.metadata.rbmkControl) return controlLabel(mesh.metadata.rbmkControl);
   if (mesh.metadata.rbmkAction === 'scram') return 'АЗ-5';
   if (mesh.metadata.rbmkAction === 'clear') return 'Снять АЗ';
+  if (mesh.metadata.rbmkAction === 'acknowledge') return 'Квитировать сигналы';
+  if (mesh.metadata.rbmkAction === 'lamp-test') return 'Проверка ламп';
   return 'Исходный режим';
 }
 
 function expectedControl(before, control) {
   const schema = RBMK_CONTROLS[control.name];
   const current = before.controls[control.name];
+  if (control.mode === 'set') return control.value;
   if (control.mode === 'toggle') return !current;
   if (schema.type === 'select') {
     const options = Object.keys(schema.options);
@@ -49,6 +54,7 @@ class RbmkPhysicalAudit {
     this.index = 0;
     this.results = [];
     this.waitTimer = 0;
+    this.pending = false;
     this.overlay = this.buildOverlay();
   }
 
@@ -94,6 +100,8 @@ class RbmkPhysicalAudit {
       this.finish();
       return;
     }
+    if (mesh.metadata.rbmkAction !== 'clear') this.reactor.model.reset();
+    this.reactor.drawStatus(true);
     mesh.computeWorldMatrix(true);
     const target = mesh.getAbsolutePosition();
     const player = this.app.player;
@@ -142,9 +150,16 @@ class RbmkPhysicalAudit {
       if (
         event.after.scrammed ||
         event.after.controls.targetPower !== 5 ||
-        event.after.controls.manualRodInsertion !== 75
+        event.after.rods.manualRodInsertion !==
+          event.before.rods.manualRodInsertion
       )
-        errors.push('снятие АЗ не восстановило пусковую конфигурацию');
+        errors.push('снятие АЗ изменило фактическое положение стержней');
+    } else if (event.action === 'acknowledge') {
+      if (!event.after.equipment.acknowledged)
+        errors.push('сигналы не квитированы');
+    } else if (event.action === 'lamp-test') {
+      if (!(event.after.equipment.lampTestUntil > event.after.elapsed))
+        errors.push('проверка ламп не запущена');
     } else if (event.action === 'reset') {
       if (
         event.after.scrammed ||
@@ -179,6 +194,8 @@ class RbmkPhysicalAudit {
   }
 
   onActivation(event) {
+    if (this.pending) return;
+    this.pending = true;
     const errors = this.verify(event);
     this.results.push({
       index: this.index + 1,
@@ -203,6 +220,7 @@ class RbmkPhysicalAudit {
 
   advance() {
     this.index += 1;
+    this.pending = false;
     this.focusCurrent();
   }
 
@@ -226,6 +244,7 @@ class RbmkPhysicalAudit {
   }
 
   render(note = '') {
+    this.overlay.dataset.targetIndex = String(this.index);
     const passed = this.results.filter((result) => result.ok).length;
     const fidelity = this.console.fidelityMetrics({
       total: this.targets.length,
@@ -241,8 +260,8 @@ class RbmkPhysicalAudit {
     this.overlay.textContent = [
       'ФИЗИЧЕСКИЙ АУДИТ БЩУ',
       `${passed}/${this.targets.length} успешно · ${this.results.length} проверено`,
-      `ПОЛНОТА ${fidelity.score}/100 · компоновка ${fidelity.layout} · системы ${fidelity.systemCoverage} · плотность ${fidelity.density} · смысл ${fidelity.semantics} · поведение ${fidelity.behavior}`,
-      `Функциональных элементов ${fidelity.counts.functionalElements} · неподписанного декора ${fidelity.counts.unlabeledDecorativeElements}`,
+      'Сходство ≥90%: пока не измерено. Аудит проверяет нажатия и обновление приборов.',
+      `Физических целей: ${fidelity.counts.physicalTargets}`,
       current
         ? `Цель ${this.index + 1}/${this.targets.length}: ${targetLabel(current)}`
         : 'Целей больше нет',

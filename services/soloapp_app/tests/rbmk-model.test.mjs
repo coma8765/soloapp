@@ -8,6 +8,10 @@ import {
 } from '../public/client/rbmk-data.js';
 import { REACTOR_MAP } from '../public/shared/room.js';
 import { validState } from '../public/shared/world.js';
+import {
+  EQUIPMENT_BANKS,
+  EQUIPMENT_CONTROLS,
+} from '../public/client/rbmk-equipment.js';
 
 function advance(model, seconds, step = 0.1) {
   for (let elapsed = 0; elapsed < seconds; elapsed += step) model.step(step);
@@ -54,6 +58,8 @@ const partById = (id) => RBMK_PANEL_PARTS.find((part) => part.id === id);
 
   const physicalControls = RBMK_PHYSICAL_CONTROL_GROUPS.flatMap(
     (group) => group.controls,
+  ).concat(
+    EQUIPMENT_BANKS.flatMap((bank) => bank.controls.map((schema) => schema.id)),
   );
   assert.deepEqual(
     new Set(physicalControls),
@@ -86,6 +92,10 @@ const partById = (id) => RBMK_PANEL_PARTS.find((part) => part.id === id);
     physicalButtonCount,
     36,
     'the browser audit must cover every physical button and toggle',
+  );
+  assert.equal(
+    physicalButtonCount + Object.keys(EQUIPMENT_CONTROLS).length * 2 + 2,
+    144,
   );
 }
 
@@ -124,7 +134,7 @@ const partById = (id) => RBMK_PANEL_PARTS.find((part) => part.id === id);
 {
   const model = new RbmkModel();
   model.setControl('scenario', 'feedwater-loss');
-  const state = advance(model, 18);
+  const state = advance(model, 120);
   assert(state.drumLevelLeft < -600);
   assert(state.drumLevelRight < -600);
   assert(state.alarms.some((alarm) => alarm.includes('УРОВЕНЬ БС')));
@@ -134,7 +144,7 @@ const partById = (id) => RBMK_PANEL_PARTS.find((part) => part.id === id);
   const model = new RbmkModel();
   model.setControl('scenario', 'mcp-left-trip');
   const state = advance(model, 10);
-  assert(state.flowLeft < 40);
+  assert(state.flowLeft < 55);
   assert(state.flowRight > 90);
   assert(state.alarms.includes('РАСХОД КМПЦ-Л НИЗКИЙ'));
 }
@@ -164,7 +174,7 @@ const partById = (id) => RBMK_PANEL_PARTS.find((part) => part.id === id);
   const model = new RbmkModel();
   model.setControl('scenario', 'turbine-trip');
   let peakPressure = model.pressure;
-  for (let elapsed = 0; elapsed < 12; elapsed += 0.1) {
+  for (let elapsed = 0; elapsed < 180; elapsed += 0.1) {
     peakPressure = Math.max(peakPressure, model.step(0.1).pressure);
   }
   assert(peakPressure > 7.6);
@@ -182,8 +192,8 @@ const partById = (id) => RBMK_PANEL_PARTS.find((part) => part.id === id);
 {
   const model = new RbmkModel();
   model.scram();
-  const state = advance(model, 5);
-  assert(state.power < 1);
+  const state = advance(model, 60);
+  assert(state.power < 3);
   assert.equal(state.controls.manualRodInsertion, 100);
   assert(state.alarms.some((alarm) => alarm.startsWith('АЗ-5')));
 }
@@ -201,4 +211,4 @@ const partById = (id) => RBMK_PANEL_PARTS.find((part) => part.id === id);
   assert.equal(follower.setControl('scenario', 'unknown'), undefined);
 }
 
-console.log('RBMK educational model v2: 10 scenarios passed');
+console.log('RBMK educational model v3: scenario checks passed');

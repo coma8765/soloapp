@@ -903,3 +903,9 @@ nav > span {
 .touch-device #vr:disabled {
   display: none;
 }
+
+.at-journal #telemetry,
+.at-journal #reactor-telemetry,
+.at-journal #reactor-team {
+  display: none;
+}
