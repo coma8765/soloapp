@@ -312,6 +312,8 @@ export class Network {
           peer.ping = Math.round(performance.now() - message.sent);
           peer.pingAt = performance.now();
         }
+        if (message.type === 'instructor' && channel.label === 'control-v1')
+          this.onInstructorMessage?.(id, message);
         if (message.type === 'reactor' && channel.label === 'control-v1')
           this.onReactorMessage?.(id, message);
       } catch {

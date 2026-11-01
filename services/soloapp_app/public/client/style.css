@@ -915,3 +915,31 @@ nav > span {
 .at-journal #reactor-team {
   display: none;
 }
+
+#reactor-instructor {
+  position: fixed;
+  bottom: 65px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  width: min(600px, calc(100vw - 24px));
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #102c32ed;
+  color: #ecf1df;
+  font-size: 13px;
+}
+#reactor-instructor[hidden] {
+  display: none;
+}
+#reactor-instructor button {
+  padding: 5px 9px;
+  margin-right: 12px;
+}
+#reactor-instructor a {
+  color: #a5d9db;
+}
+#reactor-instructor p {
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
