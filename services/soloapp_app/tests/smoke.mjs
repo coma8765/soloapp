@@ -110,11 +110,57 @@ try {
       v.type === 'player_state' && v.from === wa.id && v.state.sequence === 2,
   );
   assert.equal(switched.state.avatarId, 'female');
+  for (const [index, map] of [
+    'rbmk-training-room',
+    'rbmk-physical-system',
+    'planet',
+  ].entries()) {
+    const state = {
+      type: 'state',
+      sequence: index + 3,
+      map,
+      position: map === 'planet' ? [0, 36, 0] : [index + 1, 0, 4],
+      rotation: [0, 0, 0, 1],
+      pitch: 0,
+      avatarId: 'female',
+      speed: 2,
+    };
+    a.ws.send(JSON.stringify(state));
+    const received = await b.next(
+      (v) =>
+        v.type === 'player_state' &&
+        v.from === wa.id &&
+        v.state.sequence === state.sequence,
+    );
+    assert.deepEqual(received.state, state);
+  }
+  for (const type of ['sdp', 'ice']) {
+    const signal =
+      type === 'sdp'
+        ? {
+            type,
+            to: wb.id,
+            description: 'offer',
+            sdp: 'synthetic-peer-negotiation',
+          }
+        : {
+            type,
+            to: wb.id,
+            candidate: 'synthetic-peer-candidate',
+            media: '0',
+            index: 0,
+          };
+    a.ws.send(JSON.stringify(signal));
+    const received = await b.next((v) => v.type === type && v.from === wa.id);
+    assert.equal(received.to, wb.id);
+  }
   console.log(
     JSON.stringify({
       accounts: 2,
       shared_world: true,
       player_delivery: true,
+      reactor_rooms: true,
+      voice_signaling: true,
       fish: fa.fish.length,
     }),
   );
