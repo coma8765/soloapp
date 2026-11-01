@@ -14,12 +14,15 @@ export class VisualQuality {
     this.pipeline.sharpenEnabled = true;
     this.pipeline.sharpen.edgeAmount = 0.16;
     this.pipeline.sharpen.colorAmount = 1;
-    button.onclick = () => {
-      this.high = !this.high;
-      this.apply();
-    };
+    button.onclick = () => this.toggle();
     window.addEventListener('resize', () => this.apply());
     this.apply();
+  }
+
+  toggle() {
+    this.high = !this.high;
+    this.apply();
+    return this.high;
   }
 
   apply() {
@@ -39,9 +42,10 @@ export class VisualQuality {
     this.pipeline.fxaaEnabled = this.pipeline.samples < 2;
     this.pipeline.sharpenEnabled = this.high;
     this.button.textContent = this.high
-      ? 'Графика · высокая'
-      : 'Графика · лёгкая';
+      ? 'Q · Графика: высокая'
+      : 'Q · Графика: лёгкая';
     this.button.setAttribute('aria-pressed', String(this.high));
+    this.button.title = 'Q · геймпад: L3 (нажать левый стик)';
     this.engine.resize();
   }
 }

@@ -56,8 +56,13 @@ Frame WorldStore::exchange(const Json::Value &local, const std::vector<Json::Val
     else
         db_.persist(mine);
     for (const auto &message : signals) {
-        auto player = std::find_if(frame.players.begin(), frame.players.end(),
-                                   [&](const Json::Value &p) { return p["id"] == message["to"]; });
+        // JSON round-tripping through PostgreSQL can change uintValue to intValue.
+        // Route by the numeric peer ID, not Json::Value's internal number type.
+        auto player =
+            std::find_if(frame.players.begin(), frame.players.end(), [&](const Json::Value &p) {
+                return p["id"].isUInt64() && message["to"].isUInt64() &&
+                       p["id"].asUInt64() == message["to"].asUInt64();
+            });
         if (player != frame.players.end()) {
             Signal signal{randomId(), (*player)["owner"].asString(), now + 10000, encode(message)};
             db_.persist(signal);
