@@ -36,7 +36,7 @@ def decode_wav(body):
     return pcm
 
 
-def make_handler(recognize, model_name):
+def make_handler(recognize, model_name, device="cpu"):
     lock = threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
@@ -59,7 +59,7 @@ def make_handler(recognize, model_name):
             if self.path not in ("/health", "/healthz"):
                 self.reply(404, {"error": "Not found"})
                 return
-            self.reply(200, {"ready": True, "model": model_name, "local": True})
+            self.reply(200, {"ready": True, "model": model_name, "local": True, "device": device})
 
         def do_POST(self):
             if self.path != "/transcribe":
@@ -100,10 +100,14 @@ def main():
     import numpy as np
     from faster_whisper import WhisperModel
 
+    device = os.environ.get("WHISPER_DEVICE", "cpu")
+    if device not in ("cpu", "cuda"):
+        raise ValueError("WHISPER_DEVICE must be cpu or cuda")
+    # Explicit CUDA: startup fails if GPU is unavailable; never fall back to CPU.
     model = WhisperModel(
         str(args.model),
-        device="cpu",
-        compute_type="int8",
+        device=device,
+        compute_type="int8_float16" if device == "cuda" else "int8",
         cpu_threads=2,
         num_workers=1,
         local_files_only=True,
@@ -133,7 +137,7 @@ def main():
     list(segments)
     server = ThreadingHTTPServer(
         (args.host, args.port),
-        make_handler(recognize, os.environ.get("WHISPER_MODEL_ID", args.model.name)),
+        make_handler(recognize, os.environ.get("WHISPER_MODEL_ID", args.model.name), device),
     )
     print(f"Local Whisper ready at http://127.0.0.1:{args.port}; audio is never saved", flush=True)
     try:

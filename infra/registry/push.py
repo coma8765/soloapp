@@ -25,7 +25,7 @@ SERVICES = (
     "llama",
     "headlamp",
 )
-MAX_ARCHIVE = 2 * 1024**3
+MAX_ARCHIVE = 4 * 1024**3
 ACCEPT = "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json"
 
 
@@ -260,7 +260,7 @@ def main():
                     break
                 size += len(data)
                 if size > MAX_ARCHIVE:
-                    raise ValueError("OCI archive exceeds 2 GiB")
+                    raise ValueError("OCI archive exceeds 4 GiB")
                 output.write(data)
         print(
             json.dumps(

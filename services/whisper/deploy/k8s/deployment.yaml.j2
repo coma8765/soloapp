@@ -1,23 +1,39 @@
+{% set gpu = (whisper_overrides | default({})).gpu | default(false) %}
 apiVersion: apps/v1
 kind: Deployment
 metadata: {name: whisper, namespace: soloapp}
 spec:
   replicas: {{ (whisper_overrides | default({})).replicas | default(1) }}
+{% if gpu %}
+  # One exclusive GPU cannot accommodate a surge pod.
+  strategy: {type: Recreate}
+{% else %}
   strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+{% endif %}
   progressDeadlineSeconds: 600
   selector: {matchLabels: {app: whisper}}
   template:
     metadata: {labels: {app: whisper}}
     spec:
+{% if gpu %}
+      runtimeClassName: nvidia
+{% endif %}
       automountServiceAccountToken: false
       securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
       containers:
       - name: whisper
         image: '{{ whisper_image }}'
+        env:
+        - {name: WHISPER_DEVICE, value: "{{ 'cuda' if gpu else 'cpu' }}"}
         ports: [{name: http, containerPort: 8178}]
         resources:
           requests: {cpu: '{{ (whisper_overrides | default({})).cpu_request | default(500) }}m', memory: '{{ (whisper_overrides | default({})).memory_request | default(1536) }}Mi'}
-          limits: {cpu: '2', memory: '{{ (whisper_overrides | default({})).memory_limit | default(2560) }}Mi'}
+          limits:
+            cpu: '2'
+            memory: '{{ (whisper_overrides | default({})).memory_limit | default(2560) }}Mi'
+{% if gpu %}
+            nvidia.com/gpu: 1
+{% endif %}
         securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
         startupProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 5, failureThreshold: 60}
         readinessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 5, timeoutSeconds: 2}
