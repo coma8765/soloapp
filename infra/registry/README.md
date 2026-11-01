@@ -37,3 +37,31 @@ Old tags and content remain available for rollback; garbage collection and delet
 SeaweedFS remains responsible for web release artifacts. Its old registry bucket is retained and is no longer used for new image publications.
 
 Containerd host configuration: https://github.com/containerd/containerd/blob/main/docs/hosts.md
+
+## Reuse stored base layers
+
+The home and YC registries retain base, CUDA and model layers on their persistent
+host filesystems across pod restarts and releases. The default CD upload first
+asks the destination which layer digests and sizes it already holds, then sends
+only missing layers plus the new image config/manifest. No build runs on home.
+Existing layer hashes are immutable; changed dependencies or model contents get
+new hashes and are transferred instead of silently retaining an outdated base.
+The receiver rechecks omitted blobs before publishing the complete manifest.
+Green SHA, architecture, revision labels and matching cross-site digests remain
+mandatory. Legacy full-archive uploads still work.
+
+Set Actions `force_image_transfer=true` to resend all layers explicitly. This is
+not a model upgrade or cache deletion: dependency/model upgrades are versioned in
+the Dockerfile. CLI: `python3 infra/registry/upload.py --archive IMAGE.oci.tar
+--revision SHA [--force] -- ssh ... "push-whisper SHA"`.
+The workflow reports reused layers/bytes and sent bytes. No registry GC is enabled;
+retained release manifests keep base layers available for rollback and reuse.
+
+Whisper separates `runtime-base` (Python dependencies, model, CUDA) from the
+application layer. Production CI restores the most recent matching base cache
+and saves it after the build. Application-only edits reuse its layer digests.
+Set `refresh_whisper_base=true` to explicitly rebuild/pull that base; subsequent
+runs restore the newly saved cache. Dockerfile/dependency changes invalidate its
+cache key. GitHub cache eviction can also cause a cold build; the registry on
+home still retains its existing images. Cache misses never block correctness.
+See [BuildKit local cache](https://docs.docker.com/build/cache/backends/local/).
