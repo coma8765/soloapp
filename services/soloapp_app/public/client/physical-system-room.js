@@ -152,15 +152,44 @@ export class PhysicalSystemRoom {
   }
 
   build() {
-    this.box('Laboratory floor', [0, -0.12, 0], [24, 0.24, 24], '#12252e');
+    const floor = this.box(
+      'Laboratory floor',
+      [0, -0.12, 0],
+      [24, 0.24, 24],
+      '#12252e',
+    );
+    // Bake the grid into the floor: thin overlapping boxes shimmer at a
+    // distance, especially at VR resolution. Mipmaps filter subpixel lines.
+    const floorTexture = new B.DynamicTexture(
+      'Laboratory floor grid',
+      { width: 256, height: 256 },
+      this.scene,
+      true,
+      B.Texture.TRILINEAR_SAMPLINGMODE,
+    );
+    const context = floorTexture.getContext();
+    context.fillStyle = '#12252e';
+    context.fillRect(0, 0, 256, 256);
+    context.fillStyle = '#294652';
+    context.fillRect(127, 0, 2, 256);
+    context.fillRect(0, 127, 256, 2);
+    floorTexture.wrapU = floorTexture.wrapV = B.Texture.WRAP_ADDRESSMODE;
+    floorTexture.uScale = floorTexture.vScale = 12;
+    floorTexture.anisotropicFilteringLevel = 8;
+    floorTexture.update();
+    const floorMaterial = new B.StandardMaterial(
+      'Laboratory floor',
+      this.scene,
+    );
+    floorMaterial.disableLighting = true;
+    floorMaterial.diffuseColor = B.Color3.Black();
+    floorMaterial.emissiveColor = B.Color3.White();
+    floorMaterial.emissiveTexture = floorTexture;
+    floor.material = floorMaterial;
     this.box('Laboratory ceiling', [0, 6.1, 0], [24, 0.2, 24], '#172b35');
     this.box('Laboratory back', [0, 3, -12], [24, 6, 0.2], '#12212a');
     for (const x of [-12, 12])
       this.box('Laboratory side', [x, 3, 0], [0.2, 6, 24], '#172b35');
-    for (let i = -11; i <= 11; i += 2) {
-      this.box('Floor grid', [i, 0.012, 0], [0.014, 0.012, 24], '#294652');
-      this.box('Floor grid', [0, 0.012, i], [24, 0.012, 0.014], '#294652');
-    }
     this.label('Physical laboratory title', [0, 5.2, -3.8], 8.3, 1, () => [
       'РБМК / ФИЗИЧЕСКАЯ СИСТЕМА',
       'Топливо → теплоноситель → пар → электричество',
