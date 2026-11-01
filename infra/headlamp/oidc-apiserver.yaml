@@ -47,7 +47,7 @@
     register: oidc_k3s_changed
   - name: Restart one control plane at a time
     ansible.builtin.systemd_service: {name: k3s, state: restarted}
-    when: oidc_k3s_changed.changed
+    when: oidc_k3s_changed.changed or oidc_auth_changed.changed
   - name: Wait for the local API server
     ansible.builtin.command: k3s kubectl get --raw=/readyz
     register: oidc_ready
