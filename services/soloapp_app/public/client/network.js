@@ -72,12 +72,12 @@ export class Network {
     return (id === this.id && this.email) || this.participants.label(id);
   }
 
-  clearPeers() {
+  clearPeers({ preserveMicrophone = false } = {}) {
     this.participants.reset();
     this.email = '';
     this.ping = null;
     this.pingAt = 0;
-    this.voice?.disconnect();
+    this.voice?.disconnect({ preserveMicrophone });
     for (const peer of this.peers.values()) peer.pc.close();
     this.peers.clear();
     this.worldPC?.close();
@@ -90,21 +90,21 @@ export class Network {
     this.fish.reset();
   }
 
-  disconnect() {
+  disconnect({ preserveMicrophone = false } = {}) {
     this.onProfessorMessage?.({ type: 'professor_disconnect' });
     this.onReactorServerMessage?.({ type: 'reactor_disconnect' });
     this.generation++;
     this.socket?.close();
     this.socket = null;
-    this.clearPeers();
+    this.clearPeers({ preserveMicrophone });
     this.ping = null;
     this.id = 0;
     this.status = 'Локальная прогулка';
     this.worldTransport = 'доступны после входа';
   }
 
-  connect() {
-    this.disconnect();
+  connect({ reconnecting = false } = {}) {
+    this.disconnect({ preserveMicrophone: reconnecting });
     if (!this.auth.token || Date.now() >= this.auth.expiresAt) {
       this.requireAuth();
       return;
@@ -157,10 +157,11 @@ export class Network {
       this.id = 0;
       this.onProfessorMessage?.({ type: 'professor_disconnect' });
       this.onReactorServerMessage?.({ type: 'reactor_disconnect' });
-      this.clearPeers();
+      this.clearPeers({ preserveMicrophone: true });
       setTimeout(
         () => {
-          if (generation === this.generation && this.auth.token) this.connect();
+          if (generation === this.generation && this.auth.token)
+            this.connect({ reconnecting: true });
         },
         1500 + Math.random() * 1000,
       );
@@ -192,6 +193,7 @@ export class Network {
             [server.urls].flat().some((url) => /^turns?:/.test(url)),
           ) || false;
         this.voice.online = true;
+        this.voice.reconnecting = false;
         this.voice.onChange();
       }
       this.sequence = 0;
