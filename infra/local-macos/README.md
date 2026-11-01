@@ -27,7 +27,9 @@ Keychain-held credentials and verifies every object before committing a release.
 The production publisher independently requires two successful S3 copies.
 
 The LAN entry listens on TCP 443 using a launchd socket relay into a supervised
-loopback Kubernetes tunnel. `make lan-refresh LAN_IP=<address>` updates the leaf
+loopback SSH tunnel through the Colima VM to the nginx Kubernetes Service.
+Individual interrupted downloads do not terminate other clients’ WSS sessions,
+and new connections follow Service endpoints after pod replacement. `make lan-refresh LAN_IP=<address>` updates the leaf
 certificate and allowed Origin after moving networks. The public CA is exported
 to `outputs/soloapp-local-ca.crt`; clients must trust that CA to use HTTPS by IP.
 Keys never belong in the exported CA file. A second physical LAN client has not
