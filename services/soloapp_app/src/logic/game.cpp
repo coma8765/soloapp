@@ -21,9 +21,9 @@ bool validState(const Json::Value &v) {
     if (!std::all_of(v["position"].begin(), v["position"].end(), finite) ||
         !std::all_of(v["rotation"].begin(), v["rotation"].end(), finite))
         return false;
-    if ((v.isMember("avatarId") &&
-         (!v["avatarId"].isString() ||
-          (v["avatarId"] != "male" && v["avatarId"] != "female" && v["avatarId"] != "uraraka"))) ||
+    if ((v.isMember("avatarId") && (!v["avatarId"].isString() ||
+                                    (v["avatarId"] != "scientist" && v["avatarId"] != "male" &&
+                                     v["avatarId"] != "female" && v["avatarId"] != "uraraka"))) ||
         (v.isMember("speed") &&
          (!finite(v["speed"]) || v["speed"].asDouble() < 0 || v["speed"].asDouble() > 20)) ||
         (v.isMember("map") && v["map"] != "planet"))

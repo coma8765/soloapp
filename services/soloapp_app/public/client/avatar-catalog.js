@@ -1,5 +1,23 @@
 export const AVATARS = Object.freeze([
   {
+    id: 'scientist',
+    name: 'Учёный',
+    description: 'Scientist Broken · CC BY 4.0',
+    url: new URL('../assets/avatar/scientist.glb', import.meta.url).href,
+    height: 5.824408214585046,
+    floor: 0.06538959324388105,
+    armRestAngle: 0.6,
+    bones: {
+      upperarm_l: 'ValveBiped.Bip01_L_UpperArm_59',
+      upperarm_r: 'ValveBiped.Bip01_R_UpperArm_87',
+      thigh_l: 'ValveBiped.Bip01_L_Thigh_22',
+      thigh_r: 'ValveBiped.Bip01_R_Thigh_27',
+      calf_l: 'ValveBiped.Bip01_L_Calf_21',
+      calf_r: 'ValveBiped.Bip01_R_Calf_26',
+      Head: 'ValveBiped.Bip01_Head1_31',
+    },
+  },
+  {
     id: 'male',
     name: 'Атлет',
     description: 'Мужской аватар',

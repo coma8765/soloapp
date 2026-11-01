@@ -16,6 +16,7 @@ FORBIDDEN = {
 
 
 REVIEWED_LARGE_ASSETS = {
+    "services/soloapp_app/public/assets/avatar/scientist.glb": "e2dd4c5dbcf0c893fb79db6f6e444b841df7203fca1948091808d2fd26e184db",
     "services/soloapp_app/public/assets/avatar/player.glb": "8711d8ac735cf0418384fec1ebabb75d1d11fe8cb7edd2710924f1fdd991cf1b",
     "services/soloapp_app/public/assets/avatar/player-female.glb": "a1925ef139cd2c2a6d5af591b5ea9b7df14ef40cbe666cda2f587a5610c4ad18",
     "services/soloapp_app/public/assets/avatar/uraraka-ochako.glb": "260ea1d80e24c3b97d732aa8247a4bc47cddd158b964251da2b6a605c1252b23",

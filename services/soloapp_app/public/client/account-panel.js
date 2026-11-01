@@ -424,7 +424,17 @@ export class AccountPanel {
       c.textAlign = 'left';
       c.fillText(value, x, y);
     };
-    const button = (id, label, x, y, w, h, action, accent = false) => {
+    const button = (
+      id,
+      label,
+      x,
+      y,
+      w,
+      h,
+      action,
+      accent = false,
+      labelY = h / 2 + 10,
+    ) => {
       this.targets.push({ id, x, y, w, h, action });
       const selected = this.hover === id || this.controllerFocus === id;
       box(
@@ -443,7 +453,7 @@ export class AccountPanel {
       c.font = '28px sans-serif';
       c.textAlign = 'center';
       c.fillStyle = accent && !selected ? '#13333b' : '#eaf6f6';
-      c.fillText(label, x + w / 2, y + h / 2 + 10);
+      c.fillText(label, x + w / 2, y + labelY);
     };
     box(3, 3, WIDTH - 6, HEIGHT - 6, '#102c3bee', '#8fbbc6');
     if (this.countdown) {
@@ -633,8 +643,9 @@ export class AccountPanel {
     text(this.onboarding ? 'Выберите аватар' : 'Настройки', 48, 135, 48);
     text('Ваш образ в мире', 48, 195, 30, '#adc8d2');
     text('Выбор сохранится в этом браузере.', 48, 240, 26, '#adc8d2');
+    const rowStep = Math.min(135, 420 / AVATARS.length);
     AVATARS.forEach((avatar, index) => {
-      const y = 285 + index * 135,
+      const y = 285 + index * rowStep,
         selected = avatar.id === this.draft;
       button(
         'avatar-' + avatar.id,
@@ -642,14 +653,15 @@ export class AccountPanel {
         48,
         y,
         928,
-        118,
+        rowStep - 12,
         () => this.chooseAvatar(avatar.id),
         selected,
+        36,
       );
       text(
         avatar.description,
         88,
-        y + 100,
+        y + rowStep - 30,
         24,
         selected ? '#254e4d' : '#adc8d2',
       );
