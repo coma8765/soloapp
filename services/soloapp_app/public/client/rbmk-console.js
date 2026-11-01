@@ -5,6 +5,7 @@ import {
   RBMK_PHYSICAL_CONTROL_GROUPS,
 } from './rbmk-data.js';
 import { EQUIPMENT_BANKS, EQUIPMENT_CONTROLS } from './rbmk-equipment.js';
+import { MeshInstances } from './mesh-instances.js';
 
 const B = window.BABYLON;
 
@@ -113,6 +114,9 @@ export class RbmkPhysicalConsole {
     this.onActivation = null;
     this.hintsEnabled = false;
     this.hoveredButton = null;
+    this.instances = new MeshInstances(scene);
+    this.capMaterials = new Map();
+    this.legendMaterials = new Map();
     this.build();
   }
 
@@ -128,7 +132,16 @@ export class RbmkPhysicalConsole {
     return material;
   }
 
-  box(name, size, position, material, parent = this.root) {
+  box(name, size, position, material, parent = this.root, instanced = true) {
+    if (instanced)
+      return this.instances.create(
+        'CreateBox',
+        { width: size[0], height: size[1], depth: size[2] },
+        material,
+        name,
+        parent,
+        position,
+      );
     const mesh = B.MeshBuilder.CreateBox(
       name,
       { width: size[0], height: size[1], depth: size[2] },
@@ -293,15 +306,15 @@ export class RbmkPhysicalConsole {
     const colors = [this.cream, this.cream, this.yellow, this.green, this.red];
     for (let row = 0; row < 8; row++) {
       for (let column = 0; column < 12; column++) {
-        const indicator = B.MeshBuilder.CreateCylinder(
-          `RBMK channel indicator ${row}-${column}`,
+        const indicator = this.instances.create(
+          'CreateCylinder',
           { diameter: 0.105, height: 0.055, tessellation: 16 },
-          this.scene,
+          colors[(row * 5 + column + seed) % colors.length],
+          `RBMK channel indicator ${row}-${column}`,
+          parent,
+          [-0.82 + column * 0.15, 4.67 - row * 0.14, 0.31],
         );
-        indicator.parent = parent;
-        indicator.position.set(-0.82 + column * 0.15, 4.67 - row * 0.14, 0.31);
         indicator.rotation.x = Math.PI / 2;
-        indicator.material = colors[(row * 5 + column + seed) % colors.length];
         indicator.isPickable = false;
         this.channelIndicators.push({ mesh: indicator, row, column });
       }
@@ -860,9 +873,10 @@ export class RbmkPhysicalConsole {
 
   createButton(parent, name, position, size, color, metadata) {
     const material = this.material(`${name} hit material`, color, true, 0.018);
-    const button = this.box(name, size, position, material, parent);
+    const button = this.box(name, size, position, material, parent, false);
     button.isPickable = true;
-    const capMaterial = this.material(`${name} cap material`, color, true);
+    button.visibility = 0;
+    const capMaterial = this.buttonMaterial(color, false);
     const cap = this.box(
       `${name} visible cap`,
       [size[0] * 0.56, Math.max(0.055, size[1] * 0.7), size[2] * 0.62],
@@ -879,24 +893,40 @@ export class RbmkPhysicalConsole {
           : metadata.rbmkControl?.delta < 0
             ? '−'
             : '+');
-    const legend = this.texturePlane(
+    const fontSize = metadata.rbmkAction || metadata.legend ? 50 : 88;
+    const legendKey = `${color}:${fontSize}:${capLabel}`;
+    let legendMaterial = this.legendMaterials.get(legendKey);
+    if (!legendMaterial) {
+      const texture = new B.DynamicTexture(
+        `${name} legend`,
+        { width: 256, height: 128 },
+        this.scene,
+        true,
+      );
+      const legendContext = texture.getContext();
+      legendContext.fillStyle = color;
+      legendContext.fillRect(0, 0, 256, 128);
+      legendContext.fillStyle = '#f3ead0';
+      legendContext.font = `bold ${fontSize}px monospace`;
+      legendContext.textAlign = 'center';
+      legendContext.textBaseline = 'middle';
+      legendContext.fillText(capLabel, 128, 67, 240);
+      texture.update();
+      legendMaterial = this.material(`${name} legend`, '#ffffff', true);
+      legendMaterial.diffuseTexture = texture;
+      legendMaterial.emissiveTexture = texture;
+      legendMaterial.backFaceCulling = false;
+      this.legendMaterials.set(legendKey, legendMaterial);
+    }
+    const legend = this.instances.create(
+      'CreatePlane',
+      { width: size[0] * 0.48, height: size[2] * 0.5 },
+      legendMaterial,
       `${name} cap legend`,
-      size[0] * 0.48,
-      size[2] * 0.5,
-      { width: 256, height: 128 },
-      [0, size[1] * 0.51, 0],
       button,
-      [-Math.PI / 2, 0, 0],
+      [0, size[1] * 0.51, 0],
     );
-    const legendContext = legend.texture.getContext();
-    legendContext.fillStyle = color;
-    legendContext.fillRect(0, 0, 256, 128);
-    legendContext.fillStyle = '#f3ead0';
-    legendContext.font = `bold ${metadata.rbmkAction || metadata.legend ? 50 : 88}px monospace`;
-    legendContext.textAlign = 'center';
-    legendContext.textBaseline = 'middle';
-    legendContext.fillText(capLabel, 128, 67, 240);
-    legend.texture.update();
+    legend.rotation.x = -Math.PI / 2;
     button.metadata = {
       ...metadata,
       restY: position[1],
@@ -912,11 +942,9 @@ export class RbmkPhysicalConsole {
     this.hintsEnabled = !!enabled;
     for (const mesh of this.hintMeshes) mesh.isPickable = !!enabled;
     for (const button of this.buttons) {
-      const base = B.Color3.FromHexString(button.metadata.baseColor);
+      button.visibility = enabled ? 1 : 0;
       button.material.alpha = enabled ? 0.18 : 0.018;
-      button.metadata.cap.material.emissiveColor = base.scale(
-        enabled ? 0.95 : 0.55,
-      );
+      this.refreshButtonMaterial(button);
     }
   }
 
@@ -927,16 +955,42 @@ export class RbmkPhysicalConsole {
     if (this.hoveredButton) {
       const previous = this.hoveredButton;
       previous.scaling.setAll(1);
-      const base = B.Color3.FromHexString(previous.metadata.baseColor);
-      previous.metadata.cap.material.emissiveColor = base.scale(
-        this.hintsEnabled ? 0.95 : 0.55,
-      );
     }
+    const previous = this.hoveredButton;
     this.hoveredButton = next;
+    if (previous) this.refreshButtonMaterial(previous);
     if (next) {
       next.scaling.setAll(1.08);
-      next.metadata.cap.material.emissiveColor.set(0.95, 0.92, 0.7);
+      this.refreshButtonMaterial(next);
     }
+  }
+
+  buttonMaterial(color, hovered) {
+    const key = `${color}:${hovered}:${!!this.hintsEnabled}`;
+    this.capMaterials ||= new Map();
+    if (!this.capMaterials.has(key)) {
+      const material = this.material('RBMK shared cap ' + key, color, true);
+      material.emissiveColor = hovered
+        ? new B.Color3(0.95, 0.92, 0.7)
+        : material.diffuseColor.scale(this.hintsEnabled ? 0.95 : 0.55);
+      this.capMaterials.set(key, material);
+    }
+    return this.capMaterials.get(key);
+  }
+
+  refreshButtonMaterial(button) {
+    const data = button.metadata;
+    const color =
+      data.active === undefined
+        ? data.baseColor
+        : data.active
+          ? '#43a66c'
+          : '#654a43';
+    this.instances ||= new MeshInstances(this.scene);
+    data.cap = this.instances.recolor(
+      data.cap,
+      this.buttonMaterial(color, button === this.hoveredButton),
+    );
   }
 
   activate(mesh) {
@@ -987,17 +1041,15 @@ export class RbmkPhysicalConsole {
         control.mode === 'set'
           ? state.controls[control.name] === control.value
           : !!state.controls[control.name];
-      button.metadata.cap.material.diffuseColor = B.Color3.FromHexString(
-        active ? '#43a66c' : '#654a43',
-      );
-      button.metadata.cap.material.emissiveColor =
-        button.metadata.cap.material.diffuseColor.scale(
-          this.hintsEnabled ? 0.95 : 0.55,
-        );
+      if (button.metadata.active !== active) {
+        button.metadata.active = active;
+        this.refreshButtonMaterial(button);
+      }
     }
   }
 
   sync(force = false) {
+    if (!force && !this.root.isEnabled()) return;
     const now = performance.now();
     const state = this.handlers.state();
     this.updateButtons(now, state);
@@ -1021,8 +1073,17 @@ export class RbmkPhysicalConsole {
     this.drawClock(state);
   }
 
+  unchanged(surface, key) {
+    surface.renderedAt = this.lastDraw;
+    if (surface.hasRendered && Object.is(surface.renderKey, key)) return true;
+    surface.hasRendered = true;
+    surface.renderKey = key;
+    return false;
+  }
+
   drawClock(state) {
     const elapsed = Math.max(0, Math.round(state.elapsed || 0));
+    if (this.unchanged(this.clock, elapsed)) return;
     const hours = String(Math.floor(elapsed / 3600)).padStart(2, '0');
     const minutes = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
     const seconds = String(elapsed % 60).padStart(2, '0');
@@ -1081,6 +1142,15 @@ export class RbmkPhysicalConsole {
 
   drawSignalPanel(panel, state) {
     const entries = this.signalEntries(state);
+    const activeStates = entries.map(
+      ([, condition, severity]) =>
+        state.equipment.lampTestUntil > state.elapsed ||
+        (condition &&
+          (severity === 'green' ||
+            state.equipment.acknowledged ||
+            Math.floor(state.elapsed * 2) % 2 === 0)),
+    );
+    if (this.unchanged(panel, activeStates.join(','))) return;
     const context = panel.texture.getContext();
     context.fillStyle = '#596164';
     context.fillRect(0, 0, 744, 212);
@@ -1178,6 +1248,13 @@ export class RbmkPhysicalConsole {
     const index = (panel.seed - 2) * 4 + panel.row * 2 + panel.column;
     const [label, raw] = metrics[index % metrics.length];
     const value = Math.max(0, Math.min(1, raw));
+    if (
+      this.unchanged(
+        panel,
+        `${Math.round(value * 300)}:${value < 0.45}:${value > 0.92}`,
+      )
+    )
+      return;
     const context = panel.texture.getContext();
     context.fillStyle = COLORS.schematic;
     context.fillRect(0, 0, 360, 220);
@@ -1396,6 +1473,17 @@ export class RbmkPhysicalConsole {
         ['ЛАМПЫ ТЕСТ', Number(e.lampTestUntil > state.elapsed), 1, ''],
       ],
     }[panel.kind];
+    if (
+      this.unchanged(
+        panel,
+        readings
+          .map(([, raw, maximum]) =>
+            Math.round(282 * Math.max(0, Math.min(1, raw / maximum))),
+          )
+          .join(','),
+      )
+    )
+      return;
     const context = panel.texture.getContext();
     context.fillStyle = '#596164';
     context.fillRect(0, 0, 1048, 600);
@@ -1446,18 +1534,22 @@ export class RbmkPhysicalConsole {
             (0.94 + Math.sin(item.row * 2.1 + item.column * 1.4) * 0.06),
         ),
       );
-      item.mesh.material =
-        local > 1.05 ? this.red : local > 0.65 ? this.yellow : this.green;
+      item.mesh = this.instances.recolor(
+        item.mesh,
+        local > 1.05 ? this.red : local > 0.65 ? this.yellow : this.green,
+      );
     }
     for (const item of this.coreCells) {
       if (item.edge) {
-        item.mesh.material = this.cream;
+        item.mesh = this.instances.recolor(item.mesh, this.cream);
         continue;
       }
       const radial = Math.hypot(item.column / 6, item.row / 4.4);
       const local = (state.power / 100) * (1 - radial * 0.34);
-      item.mesh.material =
-        local > 1.02 ? this.red : local > 0.58 ? this.yellow : this.green;
+      item.mesh = this.instances.recolor(
+        item.mesh,
+        local > 1.02 ? this.red : local > 0.58 ? this.yellow : this.green,
+      );
     }
     this.channelMapsRenderedAt = this.lastDraw;
   }
@@ -1496,6 +1588,7 @@ export class RbmkPhysicalConsole {
   drawReadout(readout, state) {
     const name = readout.name;
     const value = state.controls[name];
+    if (this.unchanged(readout, value)) return;
     const context = readout.texture.getContext();
     context.fillStyle = '#d9d1b6';
     context.fillRect(0, 0, 400, 72);
@@ -1625,6 +1718,26 @@ export class RbmkPhysicalConsole {
       alarms: [...state.alarms],
     };
     screen.renderedAt = this.lastDraw;
+    if (
+      screen.panel.kind !== 'annunciator' &&
+      this.unchanged(
+        screen,
+        `${state.scrammed}:` +
+          screen.panel.readings
+            .map(([, key]) =>
+              Math.round(
+                370 *
+                  this.readingNormalized(
+                    state,
+                    key,
+                    this.readingValue(state, key),
+                  ),
+              ),
+            )
+            .join(','),
+      )
+    )
+      return;
     const context = screen.texture.getContext();
     context.fillStyle = '#d6cfb7';
     context.fillRect(0, 0, 640, 430);
