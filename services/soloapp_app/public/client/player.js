@@ -15,6 +15,7 @@ export class Player {
     this.inputEnabled = true;
     this.worldMap = 'planet';
     this.roomColliders = [];
+    this.roomPeople = () => [];
     this.movementConstraints = [];
     this.structures = [];
     this.scene = scene;
@@ -198,7 +199,13 @@ export class Player {
         0,
         clamp(next.z, -ROOM_PLAYER_LIMIT, ROOM_PLAYER_LIMIT),
       );
-      this.position = resolveRoomMovement(before, next, this.roomColliders);
+      this.position = resolveRoomMovement(
+        before,
+        next,
+        this.roomColliders,
+        0.35,
+        this.roomPeople(),
+      );
       this.radialSpeed = 0;
     } else {
       // Tree trunks use the same 0.18 m collider and 0.35 m player radius.

@@ -55,11 +55,34 @@ function sweep(position, delta, box) {
   return { time: Math.max(0, enter), normal };
 }
 
+// Horizontal swept discs share the same contact solver as furniture, so
+// sliding past a person cannot push the participant through a nearby panel.
+function sweepPerson(position, delta, person, radius) {
+  const x = position.x - person.x,
+    z = position.z - person.z;
+  const size = radius + person.radius;
+  const a = delta.x ** 2 + delta.z ** 2;
+  const b = x * delta.x + z * delta.z;
+  const c = x * x + z * z - size * size;
+  if (a < 1e-12 || b >= 0) return null;
+  const discriminant = b * b - a * c;
+  if (discriminant < 0) return null;
+  const time = (-b - Math.sqrt(discriminant)) / a;
+  if (time < -1e-8 || time > 1) return null;
+  const normal = new B.Vector3(
+    x + delta.x * time,
+    0,
+    z + delta.z * time,
+  ).normalize();
+  return { time: Math.max(0, time), normal };
+}
+
 export function resolveRoomMovement(
   before,
   next,
   meshes,
   radius = PLAYER_RADIUS,
+  people = [],
 ) {
   const boxes = meshes.map((m) => footprint(m, next.y, radius)).filter(Boolean);
   const position = before.clone();
@@ -83,6 +106,20 @@ export function resolveRoomMovement(
       position.addInPlace(face.normal.scale(face.distance + SKIN));
       overlap = true;
     }
+    for (const person of people) {
+      const offset = new B.Vector3(
+        position.x - person.x,
+        0,
+        position.z - person.z,
+      );
+      const distance = offset.length();
+      const size = radius + person.radius;
+      if (distance >= size) continue;
+      const outward =
+        distance > 1e-8 ? offset.scale(1 / distance) : B.Vector3.Right();
+      position.addInPlace(outward.scale(size - distance + SKIN));
+      overlap = true;
+    }
     if (!overlap) break;
   }
   // Sweep the whole frame, including long frames, then slide along the first
@@ -91,6 +128,10 @@ export function resolveRoomMovement(
     let hit = null;
     for (const box of boxes) {
       const candidate = sweep(position, delta, box);
+      if (candidate && (!hit || candidate.time < hit.time)) hit = candidate;
+    }
+    for (const person of people) {
+      const candidate = sweepPerson(position, delta, person, radius);
       if (candidate && (!hit || candidate.time < hit.time)) hit = candidate;
     }
     if (!hit) {

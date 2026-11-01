@@ -31,7 +31,10 @@ const { chromium } = require('playwright');
           },
         });
       }, index);
-      await page.goto('http://127.0.0.1:4193/?reactor-test=1');
+      await page.goto(
+        (process.env.SOLOAPP_BASE_URL || 'http://127.0.0.1:4193') +
+          '/?reactor-test=1',
+      );
       await page.waitForFunction(
         () => window.planetApp?.reactor.workers,
         {},
@@ -101,10 +104,9 @@ const { chromium } = require('playwright');
       planetApp.reactor.workers.update(0.016);
     });
     assert.notDeepEqual(await positions(a), before);
-    // Walk the whole loop against actual furniture mesh bounds, including
-    // cabinets that are not player colliders. Exclude NPCs and ceiling/floor.
+    // Sample seeded random paths against actual furniture, excluding NPCs and floor.
     const collisions = await a.evaluate(async () => {
-      const { workerPose, WORKER_PERIOD } =
+      const { workerPose, WORKER_LEG_MS } =
         await import('/client/worker-patrol.js');
       const r = planetApp.reactor;
       const furniture = r.root.getChildMeshes().filter((mesh) => {
@@ -119,8 +121,12 @@ const { chromium } = require('playwright');
         return lo.y < 1.75 && hi.y > 0.15;
       });
       const hit = new Set();
-      for (let time = 0; time < WORKER_PERIOD * 1000; time += 100) {
-        const p = workerPose(0, time);
+      for (let time = 0; time < WORKER_LEG_MS * 8; time += 1000) {
+        const p = workerPose(
+          Math.floor(time / WORKER_LEG_MS) % 7,
+          time,
+          r.workers.navigation,
+        );
         for (const mesh of furniture) {
           const { minimumWorld: lo, maximumWorld: hi } =
             mesh.getBoundingInfo().boundingBox;
@@ -138,10 +144,186 @@ const { chromium } = require('playwright');
     assert.deepEqual(
       collisions,
       [],
-      'route must clear furniture with body radius',
+      'random routes must clear furniture with body radius',
     );
+    await b.evaluate(() => {
+      planetApp.reactor.workers.proximity.nextReply = Infinity;
+      planetApp.reactor.instructor.finishWorkerReply();
+      window.spoken = [];
+    });
+    const contacts = await a.evaluate(async () => {
+      const { workerDestination } = await import('/client/worker-patrol.js');
+      const { REACTOR_MAP, PHYSICAL_MAP } = await import('/shared/room.js');
+      const r = planetApp.reactor,
+        p = r.player,
+        workers = r.workers;
+      p.scene.getEngine().stopRenderLoop();
+      const actor = workers.workers[0];
+      let time = workers.clock.now();
+      workers.clock.now = () => time;
+      const reset = () => {
+        workers.workers.forEach((w, i) => {
+          w.avatar.root.position.set(i ? -8 + i * 1.3 : 0, 0, i ? 6 : 0);
+          w.path = [];
+          w.replanAt = Infinity;
+          w.goalKey = workerDestination(i, time, workers.navigation).key;
+        });
+        workers.lastTime = time;
+        workers.initialized = true;
+      };
+      p.inputEnabled = true;
+      const approaches = [];
+      for (const mode of ['gamepad', 'touch', 'xr']) {
+        reset();
+        p.position.set(0, 0, 3);
+        p.forward.set(0, 0, -1);
+        p.xr = mode === 'xr';
+        p.gamepadMove = mode === 'gamepad' ? { x: 0, y: 1 } : null;
+        p.touchMove = mode === 'touch' ? { x: 0, y: 1 } : null;
+        for (let i = 0; i < 8; i++)
+          p.update(0.5, mode === 'xr' ? p.forward.clone() : null);
+        approaches.push({
+          mode,
+          z: p.position.z,
+          distance: BABYLON.Vector3.Distance(
+            p.position,
+            actor.avatar.root.position,
+          ),
+        });
+      }
+      p.xr = false;
+      p.gamepadMove = p.touchMove = null;
+      reset();
+      p.position.set(0, 0, 2);
+      actor.path = [{ x: 0, z: 4 }];
+      let closest = Infinity;
+      for (let i = 0; i < 100; i++) {
+        time += 50;
+        workers.update(0.05);
+        closest = Math.min(
+          closest,
+          BABYLON.Vector3.Distance(p.position, actor.avatar.root.position),
+        );
+      }
+      const workerStopped = actor.avatar.root.position.z;
+      const participantStayed = p.position.asArray();
+      p.position.set(4, 0, 2);
+      for (let i = 0; i < 40; i++) {
+        time += 50;
+        workers.update(0.05);
+      }
+      const resumed = actor.avatar.root.position.z > workerStopped + 0.5;
+      reset();
+      p.position.set(4, 0, 2);
+      actor.path = [{ x: 0, z: 4 }];
+      const remote = {
+        state: { map: REACTOR_MAP },
+        node: { position: new BABYLON.Vector3(0, 0, 2) },
+      };
+      planetApp.network.remotes.set(999, remote);
+      for (let i = 0; i < 100; i++) {
+        time += 50;
+        workers.update(0.05);
+      }
+      const remoteDistance = BABYLON.Vector3.Distance(
+        remote.node.position,
+        actor.avatar.root.position,
+      );
+      remote.state.map = PHYSICAL_MAP;
+      const stopped = actor.avatar.root.position.z;
+      for (let i = 0; i < 40; i++) {
+        time += 50;
+        workers.update(0.05);
+      }
+      const otherMapIgnored = actor.avatar.root.position.z > stopped + 0.5;
+      planetApp.network.remotes.delete(999);
+      r.physicalView = true;
+      const noGhosts = p.roomPeople().length === 0;
+      r.physicalView = false;
+      reset();
+      return {
+        approaches,
+        closest,
+        workerStopped,
+        participantStayed,
+        resumed,
+        remoteDistance,
+        otherMapIgnored,
+        noGhosts,
+      };
+    });
+    contacts.approaches.forEach((p) =>
+      assert(p.distance >= 0.6999 && p.z > 0 && p.z < 0.71, JSON.stringify(p)),
+    );
+    assert(
+      contacts.closest >= 0.6999 && contacts.workerStopped < 1.31,
+      JSON.stringify(contacts),
+    );
+    assert.deepEqual(contacts.participantStayed, [0, 0, 2]);
+    assert(
+      contacts.resumed &&
+        contacts.remoteDistance >= 0.6999 &&
+        contacts.otherMapIgnored &&
+        contacts.noGhosts,
+      JSON.stringify(contacts),
+    );
+
+    const roaming = await a.evaluate(() => {
+      const r = planetApp.reactor,
+        w = r.workers;
+      let time = Date.UTC(2026, 10, 1, 12);
+      w.clock.now = () => time;
+      r.player.position.set(0, 0, 3);
+      w.initialized = false;
+      r.instructor.enabled = false;
+      w.update(0);
+      const starts = w.workers.map((worker) =>
+        worker.avatar.root.position.clone(),
+      );
+      const travelled = starts.map(() => 0);
+      let minimum = Infinity,
+        furnitureHits = 0;
+      for (let frame = 0; frame < 650; frame++) {
+        const before = w.workers.map((worker) =>
+          worker.avatar.root.position.clone(),
+        );
+        time += 100;
+        w.update(0.1);
+        w.workers.forEach((worker, i) => {
+          const p = worker.avatar.root.position;
+          travelled[i] += BABYLON.Vector3.Distance(before[i], p);
+          for (const person of [
+            r.player.position,
+            ...w.workers.slice(i + 1).map((v) => v.avatar.root.position),
+          ])
+            minimum = Math.min(minimum, BABYLON.Vector3.Distance(p, person));
+          for (const mesh of w.furniture) {
+            const { minimumWorld: lo, maximumWorld: hi } =
+              mesh.getBoundingInfo().boundingBox;
+            if (p.x > lo.x && p.x < hi.x && p.z > lo.z && p.z < hi.z)
+              furnitureHits++;
+          }
+        });
+      }
+      r.instructor.enabled = true;
+      // Restore a clear, isolated approach position for the existing speech checks.
+      w.workers.forEach((worker, i) =>
+        worker.avatar.root.position.set(i ? -8 + i * 1.3 : 0, 0, i ? 6 : 0),
+      );
+      return { minimum, furnitureHits, travelled };
+    });
+    assert(
+      roaming.minimum >= 0.6999 && roaming.furnitureHits === 0,
+      JSON.stringify(roaming),
+    );
+    assert(
+      roaming.travelled.every((d) => d > 1),
+      JSON.stringify(roaming),
+    );
+
     const approach = await a.evaluate(() => {
       const r = planetApp.reactor;
+      r.instructor.stop();
       r.player.position.copyFrom(r.workers.workers[0].avatar.root.position);
       r.workers.proximity.reset();
       r.workers.update(0.016);
@@ -240,7 +422,7 @@ const { chromium } = require('playwright');
     await a.screenshot({ path: '/tmp/soloapp-workers.png' });
     assert.deepEqual(errors, []);
     console.log(
-      'PASS: seven models, labels, server clock synchronization, furniture clearance, proximity, speech priorities and resume',
+      'PASS: seven models, random navigation, shared clock, furniture clearance, mutual participant/worker collisions, remote peers, map isolation, proximity and speech priorities',
     );
   } finally {
     await browser.close();

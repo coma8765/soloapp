@@ -2,32 +2,64 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   WORKER_COUNT,
-  WORKER_PERIOD,
+  WORKER_LEG_MS,
+  workerDestination,
   workerPose,
   WorkerClock,
   WorkerProximity,
 } from '../public/client/worker-patrol.js';
 
+import { WorkerNavigation } from '../public/client/worker-navigation.js';
+const navigation = new WorkerNavigation([
+  { min: { x: -2, z: -1 }, max: { x: 2, z: 1 } },
+]);
 const posesAt = (time) =>
-  Array.from({ length: WORKER_COUNT }, (_, i) => workerPose(i, time));
-test('seven distinct workers follow a bounded, continuous, periodic route clear of furniture', () => {
+  Array.from({ length: WORKER_COUNT }, (_, i) =>
+    workerPose(i, time, navigation),
+  );
+test('seven seeded random walks choose new reachable destinations instead of repeating a circuit', () => {
   assert.equal(WORKER_COUNT, 7);
-  for (let t = 0; t < WORKER_PERIOD * 1000; t += 100) {
-    const poses = posesAt(t);
-    poses.forEach((p, i) => {
-      assert(Math.abs(p.x) <= 8 && p.z >= 5.3 && p.z <= 9.1);
-      // Journal desk ends at z=3.95; copier and chief occupy the inside of the loop.
-      assert(Math.hypot(p.x - 5.5, p.z - 7.6) >= 1.49);
-      assert(Math.hypot(p.x - 3.95, p.z - 7.5) >= 1.59);
-      const next = workerPose(i, t + 10);
-      assert(Math.hypot(next.x - p.x, next.z - p.z) <= 0.00701);
-      const repeat = workerPose(i, t + WORKER_PERIOD * 1000);
-      assert(Math.hypot(repeat.x - p.x, repeat.z - p.z) < 1e-10);
-      poses
-        .slice(i + 1)
-        .forEach((q) => assert(Math.hypot(p.x - q.x, p.z - q.z) > 2));
-    });
+  for (let i = 0; i < WORKER_COUNT; i++) {
+    const destinations = new Set();
+    for (let leg = 0; leg < 80; leg++) {
+      const time = leg * WORKER_LEG_MS;
+      const { target } = workerDestination(i, time, navigation);
+      destinations.add(`${target.x},${target.z}`);
+      for (let phase = 0; phase < WORKER_LEG_MS; phase += 1000) {
+        const p = workerPose(i, time + phase, navigation);
+        const next = workerPose(i, time + phase + 10, navigation);
+        assert(navigation.clear(p, next), 'route keeps furniture clearance');
+        assert(
+          Math.hypot(next.x - p.x, next.z - p.z) < 0.02,
+          'continuous, including leg boundaries',
+        );
+      }
+    }
+    assert(destinations.size > 50);
   }
+  assert.notDeepEqual(posesAt(10000), posesAt(10000 + WORKER_LEG_MS));
+});
+
+test('navigation goes around furniture and stationary people instead of cutting corners', () => {
+  const start = navigation.nearest({ x: -4, z: 0 });
+  const target = navigation.nearest({ x: 4, z: 0 });
+  const people = [{ x: 0, z: 2, radius: 0.35 }];
+  const path = navigation.path(start, target, people);
+  assert(path.length >= 3);
+  path.slice(1).forEach((p, i) => assert(navigation.clear(path[i], p, people)));
+  assert.deepEqual(
+    navigation.path(start, target, [{ ...target, radius: 0.35 }]),
+    [],
+  );
+});
+
+test('a touching worker can plan a way away from a participant', () => {
+  const nav = new WorkerNavigation();
+  const start = { x: 0, z: 0 };
+  const people = [{ x: 0.7001, z: 0, radius: 0.35 }];
+  const path = nav.path(start, nav.nearest({ x: -4, z: 0 }), people);
+  assert(path.length >= 2);
+  path.slice(1).forEach((p, i) => assert(nav.clear(path[i], p, people)));
 });
 
 test('late joiners with different system clocks converge on database time and extrapolate', () => {
