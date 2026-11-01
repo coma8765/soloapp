@@ -58,3 +58,8 @@ add_executable(participants_test tests/participants_test.cpp)
 target_include_directories(participants_test PRIVATE src/logic)
 target_link_libraries(participants_test PRIVATE Drogon::Drogon)
 add_test(NAME participants COMMAND participants_test)
+
+add_executable(workers_count_test tests/workers_count_test.cpp)
+target_include_directories(workers_count_test PRIVATE src/logic)
+target_link_libraries(workers_count_test PRIVATE Drogon::Drogon)
+add_test(NAME workers_count COMMAND workers_count_test)

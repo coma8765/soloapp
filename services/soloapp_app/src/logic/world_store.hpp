@@ -12,6 +12,7 @@ struct Frame {
     Json::Value reactor, reactorReplies, reactorJournal, reactorCommands;
     Json::Value door, doorReplies;
     Json::Value professors, professorReplies;
+    Json::Value workers, workersReplies;
     bool leader = false;
     unsigned long long epoch = 0;
 };

@@ -33,7 +33,7 @@ class Game {
         bool checking = false, joined = false;
         bool reactor = false;
         unsigned long long reactorVersion = 0, journalSequence = 0, commandRevision = 0;
-        unsigned long long doorRevision = 0, professorRevision = 0;
+        unsigned long long doorRevision = 0, professorRevision = 0, workersRevision = 0;
         long long professorSentAt = 0;
         double authAt = 0, window = 0;
         unsigned messages = 0;

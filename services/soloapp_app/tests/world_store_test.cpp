@@ -82,6 +82,22 @@ int run_test(int argc, char **argv) {
         throw std::runtime_error("Cross-node participant identity/metrics missing");
     if (planet::participantsMessage(joined.players, false)["players"][0].isMember("fps"))
         throw std::runtime_error("Metrics leaked to regular participant");
+    two[0]["email"] = "a@gmail.com";
+    Json::Value workers;
+    workers["type"] = "workers_set";
+    workers["from"] = Json::UInt64(2);
+    workers["user_id"] = "synthetic-user-2";
+    workers["requestId"] = "persist-workers";
+    workers["revision"] = joined.workers["revision"];
+    workers["count"] = 10;
+    const auto countChanged = second.exchange(two, {}, {workers});
+    if (!countChanged.workersReplies[0]["accepted"].asBool() ||
+        first.exchange(one, {}).workers["count"] != 10)
+        throw std::runtime_error("Worker count did not converge across replicas");
+    planet::WorldStore countRestarted(argv[1], argv[2], "worker-count-restarted");
+    if (countRestarted.exchange(empty, {}).workers["count"] != 10)
+        throw std::runtime_error("Worker count lost after restart");
+    std::cout << "PASS: PostgreSQL worker count cross-node persistence and restart\n";
     Json::Value command;
     command["type"] = "reactor_command";
     command["from"] = 2;

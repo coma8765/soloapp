@@ -133,6 +133,55 @@ try {
   await delay(1200);
   assert.equal(a.roster.players.find((p) => p.email === member.email).fps, 60);
   regularOnly(b);
+  const workerState = (client) =>
+    client.messages.findLast((m) => m.type === 'workers_state');
+  await until(
+    () => workerState(a) && workerState(b),
+    'initial workers missing',
+  );
+  assert.equal(workerState(a).count, 7);
+  b.ws.send(
+    JSON.stringify({
+      type: 'workers_set',
+      count: 1,
+      revision: workerState(b).revision,
+      requestId: 'forged-workers',
+      email: 'a@gmail.com',
+      admin: true,
+      from: a.roster.players.find((p) => p.email === 'a@gmail.com').id,
+    }),
+  );
+  await until(
+    () =>
+      b.messages.some(
+        (m) => m.type === 'workers_ack' && m.requestId === 'forged-workers',
+      ),
+    'missing worker rejection',
+  );
+  assert.equal(
+    b.messages.find((m) => m.requestId === 'forged-workers').error,
+    'forbidden',
+  );
+  for (const count of [10, 1]) {
+    const request = {
+      type: 'workers_set',
+      count,
+      revision: workerState(a).revision,
+      requestId: 'workers-' + count,
+    };
+    a.ws.send(JSON.stringify(request));
+    await until(
+      () => workerState(a).count === count && workerState(b).count === count,
+      'cross-node count missing',
+    );
+    a.ws.send(JSON.stringify(request)); // A retransmission cannot reapply an older selection.
+  }
+  const late = connect(second, memberToken, 72);
+  await until(
+    () => workerState(late)?.count === 1,
+    'late join lost persisted worker count',
+  );
+  late.ws.close();
   b.reply = false;
   await until(
     () => a.roster.players.find((p) => p.email === member.email)?.fps === null,

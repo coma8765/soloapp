@@ -253,6 +253,8 @@ export class Network {
         'reactor_command_record',
         'door_state',
         'door_ack',
+        'workers_state',
+        'workers_ack',
       ].includes(type)
     )
       this.onReactorServerMessage?.(message);

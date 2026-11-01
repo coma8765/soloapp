@@ -181,6 +181,7 @@ void Game::message(const drogon::WebSocketConnectionPtr &socket, const std::stri
         return;
     }
     if (v["type"] == "door_request" || v["type"] == "professor_command" ||
+        v["type"] == "workers_set" ||
         ((v["type"] == "reactor_command" || v["type"] == "reactor_snapshot") && s.reactor)) {
         v["from"] = Json::UInt64(s.id);
         v["user_id"] = s.user;
@@ -331,6 +332,13 @@ void Game::received(Frame frame) {
             s.professorSentAt = professorTime;
         }
         for (const auto &reply : frame.professorReplies)
+            if (reply["to"].asUInt64() == s.id)
+                send(s.socket, reply);
+        if (frame.workers["revision"].asUInt64() != s.workersRevision) {
+            send(s.socket, frame.workers);
+            s.workersRevision = frame.workers["revision"].asUInt64();
+        }
+        for (const auto &reply : frame.workersReplies)
             if (reply["to"].asUInt64() == s.id)
                 send(s.socket, reply);
         if (s.reactor) {
