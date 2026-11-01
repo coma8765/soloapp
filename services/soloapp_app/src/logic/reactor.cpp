@@ -101,10 +101,12 @@ bool ReactorAuthority::validSnapshot(const Json::Value &state) const {
         } else if (!actual.isNumeric())
             return false;
     }
-    for (const char *name : {"returnMass", "injectionMass"})
-        for (const auto &value : cycle[name])
-            if (value.asDouble() < 0)
-                return false;
+    const std::initializer_list<const char *> inventories = {"returnMass", "injectionMass"};
+    if (std::any_of(inventories.begin(), inventories.end(), [&](const auto *name) {
+            return std::any_of(cycle[name].begin(), cycle[name].end(),
+                               [](const auto &value) { return value.asDouble() < 0; });
+        }))
+        return false;
     const auto fields = profile_["initial"].getMemberNames();
     if (!std::all_of(fields.begin(), fields.end(), [&](const auto &name) {
             if (!state.isMember(name))
