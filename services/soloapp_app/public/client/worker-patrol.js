@@ -1,50 +1,69 @@
-// All clients evaluate the same route against PostgreSQL time, independent of
-// render rate, reactor speed, room entry time and the elected physics writer.
+// Destinations use shared server time and a per-worker seed. There is no fixed
+// loop: each leg gets a new random destination in the connected walkable area.
 export const WORKER_COUNT = 7;
 export const WORKER_REPLY = 'Извините, сейчас я занят';
-export const WORKER_ROUTE = [
-  [-8, 5.3],
-  [-8, 9.1],
-  [8, 9.1],
-  [8, 5.3],
-];
-const speed = 0.7;
-const pause = 2;
-const legs = WORKER_ROUTE.map(([x, z], i) => {
-  const [nx, nz] = WORKER_ROUTE[(i + 1) % WORKER_ROUTE.length];
-  return {
-    x,
-    z,
-    dx: nx - x,
-    dz: nz - z,
-    travel: Math.hypot(nx - x, nz - z) / speed,
-  };
-});
-export const WORKER_PERIOD = legs.reduce(
-  (sum, leg) => sum + leg.travel + pause,
-  0,
-);
+export const WORKER_LEG_MS = 45000;
+export const WORKER_RADIUS = 0.35;
 
-export function workerPose(index, milliseconds) {
-  let phase =
-    (((milliseconds / 1000 + (index * WORKER_PERIOD) / WORKER_COUNT) %
-      WORKER_PERIOD) +
-      WORKER_PERIOD) %
-    WORKER_PERIOD;
-  for (const leg of legs) {
-    const duration = leg.travel + pause;
-    if (phase < duration) {
-      const t = Math.max(0, phase - pause) / leg.travel;
+function random(seed) {
+  let n = Math.imul(seed ^ (seed >>> 16), 0x45d9f3b);
+  n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+}
+
+export function workerDestination(index, milliseconds, navigation) {
+  const phase = milliseconds + index * 6300;
+  const leg = Math.floor(phase / WORKER_LEG_MS);
+  const choose = (n) =>
+    navigation.targets[
+      Math.floor(random(n + index * 104729) * navigation.targets.length)
+    ];
+  return {
+    key: leg,
+    from: choose(leg),
+    target: choose(leg + 1),
+    fraction: (phase - leg * WORKER_LEG_MS) / WORKER_LEG_MS,
+  };
+}
+
+// Stateless initial pose makes a late join independent of local wall-clock skew.
+// Live movement then yields to people and re-plans around their current poses.
+export function workerPose(index, milliseconds, navigation) {
+  const { key, from, target, fraction } = workerDestination(
+    index,
+    milliseconds,
+    navigation,
+  );
+  const cacheKey = `${index}:${key}`;
+  if (!navigation.routes.has(cacheKey)) {
+    if (navigation.routes.size >= 64) navigation.routes.clear();
+    navigation.routes.set(cacheKey, navigation.path(from, target));
+  }
+  const path = navigation.routes.get(cacheKey);
+  const lengths = path
+    .slice(1)
+    .map((p, i) => Math.hypot(p.x - path[i].x, p.z - path[i].z));
+  const length = lengths.reduce((a, b) => a + b, 0);
+  const pause = 0.05 + random(key + index * 31) * 0.05;
+  let remaining = length * Math.max(0, (fraction - pause) / (1 - pause));
+  for (let i = 0; i < lengths.length; i++) {
+    if (remaining <= lengths[i] && lengths[i] > 0) {
+      const a = path[i],
+        b = path[i + 1],
+        t = remaining / lengths[i];
       return {
-        x: leg.x + leg.dx * t,
-        z: leg.z + leg.dz * t,
-        yaw: Math.atan2(-leg.dx, -leg.dz),
-        speed: phase < pause ? 0 : speed,
+        x: a.x + (b.x - a.x) * t,
+        z: a.z + (b.z - a.z) * t,
+        yaw: Math.atan2(a.x - b.x, a.z - b.z),
+        speed:
+          fraction < pause
+            ? 0
+            : length / ((WORKER_LEG_MS / 1000) * (1 - pause)),
       };
     }
-    phase -= duration;
+    remaining -= lengths[i];
   }
-  return workerPose(index, 0);
+  return { x: target.x, z: target.z, yaw: 0, speed: 0 };
 }
 
 export class WorkerClock {

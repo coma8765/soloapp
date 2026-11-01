@@ -10,3 +10,11 @@ deploy:
 	cd ../.. && ansible-playbook infra/local-macos/deploy.yaml
 lan-refresh:
 	$(PYTHON) refresh-lan.py $(LAN_IP)
+
+.PHONY: update check update-plan
+update:
+	./update-local.sh $(ARGS)
+check:
+	./update-local.sh --check-only
+update-plan:
+	./update-local.sh --plan

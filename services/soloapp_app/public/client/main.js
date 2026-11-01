@@ -511,6 +511,14 @@ async function start() {
     const { runDoorChecks } = await import('./door-checks.js');
     window.doorChecks = runDoorChecks(window.planetApp);
   }
+  if (
+    location.hostname === '127.0.0.1' &&
+    new URL(location.href).searchParams.has('reactor-performance')
+  ) {
+    const { measureReactorPerformance } =
+      await import('./reactor-performance.js');
+    measureReactorPerformance(window.planetApp);
+  }
   engine.runRenderLoop(() => {
     const now = performance.now(),
       dt = Math.min((now - previous) / 1000, 0.05);
