@@ -40,6 +40,7 @@ items:
           - {name: CHAT_ALLOWED_ORIGIN, value: 'https://{{ public_domain }}'}
           - {name: PORT, value: '{{ whoami_config.port }}'}
           - {name: LISTEN_ADDRESS, value: '0.0.0.0'}
+          - {name: TTS_URL, value: 'http://tts.soloapp.svc.cluster.local:8179'}
           ports: [{name: http, containerPort: {{ whoami_config.port }}}]
           resources: {{ whoami_config.resources | to_json }}
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}

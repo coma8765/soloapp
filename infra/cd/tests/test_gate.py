@@ -243,7 +243,7 @@ class IsolatedDeploymentTests(unittest.TestCase):
                 current = json.loads((state / "deployed.json").read_text())
                 for other in gate.WORKLOADS:
                     if (
-                        other in ("client-notify", "client-gateway", "keycloak", "whisper")
+                        other in ("client-notify", "client-gateway", "keycloak", "whisper", "tts")
                         and other != scope
                     ):
                         self.assertNotIn(other, current["services"])

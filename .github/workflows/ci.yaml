@@ -224,8 +224,13 @@ jobs:
         with: {persist-credentials: false}
       - name: Test speech isolation and audio windows
         run: |
+          python3 -m unittest discover -s services/tts/tests -v
           python3 -m unittest discover -s services/whisper/tests -v
           node services/soloapp_app/tests/speech.test.mjs
+      - name: Build offline TTS runtime
+        run: docker build -t soloapp-tts-test -f services/tts/deploy/Dockerfile .
+      - name: Verify synthesis without network or writable filesystem
+        run: docker run --rm --network none --read-only --cap-drop=ALL -v "$PWD/services/tts/tests/smoke.py:/smoke.py:ro" --entrypoint python3 soloapp-tts-test /smoke.py
       - name: Build offline Whisper runtime
         run: docker build -t soloapp-whisper-test -f services/whisper/deploy/Dockerfile .
       - name: Build C++ and test checkpoint recovery

@@ -232,6 +232,7 @@ const DEPLOY_SERVICES = [
   'client-gateway',
   'keycloak',
   'whisper',
+  'tts',
 ];
 export function deploymentMessage(payload) {
   const states = {
