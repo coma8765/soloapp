@@ -65,7 +65,10 @@ const { chromium } = require('playwright');
           },
         });
       });
-      await page.goto('http://127.0.0.1:4193/?reactor-test=1');
+      await page.goto(
+        (process.env.SOLOAPP_BASE_URL || 'http://127.0.0.1:4193') +
+          '/?reactor-test=1',
+      );
       await page.waitForFunction(
         () => window.planetApp?.engineer,
         {},
@@ -124,6 +127,11 @@ const { chromium } = require('playwright');
     await b.waitForFunction(
       () => planetApp.engineer.session.turns.get(1)?.stage === 'answer',
     );
+    await a.waitForFunction(
+      () =>
+        planetApp.network.voice.npc.source &&
+        planetApp.reactor.instructor.avatar.speaking,
+    );
     assert.equal(
       await b.evaluate(() => planetApp.reactor.instructor.subtitle.textContent),
       'Стержни поглощают нейтроны.',
@@ -146,6 +154,11 @@ const { chromium } = require('playwright');
     );
     await a.waitForFunction(() => planetApp.engineer.localTurn === null);
     await b.waitForFunction(() => planetApp.engineer.owner === null);
+    assert.equal(
+      await a.evaluate(() => planetApp.reactor.instructor.avatar.speaking),
+      false,
+      'completed WAV answer closes the mouth',
+    );
     assert.deepEqual(requests, [1, 0]);
     // Moving away mid-utterance cancels recording and releases the shared turn.
     await a.evaluate(() => (inputGain.gain.value = 0.1));
