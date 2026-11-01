@@ -91,6 +91,7 @@ export class Network {
   }
 
   disconnect() {
+    this.onProfessorMessage?.({ type: 'professor_disconnect' });
     this.onReactorServerMessage?.({ type: 'reactor_disconnect' });
     this.generation++;
     this.socket?.close();
@@ -154,6 +155,7 @@ export class Network {
           : 'Нет соединения · переподключитесь';
       this.worldTransport = 'отключён';
       this.id = 0;
+      this.onProfessorMessage?.({ type: 'professor_disconnect' });
       this.onReactorServerMessage?.({ type: 'reactor_disconnect' });
       this.clearPeers();
       setTimeout(
@@ -199,6 +201,10 @@ export class Network {
       this.reactorProtocol = message.reactor_protocol;
       this.doorProtocol = message.door_protocol;
       this.userId = message.user_id;
+      this.onProfessorMessage?.({
+        type: 'professor_welcome',
+        protocol: message.professor_protocol,
+      });
       this.onReactorServerMessage?.({
         type: 'reactor_welcome',
         id: this.id,
@@ -209,6 +215,8 @@ export class Network {
       if (this.worldProtocol === 1) this.startWorld();
       else this.worldTransport = 'WSS · общий мир';
     }
+    if (type === 'professor_state' || type === 'professor_ack')
+      this.onProfessorMessage?.(message);
     if (type === 'participants') {
       this.participants.accept(message);
       for (const [id, remote] of this.remotes)

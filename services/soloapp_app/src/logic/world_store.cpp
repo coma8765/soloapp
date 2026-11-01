@@ -2,6 +2,7 @@
 #include "door.hpp"
 #include "generated/odb/world-odb.hxx"
 #include "json.hpp"
+#include "lake_professors.hpp"
 #include "odb/primary_pool.hpp"
 #include <algorithm>
 #include <filesystem>
@@ -92,6 +93,9 @@ Frame WorldStore::exchange(const Json::Value &local, const std::vector<Json::Val
     frame.reactorReplies = reactor_.update(reactor, frame.players, reactorMessages, now);
     frame.doorReplies = DoorAuthority::update(reactor["door"], frame.players, reactorMessages, now);
     frame.door = DoorAuthority::publicState(reactor["door"]);
+    frame.professorReplies =
+        LakeProfessorsAuthority::update(reactor["professors"], frame.players, reactorMessages, now);
+    frame.professors = LakeProfessorsAuthority::publicState(reactor["professors"], now);
     frame.reactor = reactor_.publicState(reactor);
     // One database clock for room NPCs, including late joiners across replicas.
     frame.reactor["serverTime"] = Json::Int64(now);

@@ -14,7 +14,7 @@ add_custom_command(OUTPUT ${ODB_DIR}/world-odb.cxx ${ODB_DIR}/world-odb.hxx ${OD
  COMMAND ${CMAKE_COMMAND} -E make_directory ${ODB_DIR}
  COMMAND ${ODB_COMPILER} --std c++11 --database pgsql --generate-query --output-dir ${ODB_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src/models/world.hpp
  DEPENDS src/models/world.hpp VERBATIM)
-add_library(world_store src/logic/world_store.cpp src/logic/simulation.cpp src/logic/reactor.cpp src/logic/door.cpp ${ODB_DIR}/world-odb.cxx)
+add_library(world_store src/logic/world_store.cpp src/logic/simulation.cpp src/logic/reactor.cpp src/logic/door.cpp src/logic/lake_professors.cpp ${ODB_DIR}/world-odb.cxx)
 target_include_directories(world_store PUBLIC ${CMAKE_CURRENT_BINARY_DIR} src src/models src/logic ../../libs /usr/include/postgresql)
 target_link_libraries(world_store PUBLIC Drogon::Drogon OpenSSL::Crypto ${ODB_LIBRARY} ${ODB_PGSQL_LIBRARY})
 add_executable(soloapp-app src/main.cpp src/views/api.cpp src/logic/game.cpp src/logic/professor.cpp)
@@ -42,6 +42,10 @@ add_test(NAME door COMMAND door_test)
 add_executable(world_store_test tests/world_store_test.cpp)
 target_link_libraries(world_store_test PRIVATE world_store)
 
+add_executable(lake_professors_test tests/lake_professors_test.cpp src/logic/lake_professors.cpp)
+target_include_directories(lake_professors_test PRIVATE src/logic)
+target_link_libraries(lake_professors_test PRIVATE Drogon::Drogon)
+add_test(NAME lake_professors COMMAND lake_professors_test)
 add_executable(engineer_test tests/engineer_test.cpp)
 target_include_directories(engineer_test PRIVATE src/logic)
 target_link_libraries(engineer_test PRIVATE Drogon::Drogon)

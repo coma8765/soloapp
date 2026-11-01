@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+node --test services/soloapp_app/tests/lake-professor-sync.test.mjs
 name="soloapp-world-test-$$"
 cleanup() {
   docker rm -fv "$name" >/dev/null 2>&1 || true

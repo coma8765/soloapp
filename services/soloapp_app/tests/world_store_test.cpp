@@ -142,6 +142,50 @@ int run_test(int argc, char **argv) {
     planet::WorldStore reader(argv[1], argv[2], "test-reader");
     if (reader.exchange(empty, {}).reactorJournal[0]["id"] != "postgres-note")
         throw std::runtime_error("Journal entry did not survive fresh database connection");
+    auto visitorOne = one, visitorTwo = two;
+    for (auto *visitors : {&visitorOne, &visitorTwo}) {
+        auto &p = (*visitors)[0];
+        p["reactor"] = false;
+        p["state"]["map"] = "planet";
+        p["state"]["professorTarget"] = 0;
+        for (int coordinate : {1, 0, 3})
+            p["state"]["position"].append(coordinate);
+    }
+    first.exchange(visitorOne, {});
+    second.exchange(visitorTwo, {});
+    Json::Value question;
+    question["type"] = "professor_command";
+    question["from"] = 1;
+    question["user_id"] = "synthetic-user-1";
+    question["requestId"] = "professor-begin";
+    question["turn"] = "shared-question";
+    question["action"] = "begin";
+    question["lake"] = 0;
+    auto claimed = first.exchange(visitorOne, {}, {question});
+    if (!claimed.professorReplies[0]["accepted"].asBool())
+        throw std::runtime_error("Professor question not claimed");
+    auto competing = question;
+    competing["from"] = 2;
+    competing["user_id"] = "synthetic-user-2";
+    competing["turn"] = "competing-question";
+    auto busy = second.exchange(visitorTwo, {}, {competing});
+    if (busy.professorReplies[0]["error"] != "busy")
+        throw std::runtime_error("Professor accepted concurrent questions across nodes");
+    question["action"] = "result";
+    question["requestId"] = "professor-result";
+    question["text"] = "Вопрос у озера";
+    question["answer"] = "Общий ответ профессора";
+    auto answered = first.exchange(visitorOne, {}, {question});
+    auto seen = second.exchange(visitorTwo, {});
+    auto late = reader.exchange(empty, {});
+    for (const auto *professorSnapshot : {&seen.professors, &late.professors}) {
+        const auto &lake = (*professorSnapshot)["lakes"][0];
+        if (lake["answer"] != question["answer"] || lake["focus"].asUInt64() != 1 ||
+            lake["startedAt"].asInt64() != answered.professors["lakes"][0]["startedAt"].asInt64())
+            throw std::runtime_error(
+                "Professor text, focus or animation lost across nodes/late join");
+    }
+    std::cout << "PASS: PostgreSQL shared professor conversation, competing nodes and late join\n";
     std::cout << "PASS: single leader, checkpoint failover, old leader fenced\n";
     std::cout << "PASS: PostgreSQL reactor command ordering, idempotency, cross-node recovery, "
                  "writer fencing and journal persistence\n";
