@@ -435,9 +435,8 @@ async function start() {
     reactor.physicalView &&
     new URL(location.href).searchParams.has('physical-audit')
   ) {
-    const { runPhysicalSystemChecks } = await import(
-      './physical-system-checks.js'
-    );
+    const { runPhysicalSystemChecks } =
+      await import('./physical-system-checks.js');
     window.physicalSystemChecks = runPhysicalSystemChecks(window.planetApp);
   }
   if (
