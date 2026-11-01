@@ -1,5 +1,6 @@
 const B = window.BABYLON;
 import { RoomShortcut, xrRoomShortcut } from './physical-room-input.js';
+import { xrQualityPressed } from './quality-input.js';
 export class XRView {
   constructor(scene, player, planet, button, hudText) {
     this.scene = scene;
@@ -12,6 +13,8 @@ export class XRView {
     this.aDown = false;
     this.visible = true;
     this.roomShortcut = new RoomShortcut();
+    this.qualityShortcut = new RoomShortcut();
+    this.highQuality = false;
     this.ready = this.init();
   }
   async init() {
@@ -33,9 +36,10 @@ export class XRView {
       // The XR camera uses tracked floor-relative poses; the parent supplies the planet frame.
       this.helper.camera.compensateOnFirstFrame = false;
       this.helper.sessionManager.onXRSessionInit.add((session) => {
-        session.addEventListener('inputsourceschange', () =>
-          this.roomShortcut.reset(),
-        );
+        session.addEventListener('inputsourceschange', () => {
+          this.roomShortcut.reset();
+          this.qualityShortcut.reset();
+        });
         session.addEventListener('select', (event) => {
           this.authPanel?.selectXR(
             event,
@@ -50,6 +54,12 @@ export class XRView {
             );
         });
       });
+      // Apply dynamic scaling before Babylon asks the layer for eye viewports.
+      this.helper.sessionManager.onXRFrameObservable.add(
+        (frame) => this.applyViewportQuality(frame),
+        -1,
+        true,
+      );
       this.helper.sessionManager.onXRFrameObservable.add((frame) => {
         this.authPanel?.updateXR(
           frame,
@@ -86,9 +96,8 @@ export class XRView {
         const options = B.WebXRManagedOutputCanvasOptions.GetDefaults(
           this.scene.getEngine(),
         );
-        options.canvasOptions.framebufferScaleFactor = this.highQuality
-          ? 1.25
-          : 1;
+        // Keep a native-size allocation; change viewport scale live, not the session.
+        options.canvasOptions.framebufferScaleFactor = 1;
         const target = this.helper.sessionManager.getWebXRRenderTarget(options);
         try {
           await this.helper.enterXRAsync('immersive-vr', 'local-floor', target);
@@ -109,6 +118,34 @@ export class XRView {
       console.warn('WebXR:', e.message);
     }
   }
+  toggleQuality() {
+    this.highQuality = !this.highQuality;
+    this.applyQuality();
+    return this.highQuality;
+  }
+
+  applyQuality() {
+    if (this.active) {
+      this.planet.grass.thinInstanceCount = Math.min(
+        this.highQuality ? 12000 : 6000,
+        this.savedGrass,
+      );
+      const manager = this.helper.sessionManager;
+      if (typeof manager.fixedFoveation === 'number')
+        manager.fixedFoveation = this.highQuality ? 0 : 0.5;
+    }
+    this.nextHUD = 0;
+    this.onQualityChange?.(this.highQuality);
+  }
+
+  applyViewportQuality(frame) {
+    if (!this.active) return;
+    const space = this.helper.sessionManager.referenceSpace;
+    const pose = frame.getViewerPose(space);
+    for (const view of pose?.views || [])
+      view.requestViewportScale?.(this.highQuality ? 1 : 0.75);
+  }
+
   createHUD() {
     this.hud = B.MeshBuilder.CreatePlane(
       'VR statistics',
@@ -134,15 +171,13 @@ export class XRView {
   }
   enter() {
     this.roomShortcut.reset();
+    this.qualityShortcut.reset();
     this.active = true;
     this.planet.setXRQuality(true);
     this.player.xr = true;
     this.player.keys.clear();
     this.savedGrass = this.planet.grass.thinInstanceCount;
-    this.planet.grass.thinInstanceCount = Math.min(
-      this.highQuality ? 12000 : 6000,
-      this.savedGrass,
-    );
+    this.applyQuality();
     this.hud.setEnabled(this.visible);
     document.body.classList.add('in-vr');
     this.armed = true;
@@ -158,6 +193,7 @@ export class XRView {
   }
   exit() {
     this.roomShortcut.reset();
+    this.qualityShortcut.reset();
     for (const line of this.reactor?.xrRays?.values() || [])
       line.setEnabled(false);
     if (this.active) {
@@ -184,10 +220,13 @@ export class XRView {
     const session = this.helper.sessionManager.session;
     if (session.visibilityState !== 'visible') {
       this.roomShortcut.reset();
+      this.qualityShortcut.reset();
       this.armed = true;
       this.aDown = false;
       return B.Vector3.Zero();
     }
+    if (this.qualityShortcut.poll(xrQualityPressed(session.inputSources)))
+      this.toggleQuality();
     if (
       this.roomShortcut.poll(
         xrRoomShortcut(session.inputSources),
@@ -271,7 +310,7 @@ export class XRView {
       c.fillRect(0, 0, 768, 448);
       c.fillStyle = '#e3f0db';
       c.font = '26px sans-serif';
-      this.hudText()
+      `VR · ${this.highQuality ? 'детально' : 'плавно'} · Y / L3 — графика\n${this.hudText()}`
         .split('\n')
         .slice(0, 11)
         .forEach((s, i) => c.fillText(s, 24, 43 + i * 35));

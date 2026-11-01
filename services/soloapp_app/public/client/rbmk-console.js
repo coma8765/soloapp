@@ -98,6 +98,7 @@ export class RbmkPhysicalConsole {
     this.scene = scene;
     this.root = root;
     this.handlers = handlers;
+    this.colliders = [];
     this.screens = [];
     this.readouts = [];
     this.buttons = [];
@@ -132,9 +133,17 @@ export class RbmkPhysicalConsole {
     return material;
   }
 
-  box(name, size, position, material, parent = this.root, instanced = true) {
-    if (instanced)
-      return this.instances.create(
+  box(
+    name,
+    size,
+    position,
+    material,
+    parent = this.root,
+    collider = false,
+    instanced = true,
+  ) {
+    if (instanced) {
+      const mesh = this.instances.create(
         'CreateBox',
         { width: size[0], height: size[1], depth: size[2] },
         material,
@@ -142,6 +151,10 @@ export class RbmkPhysicalConsole {
         parent,
         position,
       );
+      mesh.isPickable = collider;
+      if (collider) this.colliders.push(mesh);
+      return mesh;
+    }
     const mesh = B.MeshBuilder.CreateBox(
       name,
       { width: size[0], height: size[1], depth: size[2] },
@@ -150,7 +163,8 @@ export class RbmkPhysicalConsole {
     mesh.parent = parent;
     mesh.position.copyFromFloats(...position);
     mesh.material = material;
-    mesh.isPickable = false;
+    mesh.isPickable = collider;
+    if (collider) this.colliders.push(mesh);
     return mesh;
   }
 
@@ -240,6 +254,7 @@ export class RbmkPhysicalConsole {
         [0, 3.02, 0],
         this.steel,
         bay,
+        true,
       );
       this.box(
         `RBMK wall header ${index + 1}`,
@@ -465,6 +480,7 @@ export class RbmkPhysicalConsole {
         [0, 0.51, 0],
         this.darkSteel,
         desk,
+        true,
       );
       const deck = new B.TransformNode(
         `RBMK sloped deck ${group.id}`,
@@ -479,6 +495,7 @@ export class RbmkPhysicalConsole {
         [0, 0, 0],
         this.steel,
         deck,
+        true,
       );
       this.makeTextPlate(
         `RBMK desk title ${group.id}`,
@@ -514,6 +531,7 @@ export class RbmkPhysicalConsole {
       [0, 0.51, 0],
       this.darkSteel,
       desk,
+      true,
     );
     const deck = new B.TransformNode(
       `RBMK auxiliary sloped deck ${kind}`,
@@ -528,6 +546,7 @@ export class RbmkPhysicalConsole {
       [0, 0, 0],
       this.steel,
       deck,
+      true,
     );
     this.makeTextPlate(
       `RBMK auxiliary desk title ${kind}`,
@@ -873,7 +892,15 @@ export class RbmkPhysicalConsole {
 
   createButton(parent, name, position, size, color, metadata) {
     const material = this.material(`${name} hit material`, color, true, 0.018);
-    const button = this.box(name, size, position, material, parent, false);
+    const button = this.box(
+      name,
+      size,
+      position,
+      material,
+      parent,
+      false,
+      false,
+    );
     button.isPickable = true;
     button.visibility = 0;
     const capMaterial = this.buttonMaterial(color, false);

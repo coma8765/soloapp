@@ -1,5 +1,6 @@
 import { orientation, vec } from './scene.js';
 import { LocalAvatar } from './local-avatar.js';
+import { resolveRoomMovement } from './room-collision.js';
 import { DEFAULT_AVATAR } from './avatar-catalog.js';
 import { WATER_RADIUS, clamp } from '../shared/world.js';
 import {
@@ -197,7 +198,7 @@ export class Player {
         0,
         clamp(next.z, -ROOM_PLAYER_LIMIT, ROOM_PLAYER_LIMIT),
       );
-      this.position = next;
+      this.position = resolveRoomMovement(before, next, this.roomColliders);
       this.radialSpeed = 0;
     } else {
       // Tree trunks use the same 0.18 m collider and 0.35 m player radius.

@@ -21,6 +21,8 @@ globalThis.OffscreenCanvas = class {
 const { RbmkPhysicalConsole } =
   await import('../public/client/rbmk-console.js');
 const { RbmkModel } = await import('../public/client/rbmk-model.js');
+const { resolveRoomMovement } =
+  await import('../public/client/room-collision.js');
 
 function fixture(t) {
   const engine = new B.NullEngine();
@@ -91,6 +93,35 @@ test('hover, hints and command color do not leak between shared caps', (t) => {
   console.setHovered(null);
   console.setHints(false);
   assert(console.buttons.every((button) => button.visibility === 0));
+});
+
+test('instanced cabinets retain the room collision boundaries', (t) => {
+  const { console, root } = fixture(t);
+  assert.equal(console.colliders.length, 25);
+  assert(
+    console.colliders.every((mesh) => mesh.isAnInstance && mesh.isPickable),
+  );
+  const cabinets = console.colliders.filter((mesh) =>
+    mesh.name.includes('cabinet'),
+  );
+  assert.equal(cabinets.length, 17);
+  for (const mesh of cabinets) {
+    const matrix = mesh.parent.computeWorldMatrix(true);
+    const world = (z) =>
+      B.Vector3.TransformCoordinates(new B.Vector3(0, 0, z), matrix);
+    const from = world(4);
+    const to = world(-4);
+    const result = resolveRoomMovement(from, to, [mesh]);
+    const local = B.Vector3.TransformCoordinates(
+      result,
+      B.Matrix.Invert(matrix),
+    );
+    assert(local.z > 0 && local.z < 4, mesh.name);
+  }
+  root.setEnabled(false);
+  const from = new B.Vector3(0, 0, 4);
+  const to = new B.Vector3(0, 0, -4);
+  assert(resolveRoomMovement(from, to, console.colliders).equals(to));
 });
 
 test('unchanged commands do not upload textures; changed commands repaint immediately', (t) => {

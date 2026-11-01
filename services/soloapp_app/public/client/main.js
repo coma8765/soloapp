@@ -22,6 +22,7 @@ import { ReactorRoom } from './reactor-room.js';
 import { ShiftClock } from './shift-clock.js';
 import { setupFullscreen } from './fullscreen.js';
 import { keyboardRoomShortcut } from './physical-room-input.js';
+import { keyboardQualityShortcut } from './quality-input.js';
 const $ = (id) => document.getElementById(id);
 async function start() {
   setupFullscreen($('fullscreen'), $('display-status'));
@@ -253,13 +254,25 @@ async function start() {
   xr = new XRView(scene, player, planet, $('vr'), info);
   xr.reactor = reactor;
   xr.toggleMicrophone = () => void voice.toggle();
-  $('vr-quality').onclick = () => {
-    xr.highQuality = !xr.highQuality;
+  xr.onQualityChange = () => {
     $('vr-quality').textContent = xr.highQuality
       ? 'VR · детально'
       : 'VR · плавно';
     $('vr-quality').setAttribute('aria-pressed', String(xr.highQuality));
   };
+  $('vr-quality').onclick = () => xr.toggleQuality();
+  xr.onQualityChange();
+  const toggleQuality = () => {
+    if (document.hidden) return;
+    if (xr.active) xr.toggleQuality();
+    else quality.toggle();
+  };
+  $('quality').onclick = toggleQuality;
+  window.addEventListener('keydown', (event) => {
+    if (!keyboardQualityShortcut(event)) return;
+    event.preventDefault();
+    toggleQuality();
+  });
   if (!auth.token) void signIn();
   else lobby.activate();
   if (reactor.active) {
@@ -336,6 +349,7 @@ async function start() {
   };
   $('physical-room').onclick = togglePhysical;
   gamepad.togglePhysical = togglePhysical;
+  gamepad.toggleQuality = toggleQuality;
   gamepad.activateWorld = () => reactor.activateCenter();
   xr.togglePhysical = togglePhysical;
   window.addEventListener('keydown', (event) => {
