@@ -13,3 +13,7 @@ client_gateway_config: "{{ workload_defaults | combine(lookup('template', projec
 notify_config: "{{ workload_defaults | combine(lookup('template', project_root ~ '/services/client-notify/deploy/defaults.yaml') | from_yaml, recursive=true) | combine((service_overrides | default({})).client_notify | default({}), recursive=true) }}"
 
 keycloak_config: "{{ lookup('template', project_root ~ '/services/keycloak/deploy/defaults.yaml') | from_yaml | combine((service_overrides | default({})).keycloak | default({}), recursive=true) }}"
+
+# Preserve the existing shared admin identity provider during regular CD.
+keycloak_enabled: true
+oidc_enabled: true
