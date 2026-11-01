@@ -132,7 +132,12 @@ export class EngineerConversation {
     this.owner = this.session.owner(this.members);
     this.voice.npc.setAudience(hearing, nearby, this.owner, this.id);
     const active =
-      hearing && (this.owner !== null || (enabled && this.recorder.enabled));
+      hearing &&
+      (this.owner !== null ||
+        (this.near &&
+          (this.voice.enabled ||
+            this.recorder.pending ||
+            this.recorder.error)));
     if (active || this.room.instructor.conversationActive) {
       const npc = this.voice.npc;
       const receiver = npc.receivers.get(this.owner);
@@ -168,6 +173,13 @@ export class EngineerConversation {
       turn?.text ||
       this.recorder.error ||
       record.answer ||
+      (this.recorder.pending ? 'Подключаю распознавание вопроса…' : '') ||
+      (!this.getToken()
+        ? 'Войдите в аккаунт, чтобы задать вопрос инженеру.'
+        : '') ||
+      (this.voice.muted
+        ? 'Включите входящий звук voice chat для разговора с инженером.'
+        : '') ||
       'Главный инженер слушает включённый микрофон voice chat. Задайте вопрос и сделайте паузу.';
     if (text !== this.room.instructor.subtitle.textContent) {
       this.lastCaption = text;
