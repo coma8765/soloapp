@@ -14,13 +14,30 @@ int main() {
     require(keywords("Что такое ОЗР и АЗ-5?") == "озр аз-5", "Lost abbreviations");
     require(keywords("Расскажи, пожалуйста") == "", "Empty question should not trigger model");
     Json::Value rows(Json::arrayValue), row;
-    row["document_id"] = "vver1200:test";
-    row["metadata"]["corpus"] = "vver1200-research";
+    row["document_id"] = "rbmk1000:test";
+    row["metadata"]["corpus"] = "rbmk1000-vr-research";
     row["source_text"] = "Нельзя смешивать типы реакторов";
     row["score"] = 1.0;
     rows.append(row);
     require(selectSources(rows).empty(), "Foreign reactor corpus leaked");
-    row["document_id"] = "rbmk1000:R01";
+    require(selectSources(rows, "rbmk1000-vr-research").size() == 1,
+            "Explicit corpus selection failed");
+    row["metadata"]["corpus"] = corpus;
+    rows.append(row);
+    require(selectSources(rows).empty(), "Mismatched corpus/document prefix leaked");
+    row["document_id"] = "vver1200:V16:survey";
+    rows.append(row);
+    row["document_id"] = "vver1200:V17:survey";
+    rows.append(row);
+    require(selectSources(rows).empty(), "Cross-design survey leaked into VVER answer");
+    bool invalidCorpus = false;
+    try {
+        selectSources(rows, "unknown");
+    } catch (const std::invalid_argument &) {
+        invalidCorpus = true;
+    }
+    require(invalidCorpus, "Unknown corpus accepted");
+    row["document_id"] = "vver1200:V01";
     row["metadata"]["corpus"] = corpus;
     row["metadata"]["source_url"] = "https://example.org/source";
     row["page_from"] = 12;

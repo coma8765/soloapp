@@ -105,6 +105,14 @@ struct Turn : std::enable_shared_from_this<Turn> {
             fail("engineer_search_unconfigured");
             return;
         }
+        const auto selected = env("ENGINEER_CORPUS", engineer::corpus);
+        try {
+            engineer::corpusPrefix(selected);
+        } catch (const std::exception &) {
+            fail("engineer_corpus_unconfigured");
+            return;
+        }
+        result["corpus"] = selected;
         std::string query;
         try {
             query = engineer::keywords(text);
@@ -120,7 +128,7 @@ struct Turn : std::enable_shared_from_this<Turn> {
         }
         send(
             url, "/search", "", "application/json", 5,
-            [text](const auto &self, const auto &response) {
+            [text, selected](const auto &self, const auto &response) {
                 auto value = response ? response->getJsonObject() : nullptr;
                 if (!response || response->statusCode() != drogon::k200OK || !value) {
                     self->fail("engineer_search_unavailable");
@@ -128,7 +136,7 @@ struct Turn : std::enable_shared_from_this<Turn> {
                 }
                 Json::Value sources;
                 try {
-                    sources = engineer::selectSources(*value);
+                    sources = engineer::selectSources(*value, selected);
                 } catch (const std::exception &) {
                     self->fail("engineer_invalid_search");
                     return;
@@ -149,7 +157,8 @@ struct Turn : std::enable_shared_from_this<Turn> {
             fail("engineer_model_unconfigured");
             return;
         }
-        const auto request = engineer::rewriteRequest(model, text, sources);
+        const auto request =
+            engineer::rewriteRequest(model, text, sources, result["corpus"].asString());
         send(url, "/api/chat", json(request), "application/json", 60,
              [](const auto &self, const auto &response) {
                  auto value = response ? response->getJsonObject() : nullptr;

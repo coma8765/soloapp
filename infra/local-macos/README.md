@@ -47,7 +47,7 @@ coordinates and shared world snapshots use WSS through the same HTTPS entry.
 
 The chief engineer uses the existing Knowledge Search API and Ollama. Add an
 `engineer` mapping to ignored `config.yaml` with `search_url`, `ollama_url`, and
-`ollama_model`. Use internal IP origins reachable from the Colima pods (the same
+`ollama_model`; `corpus` defaults to `vver1200-research`. Use internal IP origins reachable from the Colima pods (the same
 host-loopback bridge used by `whisper.metal_host`), not pod-local `127.0.0.1`.
 The renderer grants `whoami` egress only to those two IP/port pairs. Do not expose
 these unauthenticated ML dependencies on the public gateway. See

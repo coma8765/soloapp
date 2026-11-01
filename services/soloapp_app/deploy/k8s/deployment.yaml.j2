@@ -43,6 +43,8 @@ items:
           - {name: LISTEN_ADDRESS, value: '0.0.0.0'}
           - {name: LLAMA_URL, value: 'http://llama.soloapp.svc.cluster.local:8180'}
           - {name: TTS_URL, value: 'http://tts.soloapp.svc.cluster.local:8179'}
+          - name: ENGINEER_CORPUS
+            value: {{ engineer.corpus | default('vver1200-research') | to_json }}
           - name: ENGINEER_SEARCH_URL
             value: {{ engineer.search_url | default('') | to_json }}
           - name: OLLAMA_URL

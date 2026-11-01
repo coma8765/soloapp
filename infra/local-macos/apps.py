@@ -215,6 +215,7 @@ def manifests():
             env["LLAMA_URL"] = "http://llama.soloapp.svc.cluster.local:8180"
             env["TTS_URL"] = "http://tts.soloapp.svc.cluster.local:8179"
             engineer = CONFIG.get("engineer", {})
+            env["ENGINEER_CORPUS"] = engineer.get("corpus", "vver1200-research")
             for name, key in (
                 ("ENGINEER_SEARCH_URL", "search_url"),
                 ("OLLAMA_URL", "ollama_url"),

@@ -21,7 +21,7 @@ parser.add_argument("--connection", default="ml-test-r1")
 parser.add_argument("--image", default="localhost/soloapp-chief-test")
 parser.add_argument("--live-search", action="store_true")
 parser.add_argument("--live-model", action="store_true")
-parser.add_argument("--model", default="soloapp-engineer")
+parser.add_argument("--model", default="qwen2.5:3b")
 args = parser.parse_args()
 state = {}
 calls = []
@@ -34,8 +34,8 @@ with wave.open(output, "wb") as stream:
 wav = output.getvalue()
 fallback = "Будьте серъёзнее или задавайте более осознанные вопросы"
 source = {
-    "document_id": "rbmk1000:test",
-    "metadata": {"corpus": "rbmk1000-vr-research", "source_url": "https://example.org/manual"},
+    "document_id": "vver1200:test",
+    "metadata": {"corpus": "vver1200-research", "source_url": "https://example.org/manual"},
     "title": "Источник",
     "source_text": "Стержни СУЗ поглощают нейтроны.",
     "page_from": 12,
@@ -137,7 +137,7 @@ try:
     if not (args.live_search or args.live_model):
         for scenario in (
             {"rows": []},
-            {"rows": [{**source, "metadata": {"corpus": "vver1200-research"}}]},
+            {"rows": [{**source, "metadata": {"corpus": "rbmk1000-vr-research"}}]},
         ):
             result = run(**scenario)
             assert result["status"] == 200 and result["body"]["answer"] == fallback, result
