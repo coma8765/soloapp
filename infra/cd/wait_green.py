@@ -19,8 +19,11 @@ def wait_green(
     validate_revision(revision)
     deadline = clock() + timeout
     while True:
-        if fetch(f"repos/{repository}/git/ref/heads/main")["object"]["sha"] != revision:
-            raise RuntimeError("main advanced: start a new deployment on the current main revision")
+        head = fetch(f"repos/{repository}/git/ref/heads/main")["object"]["sha"]
+        if head != revision:
+            comparison = fetch(f"repos/{repository}/compare/{revision}...{head}")
+            if comparison.get("status") != "ahead":
+                raise RuntimeError("Pinned revision is not in main history")
         data = fetch(
             f"repos/{repository}/actions/workflows/ci.yaml/runs?event=push&branch=main&head_sha={revision}"
         )

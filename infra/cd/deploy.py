@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Root-owned CD gate. Only a green, current main commit can be deployed.
+"""Root-owned CD gate. Only a green commit from main history can be deployed.
 
 This program is installed by an operator, not self-updated by a release.
 No arbitrary command, repository URL, inventory or manifest comes over SSH.
@@ -257,11 +257,13 @@ def main():
             ["git", "fetch", "--prune", "origin", "+refs/heads/main:refs/remotes/origin/main"],
             cwd=repo,
         )
-        if (
-            not is_rollback
-            and run(["git", "rev-parse", "origin/main"], cwd=repo, capture=True).strip() != sha
-        ):
-            raise SystemExit("Deployment denied: this is not the current main commit")
+        if not is_rollback:
+            try:
+                run(["git", "merge-base", "--is-ancestor", sha, "origin/main"], cwd=repo)
+            except subprocess.CalledProcessError:
+                raise SystemExit(
+                    "Deployment denied: pinned revision is not in main history"
+                ) from None
         source = STATE / ("release-" + sha)
         if not source.exists():
             run(["git", "worktree", "add", "--detach", str(source), sha], cwd=repo)
