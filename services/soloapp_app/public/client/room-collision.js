@@ -116,7 +116,9 @@ export function resolveRoomMovement(
       const size = radius + person.radius;
       if (distance >= size) continue;
       const outward =
-        distance > 1e-8 ? offset.scale(1 / distance) : B.Vector3.Right();
+        distance > 1e-8
+          ? offset.scale(1 / distance)
+          : B.Vector3.Right().scale(person.separationSign === -1 ? -1 : 1);
       position.addInPlace(outward.scale(size - distance + SKIN));
       overlap = true;
     }
