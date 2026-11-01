@@ -43,7 +43,6 @@ export class InstructorSession {
     this.state = null;
     this.voices.clear();
     this.pending = null;
-    this.voiceComment = null;
     this.nextComment = 0;
     this.readyAt = this.clock() + 5000;
     this.deadline = this.readyAt;
@@ -98,9 +97,6 @@ export class InstructorSession {
       kind: snapshot.kind,
       text: snapshot.text,
     };
-    // A follower must not repeat an already handled voice turn after takeover.
-    if (snapshot.kind !== 'listening' && !this.voices.size)
-      this.voiceComment = null;
     this.pending = null;
     this.deadline = this.clock() + snapshot.remaining;
     if (changed) this.present(this.state);
@@ -155,7 +151,6 @@ export class InstructorSession {
   voice(peer, speaking) {
     if (speaking) {
       this.voices.set(peer, this.clock() + 2500);
-      this.voiceComment = peer;
     } else this.voices.delete(peer);
   }
 
@@ -179,18 +174,8 @@ export class InstructorSession {
       return;
     }
     if (this.state?.kind === 'listening' && now < this.deadline) return;
-    if (this.voiceComment !== null) {
-      const actor = this.voiceComment
-        ? `Участник номер ${this.voiceComment}`
-        : 'Участник';
-      this.voiceComment = null;
-      this.speak(
-        'comment',
-        `${actor}, спасибо за сообщение. Называйте наблюдение, действие и подтверждённый результат.`,
-      );
-      this.nextComment = now + 5000;
-      return;
-    }
+    // Voice activity only pauses narration. The question pipeline owns answers;
+    // an energy detector cannot know what the participant said.
     if (this.pending && now >= Math.max(this.pending.at, this.nextComment)) {
       const text = this.pending.text;
       this.pending = null;

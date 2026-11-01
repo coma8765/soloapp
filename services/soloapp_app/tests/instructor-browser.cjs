@@ -118,11 +118,11 @@ const { chromium } = require('playwright');
       i.session.voice(2, false);
       i.send({ kind: 'voice', active: false });
     });
-    await a.waitForFunction(() =>
-      planetApp.reactor.instructor.session.state.text.includes('спасибо'),
+    await a.waitForFunction(
+      () => planetApp.reactor.instructor.session.state.kind === 'intro',
     );
-    await b.waitForFunction(() =>
-      planetApp.reactor.instructor.session.state.text.includes('спасибо'),
+    await b.waitForFunction(
+      () => planetApp.reactor.instructor.session.state.kind === 'intro',
     );
     // Leaving the elected participant hands the current cursor to participant 2.
     const cursor = await b.evaluate(
@@ -147,7 +147,7 @@ const { chromium } = require('playwright');
     );
     assert.equal(
       await b.evaluate(() => planetApp.reactor.instructor.session.state.index),
-      cursor,
+      cursor + 1,
     );
     assert.equal(
       await a.evaluate(() => planetApp.reactor.instructor.panel.hidden),
@@ -233,8 +233,8 @@ const { chromium } = require('playwright');
       testOscillator.stop();
       planetApp.network.voice.stream.getTracks()[0].enabled = false;
     });
-    await a.waitForFunction(() =>
-      planetApp.reactor.instructor.session.state.text.includes('спасибо'),
+    await a.waitForFunction(
+      () => planetApp.reactor.instructor.session.state.kind === 'intro',
     );
     assert.equal(
       await a.evaluate(

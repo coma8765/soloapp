@@ -47,9 +47,7 @@ test('deployed QUICK_START matches the canonical document and excludes unfilled 
   assert(lines.some((line) => line.includes('Перед нами общая панель')));
   assert(lines.some((line) => line.includes('Турбины используют пар')));
   assert(lines.some((line) => line.includes('АЗ-5')));
-  assert(
-    lines.every((line) => !/[[\]|#]/.test(line) && !line.includes('.md')),
-  );
+  assert(lines.every((line) => !/[[\]|#]/.test(line) && !line.includes('.md')));
   assert(lines.every((line) => line.length <= 600));
   assert.deepEqual(
     quickStartLines(
@@ -101,7 +99,7 @@ test('late participant adopts current phrase; follower cannot advance; leader ha
   assert.equal(a.displayed.length, count, 'heartbeats do not repeat speech');
 });
 
-test('voice interrupts, waits for all speakers, comments and resumes interrupted sentence', () => {
+test('voice pauses narration and resumes without inventing an answer', () => {
   const f = fixture();
   f.tick(5000);
   f.session.voice(1, true);
@@ -115,11 +113,11 @@ test('voice interrupts, waits for all speakers, comments and resumes interrupted
   f.tick(6400);
   assert.equal(f.session.state.kind, 'listening');
   f.tick(6600);
-  assert.equal(f.session.state.kind, 'comment');
-  assert(f.session.state.text.includes('номер 2'));
-  f.session.finished(f.session.state.revision);
-  f.tick(7400);
+  assert.equal(f.session.state.kind, 'intro');
   assert.equal(f.session.state.text, 'Первая фраза.');
+  assert(
+    !f.displayed.some((state) => state.text.includes('спасибо за сообщение')),
+  );
 });
 
 test('lost stop packet and disconnected speaker do not block narration indefinitely', () => {
@@ -128,11 +126,11 @@ test('lost stop packet and disconnected speaker do not block narration indefinit
   f.session.voice(1, true);
   f.tick(5200);
   f.tick(8000);
-  assert.equal(f.session.state.kind, 'comment');
+  assert.equal(f.session.state.kind, 'intro');
   f.session.voice(2, true);
   f.tick(8100);
   f.tick(9500, true, new Set([0]));
-  assert.equal(f.session.state.kind, 'comment');
+  assert.equal(f.session.state.kind, 'intro');
 });
 
 test('rapid control changes are coalesced, spoken after the participant and do not skip intro', () => {
@@ -146,8 +144,7 @@ test('rapid control changes are coalesced, spoken after the participant and do n
   f.tick(5600);
   f.session.voice(1, false);
   f.tick(6800);
-  assert(f.session.state.text.includes('спасибо'));
-  f.session.finished(f.session.state.revision);
+  assert(!f.session.state.text.includes('спасибо'));
   f.tick(11800);
   assert(f.session.state.text.includes('Задание: 30'));
   f.session.finished(f.session.state.revision);
@@ -205,7 +202,7 @@ test('activity detector ignores clicks and holds speech across short pauses', ()
   assert.equal(activity.sample(0, 0.2), false);
 });
 
-test('new leader does not thank a participant twice for a completed voice turn', () => {
+test('leader handoff does not invent a response to voice activity', () => {
   const a = fixture(),
     b = fixture();
   a.tick(5000);

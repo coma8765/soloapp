@@ -65,7 +65,9 @@ export class NpcVoice {
     this.updateGains();
   }
   setAudience(near, ids, owner, localId) {
-    this.near = near;
+    // Before room entry the proximity value can be undefined. AudioParam
+    // must always receive a finite gain, including while enabling the mic.
+    this.near = Boolean(near);
     this.audience = ids;
     this.owner = owner;
     this.localId = localId;

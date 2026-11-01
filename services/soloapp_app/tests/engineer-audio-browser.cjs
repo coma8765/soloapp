@@ -37,6 +37,13 @@ const { chromium } = require('playwright');
         b = new VoiceChat();
       await a.npc.unlock();
       await b.npc.unlock();
+      // Outside an unentered room proximity can be undefined. This must not
+      // throw from the voice-change callback and strand microphone startup.
+      a.npc.setAudience(undefined, new Set(), null, 1);
+      check(
+        a.npc.local.gain.value === 0,
+        'Unentered room keeps finite silent gain',
+      );
       const context = new AudioContext();
       await context.resume();
       const mic = context.createMediaStreamDestination(),

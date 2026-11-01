@@ -85,7 +85,7 @@ const { chromium } = require('playwright');
         app.network.id = index + 1;
         app.engineer.getToken = () => 'test-engineer';
         app.engineer.recorder.getToken = () => 'test-engineer';
-        app.player.position.set(3.95, 0, 6.5);
+        app.player.position.set(0, 0, 0);
         app.reactor.instructor.stop();
         app.reactor.instructor.session.readyAt = performance.now() + 100000;
         const peer = index === 0 ? 2 : 1;
@@ -116,9 +116,21 @@ const { chromium } = require('playwright');
       osc.start();
       planetApp.network.voice.stream = destination.stream;
       await planetApp.network.voice.npc.unlock();
-      planetApp.engineer.update();
-      await planetApp.engineer.recorder.connection;
     });
+    // The microphone is already on before walking over. Never call update()
+    // from the test: the normal render loop must discover proximity itself.
+    assert.equal(
+      await a.evaluate(() => planetApp.engineer.recorder.enabled),
+      false,
+    );
+    for (const page of pages)
+      await page.evaluate(() => {
+        planetApp.player.position.set(3.95, 0, 6.5);
+        // The test control transport has no signalling socket/state timer.
+        planetApp.network.broadcastControl(
+          planetApp.player.state(++planetApp.network.sequence),
+        );
+      });
     await a.waitForFunction(() => planetApp.engineer.recorder.enabled);
     await a.evaluate(() => (inputGain.gain.value = 0.1));
     await b.waitForFunction(() => planetApp.engineer.owner === 1);
@@ -165,7 +177,6 @@ const { chromium } = require('playwright');
     await b.waitForFunction(() => planetApp.engineer.owner === 1);
     await a.evaluate(() => {
       planetApp.player.position.set(0, 0, 0);
-      planetApp.engineer.update();
       inputGain.gain.value = 0;
     });
     await b.waitForFunction(() => planetApp.engineer.owner === null);
@@ -179,6 +190,26 @@ const { chromium } = require('playwright');
     );
     await a.evaluate(async () => {
       osc.stop();
+    });
+    for (const page of pages)
+      assert.equal(
+        await page.evaluate(() =>
+          spoken.some((text) => text.includes('спасибо за сообщение')),
+        ),
+        false,
+      );
+    // A failed speech-health check must be shown, not hidden behind narration.
+    await a.route('**/speech/health', (r) =>
+      r.fulfill({ status: 503, body: '{}' }),
+    );
+    await a.evaluate(() => planetApp.player.position.set(3.95, 0, 6.5));
+    await a.waitForFunction(() => planetApp.engineer.recorder.error);
+    await a.waitForFunction(() =>
+      planetApp.reactor.instructor.subtitle.textContent.includes(
+        'Распознавание недоступно',
+      ),
+    );
+    await a.evaluate(async () => {
       planetApp.network.voice.stream = null;
       await audioTest.close();
     });
