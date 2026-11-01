@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { RBMK_MODEL_VERSION, RbmkModel } from '../public/client/rbmk-model.js';
-import { RBMK_CONTROLS, RBMK_PANEL_PARTS } from '../public/client/rbmk-data.js';
+import {
+  RBMK_CONTROLS,
+  RBMK_INSTRUMENT_PANELS,
+  RBMK_PANEL_PARTS,
+  RBMK_PHYSICAL_CONTROL_GROUPS,
+} from '../public/client/rbmk-data.js';
 import { REACTOR_MAP } from '../public/shared/room.js';
 import { validState } from '../public/shared/world.js';
 
@@ -8,6 +13,8 @@ function advance(model, seconds, step = 0.1) {
   for (let elapsed = 0; elapsed < seconds; elapsed += step) model.step(step);
   return model.snapshot();
 }
+
+const partById = (id) => RBMK_PANEL_PARTS.find((part) => part.id === id);
 
 {
   assert.equal(RBMK_PANEL_PARTS.length, 24);
@@ -36,6 +43,34 @@ function advance(model, seconds, step = 0.1) {
   for (const part of RBMK_PANEL_PARTS)
     for (const control of part.controls || [])
       assert(RBMK_CONTROLS[control], `${part.id}: unknown control ${control}`);
+
+  assert.equal(RBMK_INSTRUMENT_PANELS.length, 6);
+  assert.equal(
+    new Set(RBMK_INSTRUMENT_PANELS.map((panel) => panel.id)).size,
+    RBMK_INSTRUMENT_PANELS.length,
+  );
+  for (const panel of RBMK_INSTRUMENT_PANELS)
+    assert(partById(panel.part), `${panel.id}: unknown explanatory panel`);
+
+  const physicalControls = RBMK_PHYSICAL_CONTROL_GROUPS.flatMap(
+    (group) => group.controls,
+  );
+  assert.deepEqual(
+    new Set(physicalControls),
+    new Set(Object.keys(RBMK_CONTROLS)),
+    'every model control must have a physical 3D control',
+  );
+  assert.equal(
+    physicalControls.length,
+    new Set(physicalControls).size,
+    'physical controls must not be duplicated',
+  );
+  assert.deepEqual(
+    new Set(
+      RBMK_PHYSICAL_CONTROL_GROUPS.flatMap((group) => group.actions || []),
+    ),
+    new Set(['scram', 'clear', 'reset']),
+  );
 }
 
 {

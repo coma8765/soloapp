@@ -179,6 +179,123 @@ export const RBMK_CONTROLS = Object.freeze({
   },
 });
 
+export const RBMK_INSTRUMENT_PANELS = Object.freeze([
+  {
+    id: 'reactor-state',
+    title: 'РЕАКТОР · СУЗ',
+    part: 'neutron-instruments',
+    readings: [
+      ['N ТЕПЛОВАЯ', 'power', '%', 1],
+      ['РЕАКТИВНОСТЬ', 'reactivity', 'усл.', 2],
+      ['ОЗР', 'orm', 'ст.', 1],
+      ['РУЧНЫЕ СТЕРЖНИ', 'control:manualRodInsertion', '%', 0],
+      ['АВТО СТЕРЖНИ', 'control:automaticRodInsertion', '%', 0],
+    ],
+  },
+  {
+    id: 'left-loop',
+    title: 'КМПЦ · ЛЕВАЯ ПЕТЛЯ',
+    part: 'left-coolant',
+    readings: [
+      ['ДАВЛЕНИЕ', 'pressure', 'МПа', 2],
+      ['РАСХОД ФАКТ.', 'flowLeft', '%', 0],
+      ['РАСХОД ПРИБОР', 'measuredFlowLeft', '%', 0],
+      ['ГЦН В РАБОТЕ', 'control:pumpsLeft', 'шт.', 0],
+      ['УРОВЕНЬ БС-Л', 'drumLevelLeft', 'мм', 0],
+    ],
+  },
+  {
+    id: 'right-loop',
+    title: 'КМПЦ · ПРАВАЯ ПЕТЛЯ',
+    part: 'right-coolant',
+    readings: [
+      ['ДАВЛЕНИЕ', 'pressure', 'МПа', 2],
+      ['РАСХОД ФАКТ.', 'flowRight', '%', 0],
+      ['РАСХОД ПРИБОР', 'measuredFlowRight', '%', 0],
+      ['ГЦН В РАБОТЕ', 'control:pumpsRight', 'шт.', 0],
+      ['УРОВЕНЬ БС-П', 'drumLevelRight', 'мм', 0],
+    ],
+  },
+  {
+    id: 'thermal-state',
+    title: 'ТЕПЛОВОЕ СОСТОЯНИЕ',
+    part: 'thermal-state',
+    readings: [
+      ['ЗАПАС ТЕПЛОНОС.', 'coolantInventory', '%', 1],
+      ['ПАРОСОДЕРЖАНИЕ', 'voidPercent', '%', 1],
+      ['T ТЕПЛОНОС.', 'coolantTemperature', '°C', 1],
+      ['T ТОПЛИВА', 'fuelTemperature', '°C', 0],
+      ['T ГРАФИТА', 'graphiteTemperature', '°C', 0],
+    ],
+  },
+  {
+    id: 'turbine-generator',
+    title: 'ПАР · ТУРБИНЫ · СЕТЬ',
+    part: 'turbines',
+    readings: [
+      ['РАСХОД ПАРА', 'steamFlow', '%', 1],
+      ['N ЭЛЕКТРИЧЕСКАЯ', 'electricalPower', 'МВт', 0],
+      ['ЧАСТОТА', 'frequency', 'Гц', 2],
+      ['ТГ-1 / ТГ-2', 'turbineLoads', 'МВт', 0],
+      ['ПАРОСБРОС', 'control:steamDump', '%', 0],
+    ],
+  },
+  {
+    id: 'annunciator',
+    title: 'СИГНАЛИЗАЦИЯ · СКАЛА',
+    part: 'annunciators',
+    kind: 'annunciator',
+  },
+]);
+
+export const RBMK_PHYSICAL_CONTROL_GROUPS = Object.freeze([
+  {
+    id: 'reactor-controls',
+    title: 'МОЩНОСТЬ И СУЗ',
+    part: 'automatic-regulator',
+    controls: [
+      'targetPower',
+      'manualRodInsertion',
+      'shortenedRodInsertion',
+      'automaticRodInsertion',
+      'automaticRegulator',
+    ],
+    actions: ['scram', 'clear'],
+  },
+  {
+    id: 'circulation-controls',
+    title: 'КМПЦ И ПИТАТЕЛЬНАЯ ВОДА',
+    part: 'drum-feedwater',
+    controls: [
+      'coolantFlowLeft',
+      'pumpsLeft',
+      'feedwaterLeft',
+      'coolantFlowRight',
+      'pumpsRight',
+      'feedwaterRight',
+    ],
+  },
+  {
+    id: 'turbine-controls',
+    title: 'ТУРБИНЫ И ГЕНЕРАТОРЫ',
+    part: 'turbines',
+    controls: [
+      'turbineLoad1',
+      'generatorBreaker1',
+      'turbineLoad2',
+      'generatorBreaker2',
+      'steamDump',
+    ],
+  },
+  {
+    id: 'safety-controls',
+    title: 'САОР И ПУЛЬТ ИНСТРУКТОРА',
+    part: 'eccs',
+    controls: ['eccsAvailable', 'emergencyInjection', 'scenario'],
+    actions: ['reset'],
+  },
+]);
+
 const zone = (
   id,
   wall,
