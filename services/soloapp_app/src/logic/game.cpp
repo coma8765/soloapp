@@ -1,5 +1,6 @@
 #include "game.hpp"
 #include "config.hpp"
+#include "player_state.hpp"
 #include "runtime/health.hpp"
 #include <algorithm>
 #include <chrono>
@@ -10,26 +11,6 @@ namespace {
 double clockNow() {
     return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch())
         .count();
-}
-bool validState(const Json::Value &v) {
-    if (!v["sequence"].isUInt64() || !v["position"].isArray() || v["position"].size() != 3 ||
-        !v["rotation"].isArray() || v["rotation"].size() != 4 || !v["pitch"].isNumeric())
-        return false;
-    const auto finite = [](const Json::Value &n) {
-        return n.isNumeric() && std::isfinite(n.asDouble());
-    };
-    if (!std::all_of(v["position"].begin(), v["position"].end(), finite) ||
-        !std::all_of(v["rotation"].begin(), v["rotation"].end(), finite))
-        return false;
-    if ((v.isMember("avatarId") && (!v["avatarId"].isString() ||
-                                    (v["avatarId"] != "scientist" && v["avatarId"] != "male" &&
-                                     v["avatarId"] != "female" && v["avatarId"] != "uraraka"))) ||
-        (v.isMember("speed") &&
-         (!finite(v["speed"]) || v["speed"].asDouble() < 0 || v["speed"].asDouble() > 20)) ||
-        (v.isMember("map") && v["map"] != "planet"))
-        return false;
-    Vec3 p{v["position"][0].asDouble(), v["position"][1].asDouble(), v["position"][2].asDouble()};
-    return p.length() >= 20 && p.length() <= 50 && std::isfinite(v["pitch"].asDouble());
 }
 } // namespace
 Game::Game()
@@ -200,7 +181,7 @@ void Game::message(const drogon::WebSocketConnectionPtr &socket, const std::stri
         return;
     }
     if (v["type"] == "state") {
-        if (validState(v) &&
+        if (validPlayerState(v) &&
             (s.state.empty() || v["sequence"].asUInt64() > s.state["sequence"].asUInt64()))
             s.state = v;
         return;

@@ -148,6 +148,10 @@ export class Network {
       this.id = message.id;
       this.rtcConfig = message.rtc_config || { iceServers: [] };
       if (this.voice) {
+        this.voice.relayConfigured =
+          this.rtcConfig.iceServers?.some((server) =>
+            [server.urls].flat().some((url) => /^turns?:/.test(url)),
+          ) || false;
         this.voice.online = true;
         this.voice.onChange();
       }
@@ -444,7 +448,9 @@ export class Network {
       remote.avatarId = avatarId;
       void remote.avatar.select(avatarId);
     }
-    const first = remote.sequence < 0;
+    const first =
+      remote.sequence < 0 ||
+      (remote.state?.map || 'planet') !== (state.map || 'planet');
     remote.sequence = state.sequence;
     remote.last = performance.now();
     remote.state = { ...state, speed: state.speed ?? remote.state?.speed ?? 0 };
@@ -467,8 +473,8 @@ export class Network {
       if (now - this.lastSend >= 50) {
         this.lastSend = now;
         const state = this.player.state(++this.sequence);
-        if (this.player.worldMap === 'planet' && this.worldProtocol === 2)
-          this.send(state);
+        // Keep server presence on every map even when peer ICE cannot connect.
+        if (this.worldProtocol === 2) this.send(state);
         const raw = JSON.stringify(state);
         for (const peer of this.peers.values())
           if (peer.dc?.readyState === 'open' && peer.dc.bufferedAmount < 65536)
