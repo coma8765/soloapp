@@ -106,12 +106,20 @@ export class Laboratory {
     const frame = this.material('Laboratory teal metal', '#245c5b');
     const porcelain = this.material('Laboratory ivory worktops', '#edf0df');
     const gold = this.material('Laboratory brass details', '#bba16a');
-    this.box('Veranda foundation', [7.2, 0.2, 5.6], [0, -0.1, 0], darkWood);
+    const deckThickness = 0.035;
+    // Keep the walking surface at y=0, with the foundation below the boards.
+    // Coplanar board/foundation tops cause depth fighting when the camera moves.
+    this.box(
+      'Veranda foundation',
+      [7.2, 0.2, 5.6],
+      [0, -0.1 - deckThickness, 0],
+      darkWood,
+    );
     for (let i = 0; i < 24; i++)
       this.box(
         'Deck board',
-        [0.285, 0.035, 5.56],
-        [-3.45 + i * 0.3, -0.0175, 0],
+        [0.285, deckThickness, 5.56],
+        [-3.45 + i * 0.3, -deckThickness / 2, 0],
         wood,
       );
     for (const x of [-3.4, 3.4])
