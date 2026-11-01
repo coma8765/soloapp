@@ -66,3 +66,19 @@ runs restore the newly saved cache. Dockerfile/dependency changes invalidate its
 cache key. GitHub cache eviction can also cause a cold build; the registry on
 home still retains its existing images. Cache misses never block correctness.
 See [BuildKit local cache](https://docs.docker.com/build/cache/backends/local/).
+
+### First delivery and private peer copy
+
+Default production publication sends each image to YC, then asks home to run the
+fixed `mirror-<service> <sha>` gate command. Home reads only the configured YC
+registry over the existing WireGuard/mTLS connection and copies only missing
+content-addressed blobs. The operator-installed gate checks successful CI and
+main ancestry first, rejects redirects/arbitrary peers, validates blob sizes and
+hashes plus the image revision/platform, and passes a bounded archive to the
+same unprivileged publisher. Its existing host pull identity is used; private
+keys are never copied into staging or forwarded to another site. Temporary image
+files are removed after publication. Install the updated gate and forced-command
+parser with `infra/cd/upgrade.yaml` before using the workflow.
+
+This also avoids GitHub-to-home transfer for the first uncached CUDA image.
+`force_image_transfer=true` explicitly uses full SSH uploads to both sites.

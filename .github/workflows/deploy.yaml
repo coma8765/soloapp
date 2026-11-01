@@ -190,6 +190,13 @@ jobs:
           for service in $IMAGES; do
             for site in yc home; do
               if [ "$site" = yc ]; then host=$YC_HOST; port=$YC_PORT; else host=$HOME_HOST; port=$HOME_PORT; fi
+              if [ "$site" = home ] && [ "$FORCE_IMAGE_TRANSFER" != true ]; then
+                ssh -i "$RUNNER_TEMP/cd/$site" -p "$port" -o IdentitiesOnly=yes -o BatchMode=yes \
+                  -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/cd/known_hosts" \
+                  -o ForwardAgent=no -o ConnectTimeout=20 -o ServerAliveInterval=30 \
+                  "soloapp-cd@$host" "mirror-$service $SHA"
+                continue
+              fi
               python3 infra/registry/upload.py --archive "$RUNNER_TEMP/images/$service.oci.tar" --revision "$SHA" "${transfer_options[@]}" -- \
                 ssh -i "$RUNNER_TEMP/cd/$site" -p "$port" -o IdentitiesOnly=yes -o BatchMode=yes \
                 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/cd/known_hosts" \
