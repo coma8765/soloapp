@@ -574,7 +574,6 @@ nav > span {
   display: none;
 }
 
-.in-physical-system #telemetry,
 .in-physical-system #reactor-team {
   display: none;
 }
@@ -910,7 +909,6 @@ nav > span {
   display: none;
 }
 
-.at-journal #telemetry,
 .at-journal #reactor-telemetry,
 .at-journal #reactor-team {
   display: none;
@@ -942,4 +940,9 @@ nav > span {
 #reactor-instructor p {
   margin: 8px 0 0;
   line-height: 1.5;
+}
+
+.in-physical-system #telemetry > :not(.live, #voice-controls, #reconnect),
+.at-journal #telemetry > :not(.live, #voice-controls, #reconnect) {
+  display: none;
 }

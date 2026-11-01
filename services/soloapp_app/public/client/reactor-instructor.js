@@ -305,10 +305,13 @@ export class ReactorInstructor {
       if (!this.session?.state) this.send({ kind: 'request' });
     }
     this.monitor();
-    this.session?.tick(
-      this.room.teamLeader() === (this.room.network?.id || 0),
-      this.members(),
-    );
+    const leader = this.room.teamLeader() === (this.room.network?.id || 0);
+    this.session?.tick(leader, this.members());
+    if (!leader && !this.session?.state && now >= this.session?.readyAt) {
+      const waiting =
+        'Ожидание связи с ведущим инструктажа. Проверьте соединение комнаты.';
+      if (this.subtitle.textContent !== waiting) this.caption(waiting);
+    }
   }
 
   update(dt) {

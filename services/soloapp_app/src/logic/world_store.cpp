@@ -89,7 +89,7 @@ Frame WorldStore::exchange(const Json::Value &local, const std::vector<Json::Val
         std::vector<Vec3> positions;
         for (const auto &player : frame.players) {
             const auto &p = player["state"]["position"];
-            if (p.isArray() && p.size() == 3)
+            if (player["state"].get("map", "planet") == "planet" && p.isArray() && p.size() == 3)
                 positions.push_back({p[0].asDouble(), p[1].asDouble(), p[2].asDouble()});
         }
         // Use database time rather than worker iterations: WAN latency must not
