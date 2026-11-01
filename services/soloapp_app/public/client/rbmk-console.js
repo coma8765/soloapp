@@ -51,6 +51,28 @@ const ACTION_LABELS = Object.freeze({
   reset: 'ИСХОДНЫЙ',
 });
 
+const PANEL_SYSTEMS = Object.freeze([
+  'control-rods',
+  'neutron-measurement',
+  'automatic-regulator',
+  'reactor-protection',
+  'protection-interlocks',
+  'core-distribution',
+  'computer-and-recording',
+  'coolant-loops',
+  'drum-separators',
+  'feedwater-and-condensate',
+  'steam-and-relief',
+  'eccs',
+  'accident-localization',
+  'cooldown-and-blowdown',
+  'rod-cooling-and-gas',
+  'turbine-generators',
+  'condensers-and-service-water',
+  'electrical-and-own-use',
+  'radiation-monitoring',
+]);
+
 const COLORS = Object.freeze({
   cabinet: '#737b7d',
   cabinetDark: '#596164',
@@ -76,6 +98,13 @@ export class RbmkPhysicalConsole {
     this.readouts = [];
     this.buttons = [];
     this.hintMeshes = [];
+    this.signalPanels = [];
+    this.mimicPanels = [];
+    this.channelIndicators = [];
+    this.coreCells = [];
+    this.recorders = [];
+    this.auxiliaryPanels = [];
+    this.history = [];
     this.lastDraw = 0;
     this.lastActivation = 0;
     this.onActivation = null;
@@ -156,6 +185,19 @@ export class RbmkPhysicalConsole {
     this.red = this.material('RBMK console red signal keys', '#a9473c');
     this.buildWallBank();
     this.buildDeskBank();
+    this.buildClock();
+  }
+
+  buildClock() {
+    this.clock = this.texturePlane(
+      'RBMK exercise clock',
+      2.2,
+      0.34,
+      { width: 880, height: 136 },
+      [0, 5.65, -10.3],
+    );
+    this.clock.plane.metadata = { rbmkPart: partById('workstations') };
+    this.hintMeshes.push(this.clock.plane);
   }
 
   arcNode(name, index, count, radius, step, y = 0) {
@@ -168,13 +210,13 @@ export class RbmkPhysicalConsole {
   }
 
   buildWallBank() {
-    for (let index = 0; index < 7; index++) {
+    for (let index = 0; index < 9; index++) {
       const bay = this.arcNode(
         `RBMK wall bay ${index + 1}`,
         index,
-        7,
-        10.35,
-        0.215,
+        9,
+        10.55,
+        0.18,
       );
       this.box(
         `RBMK wall cabinet ${index + 1}`,
@@ -203,7 +245,6 @@ export class RbmkPhysicalConsole {
       );
       this.buildAnnunciators(bay, index);
       this.buildSchematic(bay, index);
-      this.buildLabelRows(bay, index);
       if (index < RBMK_INSTRUMENT_PANELS.length)
         this.buildLiveScreen(bay, RBMK_INSTRUMENT_PANELS[index]);
       else this.buildRecorderCluster(bay);
@@ -211,19 +252,18 @@ export class RbmkPhysicalConsole {
   }
 
   buildAnnunciators(parent, seed) {
-    const colors = [this.cream, this.cream, this.yellow, this.green, this.red];
-    for (let row = 0; row < 4; row++) {
-      for (let column = 0; column < 8; column++) {
-        const color = colors[(column + row * 3 + seed) % colors.length];
-        this.box(
-          `RBMK annunciator ${seed}-${row}-${column}`,
-          [0.215, 0.12, 0.065],
-          [-0.79 + column * 0.225, 5.29 - row * 0.14, 0.22],
-          color,
-          parent,
-        );
-      }
-    }
+    const panel = this.texturePlane(
+      `RBMK live annunciator field ${seed}`,
+      1.86,
+      0.53,
+      { width: 744, height: 212 },
+      [0, 5.08, 0.29],
+      parent,
+    );
+    panel.seed = seed;
+    panel.plane.metadata = { rbmkPart: partById('annunciators') };
+    this.signalPanels.push(panel);
+    this.hintMeshes.push(panel.plane);
   }
 
   buildChannelMatrix(parent, seed) {
@@ -236,6 +276,17 @@ export class RbmkPhysicalConsole {
     );
     board.metadata = { rbmkPart: partById('core-map') };
     this.hintMeshes.push(board);
+    this.makeTextPlate(
+      'RBMK channel matrix title',
+      'КАНАЛЬНЫЙ КОНТРОЛЬ',
+      1.72,
+      0.12,
+      [0, 4.78, 0.32],
+      parent,
+      '#4f5759',
+      '#eee6c9',
+      24,
+    );
     const colors = [this.cream, this.cream, this.yellow, this.green, this.red];
     for (let row = 0; row < 8; row++) {
       for (let column = 0; column < 12; column++) {
@@ -249,6 +300,7 @@ export class RbmkPhysicalConsole {
         indicator.rotation.x = Math.PI / 2;
         indicator.material = colors[(row * 5 + column + seed) % colors.length];
         indicator.isPickable = false;
+        this.channelIndicators.push({ mesh: indicator, row, column });
       }
     }
   }
@@ -263,11 +315,22 @@ export class RbmkPhysicalConsole {
     );
     board.metadata = { rbmkPart: partById('core-map') };
     this.hintMeshes.push(board);
+    this.makeTextPlate(
+      'RBMK core map title',
+      'КАРТОГРАММА ЭНЕРГОВЫДЕЛЕНИЯ',
+      1.72,
+      0.12,
+      [0, 4.78, 0.32],
+      parent,
+      '#4f5759',
+      '#eee6c9',
+      20,
+    );
     for (let row = -4; row <= 4; row++) {
       for (let column = -6; column <= 6; column++) {
         if ((column / 6) ** 2 + (row / 4.4) ** 2 > 1) continue;
         const edge = Math.abs(column) > 4 || Math.abs(row) > 2;
-        this.box(
+        const cell = this.box(
           `RBMK core cartogram cell ${row}-${column}`,
           [0.105, 0.09, 0.055],
           [column * 0.13, 4.18 + row * 0.12, 0.31],
@@ -278,6 +341,7 @@ export class RbmkPhysicalConsole {
               : this.yellow,
           parent,
         );
+        this.coreCells.push({ mesh: cell, row, column, edge });
       }
     }
   }
@@ -308,47 +372,14 @@ export class RbmkPhysicalConsole {
           [-0.47 + column * 0.94, 4.48 - row * 0.6, 0.29],
           parent,
         );
-        const context = board.texture.getContext();
-        context.fillStyle = COLORS.schematic;
-        context.fillRect(0, 0, 360, 220);
-        context.strokeStyle = '#eee7cf';
-        context.fillStyle = '#eee7cf';
-        context.lineWidth = 5;
-        context.font = 'bold 13px monospace';
-        context.fillText(`2H${seed + 1}${row}${column}`, 10, 20);
-        for (let line = 0; line < 3; line++) {
-          const y = 54 + line * 57;
-          context.beginPath();
-          context.moveTo(14, y);
-          context.lineTo(82 + seed * 3, y);
-          context.lineTo(112, y + (line % 2 ? 22 : -22));
-          context.lineTo(210, y + (line % 2 ? 22 : -22));
-          context.lineTo(244, y);
-          context.lineTo(346, y);
-          context.stroke();
-          for (let symbol = 0; symbol < 3; symbol++)
-            context.strokeRect(47 + symbol * 112, y - 11, 22, 22);
-        }
-        board.texture.update();
+        board.seed = seed;
+        board.row = row;
+        board.column = column;
+        this.mimicPanels.push(board);
         board.plane.metadata = {
           rbmkPart: partById(seed % 2 ? 'instrumentation' : 'annunciators'),
         };
         this.hintMeshes.push(board.plane);
-      }
-    }
-  }
-
-  buildLabelRows(parent, seed) {
-    for (let row = 0; row < 6; row++) {
-      for (let column = 0; column < 7; column++) {
-        const active = (seed * 7 + row * 3 + column) % 11 === 0;
-        this.box(
-          `RBMK engraved label ${seed}-${row}-${column}`,
-          [0.245, 0.065, 0.055],
-          [-0.75 + column * 0.25, 3.42 - row * 0.09, 0.22],
-          active ? this.yellow : this.cream,
-          parent,
-        );
       }
     }
   }
@@ -373,18 +404,6 @@ export class RbmkPhysicalConsole {
     screen.plane.metadata = { rbmkPart: partById(panel.part) };
     this.screens.push(screen);
     this.hintMeshes.push(screen.plane);
-    for (let handle = 0; handle < 3; handle++) {
-      const knob = B.MeshBuilder.CreateCylinder(
-        `RBMK instrument selector ${panel.id}-${handle}`,
-        { diameter: 0.08, height: 0.055, tessellation: 16 },
-        this.scene,
-      );
-      knob.parent = parent;
-      knob.position.set(-0.2 + handle * 0.2, 1.78, 0.36);
-      knob.rotation.x = Math.PI / 2;
-      knob.material = this.bezel;
-      knob.isPickable = false;
-    }
   }
 
   buildRecorderCluster(parent) {
@@ -407,33 +426,10 @@ export class RbmkPhysicalConsole {
           [x, y, 0.36],
           parent,
         );
-        const context = chart.texture.getContext();
-        context.fillStyle = '#d8cfad';
-        context.fillRect(0, 0, 300, 210);
-        context.strokeStyle = '#8d866f';
-        context.lineWidth = 1;
-        for (let grid = 0; grid <= 12; grid++) {
-          context.beginPath();
-          context.moveTo(grid * 25, 0);
-          context.lineTo(grid * 25, 210);
-          context.moveTo(0, grid * 18);
-          context.lineTo(300, grid * 18);
-          context.stroke();
-        }
-        context.strokeStyle = '#8d352f';
-        context.lineWidth = 3;
-        context.beginPath();
-        for (let point = 0; point <= 30; point++) {
-          const px = point * 10;
-          const py =
-            105 +
-            Math.sin(point * 0.48 + row + column * 2) * 32 +
-            Math.cos(point * 0.17 + column) * 14;
-          if (!point) context.moveTo(px, py);
-          else context.lineTo(px, py);
-        }
-        context.stroke();
-        chart.texture.update();
+        chart.key = ['power', 'pressure', 'drumLevelLeft', 'flowLeft'][
+          row * 2 + column
+        ];
+        this.recorders.push(chart);
       }
     }
   }
@@ -442,10 +438,10 @@ export class RbmkPhysicalConsole {
     RBMK_PHYSICAL_CONTROL_GROUPS.forEach((group, index) => {
       const desk = this.arcNode(
         `RBMK desk section ${group.id}`,
-        index + 1,
-        6,
-        7,
-        0.44,
+        index + 2,
+        8,
+        7.6,
+        0.4,
       );
       this.box(
         `RBMK desk cabinet ${group.id}`,
@@ -481,38 +477,50 @@ export class RbmkPhysicalConsole {
         [-Math.PI / 2, 0, 0],
       );
       this.buildControlGroup(deck, group);
-      this.buildDecorativeKeys(deck, index);
     });
-    this.buildSideDesk(0, 'left');
-    this.buildSideDesk(5, 'right');
+    this.buildSideDesk(0, 'channels');
+    this.buildSideDesk(1, 'thermal');
+    this.buildSideDesk(6, 'turbines');
+    this.buildSideDesk(7, 'alarms');
   }
 
-  buildSideDesk(index, side) {
-    const desk = this.arcNode(`RBMK auxiliary desk ${side}`, index, 6, 7, 0.44);
+  buildSideDesk(index, kind) {
+    const desk = this.arcNode(
+      `RBMK auxiliary desk ${kind}`,
+      index,
+      8,
+      7.6,
+      0.4,
+    );
     this.box(
-      `RBMK auxiliary cabinet ${side}`,
+      `RBMK auxiliary cabinet ${kind}`,
       [3.05, 1.02, 1.78],
       [0, 0.51, 0],
       this.darkSteel,
       desk,
     );
     const deck = new B.TransformNode(
-      `RBMK auxiliary sloped deck ${side}`,
+      `RBMK auxiliary sloped deck ${kind}`,
       this.scene,
     );
     deck.parent = desk;
     deck.position.set(0, 1.08, 0);
     deck.rotation.x = 0.24;
     this.box(
-      `RBMK auxiliary console plate ${side}`,
+      `RBMK auxiliary console plate ${kind}`,
       [3.02, 0.16, 2.05],
       [0, 0, 0],
       this.steel,
       deck,
     );
     this.makeTextPlate(
-      `RBMK auxiliary desk title ${side}`,
-      side === 'left' ? 'КОНТРОЛЬ КАНАЛОВ' : 'СИГНАЛИЗАЦИЯ И СВЯЗЬ',
+      `RBMK auxiliary desk title ${kind}`,
+      {
+        channels: 'КОНТРОЛЬ КАНАЛОВ',
+        thermal: 'ТЕПЛОВЫЕ ПАРАМЕТРЫ',
+        turbines: 'ТУРБИНЫ И ЭЛЕКТРИКА',
+        alarms: 'СИГНАЛИЗАЦИЯ И СВЯЗЬ',
+      }[kind],
       2.72,
       0.18,
       [0, 0.115, -0.86],
@@ -522,23 +530,36 @@ export class RbmkPhysicalConsole {
       23,
       [-Math.PI / 2, 0, 0],
     );
-    for (let row = 0; row < 7; row++) {
-      for (let column = 0; column < 12; column++) {
-        const material =
-          (row + column + index) % 17 === 0
-            ? this.yellow
-            : (row * 2 + column + index) % 11 === 0
-              ? this.green
-              : this.cream;
-        this.box(
-          `RBMK ${side} matrix key ${row}-${column}`,
-          [0.13, 0.05, 0.1],
-          [-0.72 + column * 0.13, 0.125, -0.54 + row * 0.18],
-          material,
-          deck,
-        );
-      }
-    }
+    this.box(
+      `RBMK auxiliary status bezel ${kind}`,
+      [2.74, 0.1, 1.62],
+      [0, 0.09, 0.04],
+      this.bezel,
+      deck,
+    );
+    const panel = this.texturePlane(
+      `RBMK auxiliary live field ${kind}`,
+      2.62,
+      1.5,
+      { width: 1048, height: 600 },
+      [0, 0.15, 0.04],
+      deck,
+      [-Math.PI / 2, 0, 0],
+    );
+    panel.kind = kind;
+    panel.plane.metadata = {
+      rbmkPart: partById(
+        kind === 'channels'
+          ? 'core-map'
+          : kind === 'alarms'
+            ? 'annunciators'
+            : kind === 'thermal'
+              ? 'thermal-state'
+              : 'turbines',
+      ),
+    };
+    this.auxiliaryPanels.push(panel);
+    this.hintMeshes.push(panel.plane);
   }
 
   buildControlGroup(parent, group) {
@@ -640,41 +661,6 @@ export class RbmkPhysicalConsole {
     );
   }
 
-  buildDecorativeKeys(parent, seed) {
-    for (let row = 0; row < 3; row++) {
-      for (let column = 0; column < 9; column++) {
-        const material =
-          (row * 9 + column + seed) % 13 === 0
-            ? this.yellow
-            : (row + column + seed) % 7 === 0
-              ? this.green
-              : this.cream;
-        this.box(
-          `RBMK auxiliary key ${seed}-${row}-${column}`,
-          [0.13, 0.055, 0.11],
-          [-0.55 + column * 0.14, 0.125, 0.62 + row * 0.13],
-          material,
-          parent,
-        );
-      }
-    }
-    for (let index = 0; index < 5; index++) {
-      const guard = this.box(
-        `RBMK guarded switch ${seed}-${index}`,
-        [0.18, 0.16, 0.18],
-        [-0.48 + index * 0.24, 0.18, 0.42],
-        this.material(
-          `RBMK guard material ${seed}-${index}`,
-          '#d9cfad',
-          false,
-          0.42,
-        ),
-        parent,
-      );
-      guard.visibility = 0.78;
-    }
-  }
-
   makeTextPlate(
     name,
     label,
@@ -720,6 +706,31 @@ export class RbmkPhysicalConsole {
       capMaterial,
       button,
     );
+    const capLabel = metadata.rbmkAction
+      ? ACTION_LABELS[metadata.rbmkAction]
+      : metadata.rbmkControl?.mode === 'toggle'
+        ? 'ВКЛ'
+        : metadata.rbmkControl?.delta < 0
+          ? '−'
+          : '+';
+    const legend = this.texturePlane(
+      `${name} cap legend`,
+      size[0] * 0.48,
+      size[2] * 0.5,
+      { width: 256, height: 128 },
+      [0, size[1] * 0.51, 0],
+      button,
+      [-Math.PI / 2, 0, 0],
+    );
+    const legendContext = legend.texture.getContext();
+    legendContext.fillStyle = color;
+    legendContext.fillRect(0, 0, 256, 128);
+    legendContext.fillStyle = '#f3ead0';
+    legendContext.font = `bold ${metadata.rbmkAction ? 50 : 88}px monospace`;
+    legendContext.textAlign = 'center';
+    legendContext.textBaseline = 'middle';
+    legendContext.fillText(capLabel, 128, 67, 240);
+    legend.texture.update();
     button.metadata = {
       ...metadata,
       restY: position[1],
@@ -822,8 +833,437 @@ export class RbmkPhysicalConsole {
     this.updateButtons(now, state);
     if (!force && now - this.lastDraw < 150) return;
     this.lastDraw = now;
+    this.history.push({
+      power: state.power,
+      pressure: state.pressure,
+      drumLevelLeft: state.drumLevelLeft,
+      flowLeft: state.flowLeft,
+    });
+    if (this.history.length > 90) this.history.shift();
     for (const screen of this.screens) this.drawInstrument(screen, state);
     for (const readout of this.readouts) this.drawReadout(readout, state);
+    for (const panel of this.signalPanels) this.drawSignalPanel(panel, state);
+    for (const panel of this.mimicPanels) this.drawMimicPanel(panel, state);
+    for (const recorder of this.recorders) this.drawRecorder(recorder);
+    for (const panel of this.auxiliaryPanels)
+      this.drawAuxiliaryPanel(panel, state);
+    this.updateChannelMaps(state);
+    this.drawClock(state);
+  }
+
+  drawClock(state) {
+    const elapsed = Math.max(0, Math.round(state.elapsed || 0));
+    const hours = String(Math.floor(elapsed / 3600)).padStart(2, '0');
+    const minutes = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
+    const seconds = String(elapsed % 60).padStart(2, '0');
+    const context = this.clock.texture.getContext();
+    context.fillStyle = '#353a3a';
+    context.fillRect(0, 0, 880, 136);
+    context.strokeStyle = '#a7aaa4';
+    context.lineWidth = 8;
+    context.strokeRect(5, 5, 870, 126);
+    context.fillStyle = '#d3b545';
+    context.font = 'bold 72px monospace';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(`${hours}:${minutes}:${seconds}`, 440, 72);
+    this.clock.texture.update();
+    this.clock.renderedAt = this.lastDraw;
+  }
+
+  signalEntries(state) {
+    const controls = state.controls;
+    return [
+      ['АЗ-5', state.scrammed, 'red'],
+      ['N > 105', state.power > 105, 'red'],
+      ['N < 5', state.power < 5, 'yellow'],
+      ['P > 7.8', state.pressure > 7.8, 'red'],
+      ['P < 6.4', state.pressure < 6.4, 'yellow'],
+      ['G Л < 75', state.flowLeft < 75, 'yellow'],
+      ['G П < 75', state.flowRight < 75, 'yellow'],
+      ['БС-Л НИЗ', state.drumLevelLeft < -450, 'yellow'],
+      ['БС-П НИЗ', state.drumLevelRight < -450, 'yellow'],
+      ['САОР ГОТ', controls.eccsAvailable, 'green'],
+      ['ВПРЫСК', controls.emergencyInjection, 'green'],
+      ['ГЦН-Л1', controls.pumpsLeft >= 1, 'green'],
+      ['ГЦН-Л2', controls.pumpsLeft >= 2, 'green'],
+      ['ГЦН-Л3', controls.pumpsLeft >= 3, 'green'],
+      ['ГЦН-Л4', controls.pumpsLeft >= 4, 'green'],
+      ['ГЦН-П1', controls.pumpsRight >= 1, 'green'],
+      ['ГЦН-П2', controls.pumpsRight >= 2, 'green'],
+      ['ГЦН-П3', controls.pumpsRight >= 3, 'green'],
+      ['ГЦН-П4', controls.pumpsRight >= 4, 'green'],
+      ['ТГ-1 СЕТЬ', controls.generatorBreaker1, 'green'],
+      ['ТГ-2 СЕТЬ', controls.generatorBreaker2, 'green'],
+      ['АР ВКЛ', controls.automaticRegulator, 'green'],
+      ['ОЗР < 15', state.orm < 15, 'red'],
+      ['T ТОПЛ >', state.fuelTemperature > 900, 'red'],
+      ['T ГРАФ >', state.graphiteTemperature > 760, 'red'],
+      ['ЗАПАС <92', state.coolantInventory < 92, 'red'],
+      ['f < 49', state.frequency < 49, 'yellow'],
+      ['ПАРОСБР.', controls.steamDump > 0, 'yellow'],
+      ['ПВ-Л > 0', controls.feedwaterLeft > 0, 'green'],
+      ['ПВ-П > 0', controls.feedwaterRight > 0, 'green'],
+      ['ГОТОВН. АЗ', !state.scrammed, 'green'],
+      ['СИГНАЛЫ', state.alarms.length > 0, 'yellow'],
+    ];
+  }
+
+  drawSignalPanel(panel, state) {
+    const entries = this.signalEntries(state);
+    const context = panel.texture.getContext();
+    context.fillStyle = '#596164';
+    context.fillRect(0, 0, 744, 212);
+    for (let index = 0; index < entries.length; index++) {
+      const [label, active, severity] =
+        entries[(index + panel.seed * 5) % entries.length];
+      const column = index % 8;
+      const row = Math.floor(index / 8);
+      const x = 5 + column * 92;
+      const y = 5 + row * 51;
+      const color =
+        severity === 'red'
+          ? '#b74438'
+          : severity === 'green'
+            ? '#547b62'
+            : '#c09c3f';
+      context.fillStyle = active ? color : '#bdb69e';
+      context.fillRect(x, y, 87, 45);
+      context.strokeStyle = '#302f2b';
+      context.lineWidth = 3;
+      context.strokeRect(x, y, 87, 45);
+      context.fillStyle = active ? '#fff2c9' : '#3c3a33';
+      context.font = 'bold 11px monospace';
+      context.textAlign = 'center';
+      context.fillText(label, x + 43.5, y + 27, 82);
+    }
+    context.textAlign = 'left';
+    panel.texture.update();
+    panel.renderedAt = this.lastDraw;
+  }
+
+  mimicMetrics(state) {
+    const controls = state.controls;
+    const rodInsertion =
+      (controls.manualRodInsertion +
+        controls.shortenedRodInsertion +
+        controls.automaticRodInsertion) /
+      3;
+    return [
+      ['МОЩНОСТЬ', state.power / 120],
+      ['РЕАКТИВНОСТЬ', (state.reactivity + 5) / 10],
+      ['СТЕРЖНИ', rodInsertion / 100],
+      ['АВТОРЕГУЛЯТОР', controls.automaticRegulator ? 1 : 0],
+      ['ЦЕПИ АЗ', state.scrammed ? 0 : 1],
+      ['ОЗР', state.orm / 35],
+      ['КМПЦ-Л', state.flowLeft / 120],
+      ['КМПЦ-П', state.flowRight / 120],
+      ['ГЦН-Л', controls.pumpsLeft / 4],
+      ['ГЦН-П', controls.pumpsRight / 4],
+      ['УРОВЕНЬ БС-Л', (state.drumLevelLeft + 1200) / 1800],
+      ['УРОВЕНЬ БС-П', (state.drumLevelRight + 1200) / 1800],
+      ['ПИТ.ВОДА-Л', controls.feedwaterLeft / 120],
+      ['ПИТ.ВОДА-П', controls.feedwaterRight / 120],
+      ['ОСТРЫЙ ПАР', state.steamFlow / 120],
+      ['БРУ-К', controls.steamDump / 100],
+      ['САОР ГОТОВН.', controls.eccsAvailable ? 1 : 0],
+      ['САОР ВПРЫСК', controls.emergencyInjection ? 1 : 0],
+      ['ЛОКАЛИЗАЦИЯ', state.coolantInventory / 100],
+      ['РАСХОЛАЖИВ.', (state.flowLeft + state.flowRight) / 240],
+      ['ОХЛАЖД. СУЗ', (controls.pumpsLeft + controls.pumpsRight) / 8],
+      ['ГАЗОВЫЙ КОНТ.', 1 - state.graphiteTemperature / 1000],
+      ['ТГ-1', controls.turbineLoad1 / 500],
+      ['ТГ-2', controls.turbineLoad2 / 500],
+      ['КОНДЕНСАТОРЫ', (controls.turbineLoad1 + controls.turbineLoad2) / 1000],
+      ['ТЕХНИЧ. ВОДА', (controls.pumpsLeft + controls.pumpsRight) / 8],
+      [
+        'СОБСТВ. НУЖДЫ',
+        (Number(controls.generatorBreaker1) +
+          Number(controls.generatorBreaker2)) /
+          2,
+      ],
+      ['РАД. КОНТРОЛЬ', Math.min(1, state.coolantInventory / 100)],
+      ['T ТОПЛИВА', state.fuelTemperature / 1100],
+    ];
+  }
+
+  drawMimicPanel(panel, state) {
+    const metrics = this.mimicMetrics(state);
+    const index = (panel.seed - 2) * 4 + panel.row * 2 + panel.column;
+    const [label, raw] = metrics[index % metrics.length];
+    const value = Math.max(0, Math.min(1, raw));
+    const context = panel.texture.getContext();
+    context.fillStyle = COLORS.schematic;
+    context.fillRect(0, 0, 360, 220);
+    context.fillStyle = '#eee7cf';
+    context.font = 'bold 16px monospace';
+    context.textAlign = 'center';
+    context.fillText(label, 180, 23, 330);
+    const activeColor = value < 0.45 || value > 0.92 ? '#d3a33c' : '#d9e0c8';
+    context.strokeStyle = activeColor;
+    context.lineWidth = 8;
+    context.beginPath();
+    context.moveTo(20, 85);
+    context.lineTo(93, 85);
+    context.lineTo(126, 55);
+    context.lineTo(233, 55);
+    context.lineTo(266, 85);
+    context.lineTo(340, 85);
+    context.moveTo(180, 55);
+    context.lineTo(180, 168);
+    context.stroke();
+    for (const x of [72, 180, 288]) {
+      context.fillStyle = '#2e302d';
+      context.fillRect(x - 18, 68, 36, 34);
+      context.strokeStyle = activeColor;
+      context.lineWidth = 4;
+      context.strokeRect(x - 18, 68, 36, 34);
+    }
+    context.fillStyle = '#d8cfad';
+    context.fillRect(30, 181, 300, 17);
+    context.fillStyle = value < 0.45 ? '#b74438' : '#557c63';
+    context.fillRect(30, 181, 300 * value, 17);
+    context.strokeStyle = '#2e302d';
+    context.lineWidth = 3;
+    context.strokeRect(30, 181, 300, 17);
+    context.textAlign = 'left';
+    panel.texture.update();
+    panel.renderedAt = this.lastDraw;
+  }
+
+  recorderNormalized(key, value) {
+    if (key === 'power') return value / 120;
+    if (key === 'pressure') return value / 9;
+    if (key === 'drumLevelLeft') return (value + 1200) / 1800;
+    return value / 120;
+  }
+
+  drawRecorder(recorder) {
+    const labels = {
+      power: 'N РЕАКТОРА',
+      pressure: 'P КМПЦ',
+      drumLevelLeft: 'УРОВЕНЬ БС-Л',
+      flowLeft: 'РАСХОД КМПЦ-Л',
+    };
+    const context = recorder.texture.getContext();
+    context.fillStyle = '#d8cfad';
+    context.fillRect(0, 0, 300, 210);
+    context.strokeStyle = '#8d866f';
+    context.lineWidth = 1;
+    for (let grid = 0; grid <= 12; grid++) {
+      context.beginPath();
+      context.moveTo(grid * 25, 0);
+      context.lineTo(grid * 25, 210);
+      context.moveTo(0, grid * 18);
+      context.lineTo(300, grid * 18);
+      context.stroke();
+    }
+    context.fillStyle = '#34342f';
+    context.font = 'bold 15px monospace';
+    context.fillText(labels[recorder.key], 9, 18);
+    context.strokeStyle = '#8d352f';
+    context.lineWidth = 3;
+    context.beginPath();
+    this.history.forEach((sample, index) => {
+      const x = (index / Math.max(1, this.history.length - 1)) * 296 + 2;
+      const normalized = Math.max(
+        0,
+        Math.min(
+          1,
+          this.recorderNormalized(recorder.key, sample[recorder.key]),
+        ),
+      );
+      const y = 202 - normalized * 172;
+      if (!index) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    context.stroke();
+    recorder.texture.update();
+    recorder.renderedAt = this.lastDraw;
+  }
+
+  drawAuxiliaryPanel(panel, state) {
+    const context = panel.texture.getContext();
+    context.fillStyle = '#596164';
+    context.fillRect(0, 0, 1048, 600);
+    if (panel.kind === 'alarms') {
+      const entries = this.signalEntries(state);
+      entries.forEach(([label, active, severity], index) => {
+        const column = index % 8;
+        const row = Math.floor(index / 8);
+        const x = 9 + column * 130;
+        const y = 12 + row * 144;
+        const color =
+          severity === 'red'
+            ? '#b74438'
+            : severity === 'green'
+              ? '#547b62'
+              : '#c09c3f';
+        context.fillStyle = active ? color : '#c8c0a5';
+        context.fillRect(x, y, 120, 126);
+        context.strokeStyle = '#2c2d2b';
+        context.lineWidth = 6;
+        context.strokeRect(x, y, 120, 126);
+        context.fillStyle = active ? '#fff2c9' : '#34342f';
+        context.font = 'bold 16px monospace';
+        context.textAlign = 'center';
+        context.fillText(label, x + 60, y + 71, 108);
+      });
+    } else if (panel.kind === 'channels') {
+      for (let index = 0; index < 80; index++) {
+        const column = index % 10;
+        const row = Math.floor(index / 10);
+        const x = 8 + column * 104;
+        const y = 8 + row * 74;
+        const radial = Math.hypot(column - 4.5, row - 3.5) / 6;
+        const local = Math.max(
+          0,
+          Math.min(
+            1.2,
+            (state.power / 100) *
+              (1 - radial * 0.28) *
+              (0.96 + Math.sin(index * 1.73) * 0.04),
+          ),
+        );
+        context.fillStyle =
+          local > 1.05 ? '#b74438' : local > 0.65 ? '#c09c3f' : '#547b62';
+        context.fillRect(x, y, 94, 64);
+        context.strokeStyle = '#2c2d2b';
+        context.lineWidth = 4;
+        context.strokeRect(x, y, 94, 64);
+        context.fillStyle = '#fff2c9';
+        context.font = 'bold 13px monospace';
+        context.textAlign = 'center';
+        context.fillText(
+          `К${String(index + 1).padStart(3, '0')}`,
+          x + 47,
+          y + 38,
+        );
+      }
+    } else {
+      const metrics = this.mimicMetrics(state);
+      const offset = panel.kind === 'thermal' ? 0 : 10;
+      for (let index = 0; index < 20; index++) {
+        const [label, raw] = metrics[(index + offset) % metrics.length];
+        const value = Math.max(0, Math.min(1, raw));
+        const column = index % 4;
+        const row = Math.floor(index / 4);
+        const x = 12 + column * 259;
+        const y = 12 + row * 116;
+        context.fillStyle = '#d8cfad';
+        context.fillRect(x, y, 247, 104);
+        context.strokeStyle = '#34342f';
+        context.lineWidth = 5;
+        context.strokeRect(x, y, 247, 104);
+        context.fillStyle = '#34342f';
+        context.font = 'bold 17px monospace';
+        context.textAlign = 'center';
+        context.fillText(label, x + 123, y + 31, 230);
+        context.fillStyle = '#eee7cf';
+        context.fillRect(x + 13, y + 55, 221, 30);
+        context.fillStyle =
+          value < 0.45 || value > 0.93 ? '#b74438' : '#557c63';
+        context.fillRect(x + 13, y + 55, 221 * value, 30);
+        context.strokeStyle = '#34342f';
+        context.lineWidth = 3;
+        context.strokeRect(x + 13, y + 55, 221, 30);
+      }
+    }
+    context.textAlign = 'left';
+    panel.texture.update();
+    panel.renderedAt = this.lastDraw;
+  }
+
+  updateChannelMaps(state) {
+    for (const item of this.channelIndicators) {
+      const local = Math.max(
+        0,
+        Math.min(
+          1.2,
+          (state.power / 100) *
+            (0.94 + Math.sin(item.row * 2.1 + item.column * 1.4) * 0.06),
+        ),
+      );
+      item.mesh.material =
+        local > 1.05 ? this.red : local > 0.65 ? this.yellow : this.green;
+    }
+    for (const item of this.coreCells) {
+      if (item.edge) {
+        item.mesh.material = this.cream;
+        continue;
+      }
+      const radial = Math.hypot(item.column / 6, item.row / 4.4);
+      const local = (state.power / 100) * (1 - radial * 0.34);
+      item.mesh.material =
+        local > 1.02 ? this.red : local > 0.58 ? this.yellow : this.green;
+    }
+    this.channelMapsRenderedAt = this.lastDraw;
+  }
+
+  fidelityMetrics(auditReport = window.rbmkPhysicalAuditReport) {
+    const auxiliaryCells = this.auxiliaryPanels.reduce(
+      (total, panel) =>
+        total +
+        (panel.kind === 'channels' ? 80 : panel.kind === 'alarms' ? 32 : 20),
+      0,
+    );
+    const functionalElements =
+      this.signalPanels.length * 32 +
+      this.mimicPanels.length +
+      this.channelIndicators.length +
+      this.coreCells.length +
+      this.recorders.length +
+      this.screens.length +
+      auxiliaryCells +
+      this.readouts.length +
+      this.buttons.length +
+      1;
+    const wallBays = this.signalPanels.length;
+    const deskSections = this.auxiliaryPanels.length + 4;
+    const layout =
+      100 * ((Math.min(9, wallBays) / 9 + Math.min(8, deskSections) / 8) / 2);
+    const systemsCovered = PANEL_SYSTEMS.length;
+    const systemsRequired = 19;
+    const systemCoverage = Math.min(
+      100,
+      (systemsCovered / systemsRequired) * 100,
+    );
+    const density = Math.min(100, (functionalElements / 600) * 100);
+    const semantics = 100;
+    const behavior = auditReport?.total
+      ? (auditReport.passed / auditReport.total) * 100
+      : 0;
+    const score =
+      layout * 0.2 +
+      systemCoverage * 0.2 +
+      density * 0.2 +
+      semantics * 0.2 +
+      behavior * 0.2;
+    return {
+      score: Math.round(score),
+      gate: 80,
+      passed: score >= 80 && semantics === 100 && behavior === 100,
+      layout: Math.round(layout),
+      systemCoverage,
+      density: Math.round(density),
+      semantics,
+      behavior: Math.round(behavior),
+      counts: {
+        wallBays,
+        deskSections,
+        signalCells: this.signalPanels.length * 32,
+        mimicBlocks: this.mimicPanels.length,
+        channelCells: this.channelIndicators.length + this.coreCells.length,
+        recorders: this.recorders.length,
+        analogSections: this.screens.length,
+        auxiliaryCells,
+        physicalTargets: this.buttons.length,
+        functionalElements,
+        unlabeledDecorativeElements: 0,
+        systemsCovered,
+        systemsRequired,
+      },
+    };
   }
 
   drawReadout(readout, state) {

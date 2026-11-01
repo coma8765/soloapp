@@ -161,6 +161,20 @@ class RbmkPhysicalAudit {
         sameControls(screen.renderedState?.controls, event.after.controls),
     );
     if (!screensMatch) errors.push('один из шести экранов отстаёт от модели');
+    const secondaryDisplays = [
+      ...this.console.signalPanels,
+      ...this.console.mimicPanels,
+      ...this.console.recorders,
+      ...this.console.auxiliaryPanels,
+    ];
+    if (
+      !secondaryDisplays.every(
+        (display) => display.renderedAt === this.console.lastDraw,
+      ) ||
+      this.console.channelMapsRenderedAt !== this.console.lastDraw ||
+      this.console.clock.renderedAt !== this.console.lastDraw
+    )
+      errors.push('часть вторичных приборов отстаёт от модели');
     return errors;
   }
 
@@ -195,12 +209,14 @@ class RbmkPhysicalAudit {
   finish() {
     this.console.onActivation = null;
     const passed = this.results.filter((result) => result.ok).length;
-    window.rbmkPhysicalAuditReport = {
+    const report = {
       total: this.targets.length,
       passed,
       failed: this.targets.length - passed,
       results: this.results.map((result) => ({ ...result })),
     };
+    report.fidelity = this.console.fidelityMetrics(report);
+    window.rbmkPhysicalAuditReport = report;
     this.overlay.dataset.complete = 'true';
     this.render(
       passed === this.targets.length
@@ -211,6 +227,10 @@ class RbmkPhysicalAudit {
 
   render(note = '') {
     const passed = this.results.filter((result) => result.ok).length;
+    const fidelity = this.console.fidelityMetrics({
+      total: this.targets.length,
+      passed,
+    });
     const rows = this.results.map(
       (result) =>
         `${result.ok ? '✓' : '✗'} ${String(result.index).padStart(2, '0')} ${result.label}${
@@ -221,6 +241,8 @@ class RbmkPhysicalAudit {
     this.overlay.textContent = [
       'ФИЗИЧЕСКИЙ АУДИТ БЩУ',
       `${passed}/${this.targets.length} успешно · ${this.results.length} проверено`,
+      `ПОЛНОТА ${fidelity.score}/100 · компоновка ${fidelity.layout} · системы ${fidelity.systemCoverage} · плотность ${fidelity.density} · смысл ${fidelity.semantics} · поведение ${fidelity.behavior}`,
+      `Функциональных элементов ${fidelity.counts.functionalElements} · неподписанного декора ${fidelity.counts.unlabeledDecorativeElements}`,
       current
         ? `Цель ${this.index + 1}/${this.targets.length}: ${targetLabel(current)}`
         : 'Целей больше нет',
@@ -228,7 +250,7 @@ class RbmkPhysicalAudit {
       '',
       ...rows,
     ]
-      .filter((line, index) => line || index === 4)
+      .filter((line, index) => line || index === 6)
       .join('\n');
   }
 }
