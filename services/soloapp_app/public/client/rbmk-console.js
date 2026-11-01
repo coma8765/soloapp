@@ -73,6 +73,7 @@ export class RbmkPhysicalConsole {
     this.hintMeshes = [];
     this.lastDraw = 0;
     this.lastActivation = 0;
+    this.onActivation = null;
     this.build();
   }
 
@@ -378,6 +379,13 @@ export class RbmkPhysicalConsole {
     mesh.metadata.pressedUntil = now + 150;
     mesh.position.z = mesh.metadata.restZ - 0.07;
     this.sync(true);
+    this.onActivation?.({
+      mesh,
+      before: state,
+      after: this.handlers.state(),
+      control: mesh.metadata.rbmkControl || null,
+      action: mesh.metadata.rbmkAction || null,
+    });
     return true;
   }
 
@@ -422,6 +430,8 @@ export class RbmkPhysicalConsole {
     context.fillText(formatControl(name, value).slice(0, 24), 390, 56);
     context.textAlign = 'left';
     readout.texture.update();
+    readout.renderedValue = value;
+    readout.renderedAt = this.lastDraw;
   }
 
   readingValue(state, key) {
@@ -433,6 +443,14 @@ export class RbmkPhysicalConsole {
   }
 
   drawInstrument(screen, state) {
+    screen.renderedState = {
+      controls: { ...state.controls },
+      scrammed: state.scrammed,
+      power: state.power,
+      pressure: state.pressure,
+      alarms: [...state.alarms],
+    };
+    screen.renderedAt = this.lastDraw;
     const context = screen.texture.getContext();
     context.fillStyle = '#071515';
     context.fillRect(0, 0, 640, 430);

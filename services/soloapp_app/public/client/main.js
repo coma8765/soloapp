@@ -384,6 +384,13 @@ async function start() {
     professorRecorder,
     laboratory,
   };
+  if (
+    location.hostname === '127.0.0.1' &&
+    new URL(location.href).searchParams.has('reactor-audit')
+  ) {
+    const { startRbmkPhysicalAudit } = await import('./rbmk-physical-audit.js');
+    window.rbmkPhysicalAudit = startRbmkPhysicalAudit(window.planetApp);
+  }
   let previous = performance.now(),
     hudAt = 0,
     reactorWasActive = false;
