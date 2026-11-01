@@ -16,8 +16,8 @@ spec:
         image: '{{ whisper_image }}'
         ports: [{name: http, containerPort: 8178}]
         resources:
-          requests: {cpu: 100m, memory: 512Mi}
-          limits: {cpu: '2', memory: 1536Mi}
+          requests: {cpu: '{{ (whisper_overrides | default({})).cpu_request | default(500) }}m', memory: '{{ (whisper_overrides | default({})).memory_request | default(1536) }}Mi'}
+          limits: {cpu: '2', memory: '{{ (whisper_overrides | default({})).memory_limit | default(2560) }}Mi'}
         securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
         startupProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 5, failureThreshold: 60}
         readinessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 5, timeoutSeconds: 2}
