@@ -151,9 +151,9 @@ export class EngineerConversation {
       this.room.instructor.avatar.setSpeaking(
         Boolean(
           active &&
-            !this.voice.muted &&
-            audible &&
-            this.session.turns.get(this.owner)?.stage === 'answer',
+          !this.voice.muted &&
+          audible &&
+          this.session.turns.get(this.owner)?.stage === 'answer',
         ),
       );
     }

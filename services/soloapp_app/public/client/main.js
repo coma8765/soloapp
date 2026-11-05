@@ -486,9 +486,8 @@ async function start() {
     reactor.physicalView &&
     new URL(location.href).searchParams.has('physical-audit')
   ) {
-    const { runPhysicalSystemChecks } = await import(
-      './physical-system-checks.js'
-    );
+    const { runPhysicalSystemChecks } =
+      await import('./physical-system-checks.js');
     window.physicalSystemChecks = runPhysicalSystemChecks(window.planetApp);
   }
   if (
@@ -527,9 +526,8 @@ async function start() {
     location.hostname === '127.0.0.1' &&
     new URL(location.href).searchParams.has('reactor-performance')
   ) {
-    const { measureReactorPerformance } = await import(
-      './reactor-performance.js'
-    );
+    const { measureReactorPerformance } =
+      await import('./reactor-performance.js');
     measureReactorPerformance(window.planetApp);
   }
   engine.runRenderLoop(() => {
