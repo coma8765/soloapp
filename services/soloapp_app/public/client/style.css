@@ -1019,3 +1019,25 @@ nav > span {
 #worker-controls small {
   display: block;
 }
+
+#reactor-loading {
+  position: fixed;
+  left: 50%;
+  top: 35%;
+  transform: translateX(-50%);
+  z-index: 30;
+  max-width: min(90vw, 440px);
+  padding: 20px;
+  border-radius: 12px;
+  background: #102526f5;
+  color: white;
+  text-align: center;
+}
+#reactor-loading button {
+  display: block;
+  margin: 12px auto 0;
+}
+#reactor-loading [hidden],
+#reactor-loading[hidden] {
+  display: none;
+}

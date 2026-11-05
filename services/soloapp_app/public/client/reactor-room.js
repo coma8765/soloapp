@@ -2,14 +2,10 @@ import { orientation, vec } from './scene.js';
 import { REACTOR_MAP, PHYSICAL_MAP, isReactorMap } from '../shared/room.js';
 import { RbmkModel } from './rbmk-model.js';
 import { RBMK_CONTROLS, RBMK_PANEL_PARTS } from './rbmk-data.js';
-import { RbmkPhysicalConsole } from './rbmk-console.js';
-import { RbmkJournalStation } from './rbmk-journal-station.js';
 import { RbmkJournal } from './rbmk-journal.js';
 import { RbmkServerSync } from './rbmk-server.js';
-import { PhysicalSystemRoom } from './physical-system-room.js';
-import { ReactorInstructor } from './reactor-instructor.js';
 import { ReactorDoor } from './reactor-door.js';
-import { ReactorWorkers } from './reactor-workers.js';
+import { WorkerCountSync } from './worker-controls.js';
 
 const B = window.BABYLON;
 export { REACTOR_MAP } from '../shared/room.js';
@@ -35,9 +31,10 @@ export class ReactorRoom {
     this.teamLog = [];
     this.materials = new Map();
     this.door = new ReactorDoor(this, B);
-    this.buildRoom();
-    this.instructor = new ReactorInstructor(this);
-    this.workers = new ReactorWorkers(this);
+    // Keep server state available before the interior (and its assets) exists.
+    this.workers = {
+      sync: new WorkerCountSync((message) => this.network?.send(message)),
+    };
     this.server = new RbmkServerSync({
       send: (message) => this.network?.send(message),
       restore: (state) => {
@@ -86,6 +83,134 @@ export class ReactorRoom {
       this.door.resolve(next, before),
     );
     this.bindUI();
+  }
+
+  async buildInterior() {
+    const {
+      RbmkPhysicalConsole,
+      RbmkJournalStation,
+      ReactorInstructor,
+      ReactorWorkers,
+      PhysicalSystemRoom,
+    } = await import('./reactor-interior.js');
+    this.interiorTypes = {
+      RbmkPhysicalConsole,
+      RbmkJournalStation,
+      PhysicalSystemRoom,
+    };
+    const materials = new Set(this.scene.materials);
+    const textures = new Set(this.scene.textures);
+    try {
+      this.buildRoom();
+      this.instructor = new ReactorInstructor(this);
+      // Preserve the sync object held by WorkerControls and state received outside.
+      this.workers = new ReactorWorkers(this, this.workers.sync);
+    } catch (error) {
+      // Roll back a partial build so retrying cannot duplicate colliders or NPCs.
+      this.instructor?.dispose();
+      this.instructor = null;
+      this.journal?.input.remove();
+      this.journal?.accessible.remove();
+      this.journal = null;
+      this.roomLight?.dispose();
+      for (const child of this.root.getChildren()) child.dispose();
+      for (const material of this.scene.materials.filter(
+        (item) => !materials.has(item),
+      ))
+        material.dispose();
+      for (const texture of this.scene.textures.filter(
+        (item) => !textures.has(item),
+      ))
+        texture.dispose();
+      this.door.views = this.door.views.filter((view) => !view.exit);
+      this.colliders = [];
+      this.hotspots = [];
+      throw error;
+    }
+    await Promise.all([
+      this.instructor.ready,
+      this.instructor.avatar.ready,
+      this.workers.ready,
+    ]);
+  }
+
+  prepare() {
+    if (!this.preparation) {
+      this.preparation = this.buildInterior()
+        .then(() => {
+          this.prepared = true;
+        })
+        .catch((error) => {
+          // A failed module download can be retried without reloading the planet.
+          this.preparation = null;
+          throw error;
+        });
+    }
+    return this.preparation;
+  }
+
+  loadingStatus(text, retry = false) {
+    if (!this.loadingElement) {
+      const element = document.createElement('div');
+      element.id = 'reactor-loading';
+      element.setAttribute('role', 'status');
+      element.setAttribute('aria-live', 'polite');
+      const label = document.createElement('span');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Повторить загрузку';
+      button.onclick = () => void this.loadForEntry();
+      element.append(label, button);
+      document.body.append(element);
+      this.loadingElement = element;
+      this.loadingLabel = label;
+      this.loadingRetry = button;
+      this.scene.onDisposeObservable.addOnce(() => element.remove());
+    }
+    this.loadingElement.hidden = !text;
+    this.loadingElement.setAttribute('aria-busy', String(this.loading));
+    this.loadingLabel.textContent = text;
+    this.loadingRetry.hidden = !retry;
+  }
+
+  loadForEntry() {
+    if (this.prepared) {
+      this.loadingError = false;
+      if (this.loadingElement) this.loadingStatus('');
+      return Promise.resolve(true);
+    }
+    if (this.entryLoading) return this.entryLoading;
+    this.loading = true;
+    this.loadingError = false;
+    this.player.keys.clear();
+    this.player.speed = 0;
+    this.loadingStatus('Загрузка БЩУ · подготовка комнаты и персонажей…');
+    this.entryLoading = (async () => {
+      let timer;
+      try {
+        await Promise.race([
+          this.prepare(),
+          new Promise((_, reject) => {
+            timer = setTimeout(
+              () => reject(Error('Превышено время загрузки БЩУ')),
+              30000,
+            );
+          }),
+        ]);
+        this.loadingStatus('');
+        return true;
+      } catch (error) {
+        this.loadingError = true;
+        this.loadingStatus(`${error.message}. Повторите вход.`, true);
+        return false;
+      } finally {
+        clearTimeout(timer);
+        this.loading = false;
+        this.loadingElement?.setAttribute('aria-busy', 'false');
+        this.entryLoading = null;
+      }
+    })();
+    return this.entryLoading;
   }
 
   material(name, color, emissive = false, alpha = 1) {
@@ -302,13 +427,17 @@ export class ReactorRoom {
   }
 
   buildPhysicalConsole() {
-    this.physicalConsole = new RbmkPhysicalConsole(this.scene, this.root, {
-      state: () => this.model.snapshot(),
-      control: (name, value, operation) =>
-        this.commitControl(name, value, operation),
-      action: (action) => this.commitAction(action),
-    });
-    this.journal = new RbmkJournalStation(this);
+    this.physicalConsole = new this.interiorTypes.RbmkPhysicalConsole(
+      this.scene,
+      this.root,
+      {
+        state: () => this.model.snapshot(),
+        control: (name, value, operation) =>
+          this.commitControl(name, value, operation),
+        action: (action) => this.commitAction(action),
+      },
+    );
+    this.journal = new this.interiorTypes.RbmkJournalStation(this);
     this.colliders.push(...this.physicalConsole.colliders);
     this.journal.restore();
     this.drawStatus(true);
@@ -402,7 +531,7 @@ export class ReactorRoom {
 
   togglePhysical() {
     if (!this.active) return false;
-    this.physicalRoom ||= new PhysicalSystemRoom(this);
+    this.physicalRoom ||= new this.interiorTypes.PhysicalSystemRoom(this);
     this.setHints(false);
     this.elements.dialog.close();
     this.journal.blur();
@@ -517,7 +646,7 @@ export class ReactorRoom {
   connectNetwork(network) {
     this.network = network;
     network.onInstructorMessage = (peer, message) =>
-      this.instructor.receive(peer, message);
+      this.instructor?.receive(peer, message);
     network.onReactorMessage = (peerId, message) =>
       this.receiveNetworkMessage(peerId, message);
     network.onReactorServerMessage = (message) => {
@@ -1000,7 +1129,11 @@ export class ReactorRoom {
   }
 
   enter() {
-    if (this.active || this.cooldown > 0) return;
+    if (this.active || this.cooldown > 0) return false;
+    if (!this.prepared)
+      return this.loadForEntry().then((ready) =>
+        ready ? this.enter() : false,
+      );
     this.saved = {
       position: this.player.position.clone(),
       forward: this.player.forward.clone(),
@@ -1044,6 +1177,7 @@ export class ReactorRoom {
     this.share('state-request');
     this.syncTeamPanel();
     this.drawStatus(true);
+    return true;
   }
 
   leave() {
@@ -1090,14 +1224,16 @@ export class ReactorRoom {
 
   get uiOpen() {
     return (
-      this.active &&
-      (this.hints || this.elements.dialog.open || this.journal.focused)
+      this.loading ||
+      (this.active &&
+        (this.hints || this.elements.dialog.open || this.journal.focused))
     );
   }
 
   update(dt) {
-    this.instructor.update(dt);
-    this.workers.update(dt);
+    this.instructor?.update(dt);
+    if (this.workers.update) this.workers.update(dt);
+    else this.workers.sync.tick();
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.door.update(dt);
     if (!this.active) return;

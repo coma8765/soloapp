@@ -94,7 +94,7 @@ export class EngineerConversation {
     this.room.instructor.avatar.setSpeaking(false);
   }
   update() {
-    if (this.disposed) return;
+    if (this.disposed || !this.room.instructor) return;
     const room = this.room,
       network = room.network;
     const state = {

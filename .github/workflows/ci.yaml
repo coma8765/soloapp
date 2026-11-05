@@ -74,6 +74,8 @@ jobs:
         run: |
           services/app-api/node_modules/.bin/prettier --check infra/telegram-relay/src infra/telegram-relay/tests libs/chat_runtime/src libs/chat_runtime/tests services/client-gateway/src/logic services/client-gateway/src/views services/client-gateway/src/main.mjs services/client-gateway/tests
           services/app-api/node_modules/.bin/oxlint infra/telegram-relay/src infra/telegram-relay/tests libs/chat_runtime/src libs/chat_runtime/tests services/client-gateway/src/logic services/client-gateway/src/views services/client-gateway/src/main.mjs services/client-gateway/tests
+      - name: Test game browser behavior
+        run: node --test services/soloapp_app/tests/*.test.mjs
       - name: Game browser style and analysis
         run: |
           services/app-api/node_modules/.bin/prettier --check 'services/soloapp_app/public/client/*.{js,css}' services/soloapp_app/public/shared/world.js services/soloapp_app/tests/smoke.mjs

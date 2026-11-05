@@ -97,7 +97,11 @@ export class ReactorDoor {
     ctx.fillText(view.exit ? 'НА ПЛАНЕТУ' : 'БЩУ · ВВЭР-1200', 512, 85);
     ctx.font = '30px sans-serif';
     ctx.fillStyle = '#cfe6c9';
-    ctx.fillText(this.sync.status(), 512, 163);
+    ctx.fillText(
+      this.room.loading ? 'Загрузка БЩУ…' : this.sync.status(),
+      512,
+      163,
+    );
     ctx.font = '24px sans-serif';
     ctx.fillText('Автоматическая дверь', 512, 216);
     view.texture.update();
@@ -140,6 +144,30 @@ export class ReactorDoor {
     );
   }
 
+  async requestPass(side) {
+    if (this.pendingPass || this.room.loadingError) return;
+    this.pendingPass = true;
+    try {
+      // Do not commit passage until the destination is usable. On failure the
+      // player remains on the planet and can retry the download safely.
+      if (!this.room.prepared && !(await this.room.loadForEntry())) return;
+      const view = this.view();
+      const p = view && this.local(view, this.room.player.position);
+      if (
+        this.room.player.worldMap !== side ||
+        !p ||
+        Math.abs(p.x) >= 1.5 ||
+        Math.abs(p.z) >= 2.5 ||
+        p.y <= -0.8 ||
+        p.y >= 3.1
+      )
+        return;
+      this.sync.request('pass', side);
+    } finally {
+      this.pendingPass = false;
+    }
+  }
+
   update(dt) {
     this.sync.requireServer(!!this.room.network?.auth?.token);
     this.sync.tick();
@@ -150,7 +178,11 @@ export class ReactorDoor {
     for (const view of this.views)
       for (const { node, side } of view.leaves)
         node.position.x = side * (0.55 + this.amount * 1.13);
-    const status = this.sync.status();
+    const status = this.room.loading
+      ? 'Загрузка БЩУ…'
+      : this.room.loadingError
+        ? 'Не удалось загрузить БЩУ · повторите загрузку'
+        : this.sync.status();
     if (status !== this.lastStatus) {
       for (const view of this.views) this.draw(view);
       this.lastStatus = status;
@@ -171,7 +203,7 @@ export class ReactorDoor {
         this.wantPass === this.room.player.worldMap &&
         this.room.cooldown === 0
       )
-        this.sync.request('pass', this.wantPass);
+        void this.requestPass(this.wantPass);
       this.wantPass = null;
     } else if (near && this.room.cooldown === 0 && !this.sync.open)
       this.sync.request('open', this.room.player.worldMap);
