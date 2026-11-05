@@ -133,7 +133,7 @@ export class WorkerNavigation {
     for (let p = target; p; p = previous.get(p)) path.push(p);
     path.reverse();
     const result = [point];
-    for (let i = 0; i < path.length;) {
+    for (let i = 0; i < path.length; ) {
       let end = path.length - 1;
       while (end > i && !this.clear(result.at(-1), path[end], people)) end--;
       // An actor may be touching us: wait rather than step through them.
