@@ -534,6 +534,7 @@ export class ReactorInstructor {
   }
 
   dispose() {
+    if (this.disposed) return;
     this.disposed = true;
     clearInterval(this.timer);
     this.leave();

@@ -17,11 +17,12 @@ import {
 const B = window.BABYLON;
 
 export class ReactorWorkers {
-  constructor(room) {
+  constructor(room, sync) {
     this.room = room;
     this.clock = new WorkerClock();
     this.proximity = new WorkerProximity();
-    this.sync = new WorkerCountSync((message) => room.network?.send(message));
+    this.sync =
+      sync || new WorkerCountSync((message) => room.network?.send(message));
     this.workers = Array.from({ length: WORKER_COUNT }, (_, index) =>
       this.create(index),
     );

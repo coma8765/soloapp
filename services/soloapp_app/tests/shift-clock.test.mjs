@@ -88,6 +88,7 @@ function fixture() {
   };
   const room = {
     active: true,
+    prepared: true,
     root: { name: 'control', isEnabled: () => true },
     scene: { onDisposeObservable: { addOnce() {} } },
   };
@@ -180,6 +181,21 @@ test('no queued announcement before the recording is decoded', () => {
   assert.equal(sources.length, 1);
 });
 
+test('room clock graphics and audio are deferred until the room is loaded', async (t) => {
+  const { clock, room, textures } = fixture();
+  room.active = false;
+  room.prepared = false;
+  clock.buffer = null;
+  let requests = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    requests++;
+  });
+  await clock.prepareAudio();
+  clock.update(boundary);
+  assert.equal(requests, 0);
+  assert.equal(textures.length, 0);
+});
+
 test('recording is loaded once; failed loading can retry on another interaction', async (t) => {
   const { clock } = fixture();
   clock.buffer = null;
@@ -213,7 +229,7 @@ test('bundled recording has nonempty mono PCM speech, not a silent placeholder',
   assert.equal(wav.toString('ascii', 8, 12), 'WAVE');
   let duration = 0,
     peak = 0;
-  for (let offset = 12; offset + 8 <= wav.length;) {
+  for (let offset = 12; offset + 8 <= wav.length; ) {
     const tag = wav.toString('ascii', offset, offset + 4);
     const size = wav.readUInt32LE(offset + 4);
     const start = offset + 8;

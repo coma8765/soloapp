@@ -1,5 +1,5 @@
 // Local-only geometry/lifecycle check. Uses the real Player movement path, not teleport callbacks.
-export function runDoorChecks(app) {
+export async function runDoorChecks(app) {
   const { reactor, player, network } = app;
   const B = window.BABYLON;
   const results = [];
@@ -29,6 +29,7 @@ export function runDoorChecks(app) {
     if (!value) throw Error(name);
   };
   try {
+    await reactor.prepare();
     check(
       'local test does not use an authenticated world',
       !network.auth.token,

@@ -76,7 +76,7 @@ async function start() {
     location.hostname === '127.0.0.1' &&
     new URL(location.href).searchParams.has('reactor-test')
   )
-    reactor.enter();
+    await reactor.enter();
   const shiftClock = new ShiftClock(reactor, sound);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) shiftClock.update(Date.now(), false);
@@ -384,7 +384,7 @@ async function start() {
     location.hostname === '127.0.0.1' &&
     new URL(location.href).searchParams.has('physical-test')
   ) {
-    reactor.enter();
+    await reactor.enter();
     togglePhysical();
   }
   const marine = new MarineLife(
@@ -486,8 +486,9 @@ async function start() {
     reactor.physicalView &&
     new URL(location.href).searchParams.has('physical-audit')
   ) {
-    const { runPhysicalSystemChecks } =
-      await import('./physical-system-checks.js');
+    const { runPhysicalSystemChecks } = await import(
+      './physical-system-checks.js'
+    );
     window.physicalSystemChecks = runPhysicalSystemChecks(window.planetApp);
   }
   if (
@@ -520,14 +521,15 @@ async function start() {
     new URL(location.href).searchParams.has('door-audit')
   ) {
     const { runDoorChecks } = await import('./door-checks.js');
-    window.doorChecks = runDoorChecks(window.planetApp);
+    window.doorChecks = await runDoorChecks(window.planetApp);
   }
   if (
     location.hostname === '127.0.0.1' &&
     new URL(location.href).searchParams.has('reactor-performance')
   ) {
-    const { measureReactorPerformance } =
-      await import('./reactor-performance.js');
+    const { measureReactorPerformance } = await import(
+      './reactor-performance.js'
+    );
     measureReactorPerformance(window.planetApp);
   }
   engine.runRenderLoop(() => {
@@ -553,9 +555,10 @@ async function start() {
         (!xr.active ||
           xr.helper.sessionManager.session.visibilityState === 'visible'),
     );
-    reactor.instructor.setAnnouncementActive(!!shiftClock.source);
+    reactor.instructor?.setAnnouncementActive(!!shiftClock.source);
     if (reactor.active !== reactorWasActive) {
       reactorWasActive = reactor.active;
+      if (reactor.active) void shiftClock.prepareAudio();
       professorRecorder.clear();
       syncProfessorVoice();
       authPanel.recenter = true;

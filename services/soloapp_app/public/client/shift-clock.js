@@ -42,7 +42,6 @@ export class ShiftClock {
     this.sound = sound;
     this.schedule = new ShiftSchedule();
     this.faces = new Map();
-    this.addFace(room.root, [-11.85, 4.3, 0], Math.PI / 2);
     room.scene.onDisposeObservable.addOnce(() => this.dispose());
   }
 
@@ -74,7 +73,13 @@ export class ShiftClock {
   }
 
   prepareAudio() {
-    if (this.buffer || !this.sound.context || this.disposed) return;
+    if (
+      !this.room.prepared ||
+      this.buffer ||
+      !this.sound.context ||
+      this.disposed
+    )
+      return;
     if (this.loading) return this.loading;
     this.loading = (async () => {
       try {
@@ -118,6 +123,8 @@ export class ShiftClock {
       this.source = source;
     }
     if (!this.room.active) return;
+    if (!this.faces.has(this.room.root))
+      this.addFace(this.room.root, [-11.85, 4.3, 0], Math.PI / 2);
     const physicalRoot = this.room.physicalRoom?.root;
     if (physicalRoot && !this.faces.has(physicalRoot))
       this.addFace(physicalRoot, [-11.85, 4.3, 7], Math.PI / 2);
