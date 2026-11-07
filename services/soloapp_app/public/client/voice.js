@@ -8,6 +8,7 @@ export class VoiceChat {
     this.peers = new Map();
     this.npc = new NpcVoice(this);
     this.online = false;
+    this.reconnecting = false;
     this.localAllowed = false;
     this.muted = false;
     this.pending = false;
@@ -20,7 +21,9 @@ export class VoiceChat {
     return !!this.stream;
   }
   get available() {
-    return this.online || this.localAllowed;
+    return (
+      this.online || this.localAllowed || (this.reconnecting && this.enabled)
+    );
   }
   get status() {
     if (!this.available) return 'Голос · войдите в общий мир';
@@ -28,6 +31,8 @@ export class VoiceChat {
     if (this.pending) return 'Разрешите доступ к микрофону…';
     if (this.stream?.getAudioTracks().some((track) => track.muted))
       return 'Браузер приостановил микрофон · проверьте другую вкладку или устройство';
+    if (this.reconnecting)
+      return `Восстанавливаю связь · микрофон ${this.enabled ? 'включён' : 'выключен'}`;
     if (!this.online)
       return this.enabled
         ? 'Микрофон включён · у профессора речь расшифровывается автоматически'
@@ -254,10 +259,14 @@ export class VoiceChat {
     this.onChange();
   }
 
-  disconnect() {
+  disconnect({ preserveMicrophone = false } = {}) {
     this.online = false;
-    this.stop();
+    this.reconnecting = preserveMicrophone;
+    // Keep only an already granted capture during transport recovery. Logout,
+    // page departure and the microphone button still stop the owned tracks.
+    if (!preserveMicrophone) this.stop();
     for (const id of this.peers.keys()) this.remove(id);
     this.npc.dispose();
+    this.onChange();
   }
 }
